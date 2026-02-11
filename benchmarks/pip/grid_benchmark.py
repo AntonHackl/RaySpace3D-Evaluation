@@ -298,16 +298,16 @@ def main():
     parser.add_argument('--centered', action='store_true',
                         help='Run experiment twice at bbox center instead of grid. Mutually exclusive with --grid-size')
     parser.add_argument('--cgal-dir', 
-                        default='../RaySpace3DBaslines/CGAL',
+                        default='../../baselines/RaySpace3DBaselines/CGAL',
                         help='CGAL baseline directory')
     parser.add_argument('--sql-dir',
-                        default='../RaySpace3DBaslines/SQL',
+                        default='../../baselines/RaySpace3DBaselines/SQL',
                         help='SQL baseline directory')
     parser.add_argument('--rayspace-dir',
-                        default='../RaySpace3D',
+                        default='../../src/RaySpace3D',
                         help='RaySpace3D directory')
     parser.add_argument('--cuda-dir',
-                        default='../RaySpace3DBaslines/CUDA',
+                        default='../../baselines/RaySpace3DBaselines/CUDA',
                         help='CUDA baseline directory')
     parser.add_argument('--evaluate', action='store_true',
                         help='Run evaluation script after benchmark completes')

@@ -47,15 +47,18 @@ DEFAULT_DATASET = "small"
 # Paths to systems (relative to workspace root or this script)
 # Script is in mesh_overlap_benchmark/
 # Workspace root is ..
-WORKSPACE_ROOT = Path(__file__).resolve().parent.parent
-TDBASE_DIR = WORKSPACE_ROOT / "tdbase"
-CGAL_BASE_DIR = WORKSPACE_ROOT / "RaySpace3DBaslines/CGAL" 
-RAYSPACE_DIR = WORKSPACE_ROOT / "RaySpace3D"
-DATA_DIR = WORKSPACE_ROOT / "mesh_overlap_benchmark" / "data"
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent.parent
+EXTERNAL_ROOT = REPO_ROOT.parent
+
+TDBASE_DIR = EXTERNAL_ROOT / "tdbase"
+CGAL_BASE_DIR = REPO_ROOT / "baselines/RaySpace3DBaselines/CGAL" 
+RAYSPACE_DIR = REPO_ROOT / "src/RaySpace3D"
+DATA_DIR = SCRIPT_DIR / "data"
 RAW_DIR = DATA_DIR / "raw" 
 PREPROCESSED_DIR = DATA_DIR / "preprocessed"
 TIMINGS_DIR = DATA_DIR / "timings"
-RUNS_DIR = WORKSPACE_ROOT / "mesh_overlap_benchmark" / "runs"
+RUNS_DIR = SCRIPT_DIR / "runs"
 
 def print_results(adapter_name, results):
     if "error" in results:

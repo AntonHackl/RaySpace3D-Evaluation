@@ -23,8 +23,8 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
 # Default paths (relative to first_benchmark directory)
-QUERY_OBJ="../datasets/range_query/ranges/Cube_large.obj"
-POINTS_WKT="../datasets/range_query/points/uniform_points_10000000.wkt"
+QUERY_OBJ="../../../datasets/range_query/ranges/Cube_large.obj"
+POINTS_WKT="../../../datasets/range_query/points/uniform_points_10000000.wkt"
 OUTPUT_JSON="results/grid_benchmark.json"
 WORKSPACE="workspace"
 
@@ -87,9 +87,9 @@ python grid_benchmark.py \
     --output "$OUTPUT_JSON" \
     --workspace "$WORKSPACE" \
     --grid-size 1 1 1 \
-    --cgal-dir ../RaySpace3DBaslines/CGAL \
-    --sql-dir ../RaySpace3DBaslines/SQL \
-    --rayspace-dir ../RaySpace3D \
+    --cgal-dir ../../baselines/RaySpace3DBaselines/CGAL \
+    --sql-dir ../../baselines/RaySpace3DBaselines/SQL \
+    --rayspace-dir ../../src/RaySpace3D \
     $EVALUATE_FLAG
 
 EXIT_CODE=$?
