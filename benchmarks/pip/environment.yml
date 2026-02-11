@@ -1,0 +1,24 @@
+name: spatial_benchmark
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  # Build tools
+  - cmake
+  - make
+  - gxx_linux-64
+  - cxx-compiler
+  - pkg-config
+  # Database (SQL baseline)
+  - postgresql=16
+  - postgis=3.4
+  - libpq
+  - psycopg2
+  # Python scientific stack
+  - numpy
+  - matplotlib
+  - scipy
+  # Utilities
+  - pandas
+  - plotly  # For interactive plots

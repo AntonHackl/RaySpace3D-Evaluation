@@ -1,0 +1,73 @@
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# RaySpace Data Files
+*.dt
+*.pre
+*.off
+*.ply
+*.stl
+*.nvdb
+*.vdb
+*.txt
+*.wkt
+*.csv
+
+# Logs and Verify
+*.log
+*.err
+*.tlog
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C/C++ Build Directories
+build/
+cmake-build-*/
+.cache/
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+
+# Benchmark specific
+*.json
+*.csv
+# Keep important JSONs like config if needed, but user said "json files... should not be included" so likely results/timings.
+# I'll add an exception for package.json or similar if I see it, but user was explicit on json.
+
+# RayTracer PTX
+*.ptx
+
+*.png

@@ -1,0 +1,6 @@
+[submodule "src/RaySpace3D"]
+	path = src/RaySpace3D
+	url = ../RaySpace3D
+[submodule "baselines/RaySpace3DBaselines"]
+	path = baselines/RaySpace3DBaselines
+	url = ../RaySpace3DBaslines
