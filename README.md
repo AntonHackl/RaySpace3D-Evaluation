@@ -1,51 +1,69 @@
-# RaySpace3D-Evaluation (Monorepo)
+# RaySpace3D-Evaluation
 
-This repository serves as the central hub for the RaySpace3D project, its baselines, and evaluation benchmarks. It consolidates the core library, alternative implementations, and experimental setups into a single structure.
+Monorepo for evaluating RaySpace3D against baselines (CGAL, CUDA, PostGIS) on various benchmarks.
 
-## Structure
+## Repository Structure
 
-- **src/RaySpace3D/**: The core RaySpace3D library (Git Submodule). Contains the primary implementation using OptiX for hardware-accelerated queries.
-- **baselines/RaySpace3DBaselines/**: Alternative implementations (Git Submodule). Includes CPU-based (CGAL), SQL, and other baseline methods for comparison.
-- **benchmarks/**: Evaluation scripts and datasets.
-  - **pip/**: Point-in-Polygon (PIP) benchmarks (formerly `first_benchmark`).
-  - **mesh_overlap/**: Mesh Overlap benchmarks (formerly `mesh_overlap_benchmark`).
+- **`src/RaySpace3D`**: Core RaySpace3D implementation.
+  - `preprocess`: Data preprocessing tools.
+  - `query`: Ray tracing query engine (Requires OptiX).
+- **`baselines/RaySpace3DBaselines`**: Baseline implementations.
+  - `CGAL`: CPU-based geometry processing.
+  - `CUDA`: Naive CUDA implementation.
+  - `SQL`: PostGIS-based implementation.
+- **`benchmarks`**: Benchmark scripts and data.
+  - `pip`: Point-in-Polygon benchmark.
+  - `mesh_overlap`: Mesh overlap benchmark.
+- **`datasets`**: Shared datasets (e.g., `range_query`).
 
-## Usage
+## Prerequisites
 
-### Prerequisites
+- **Linux** environment.
+- **Conda** for environment management.
+- **NVIDIA Driver & CUDA** (for GPU components).
+- **OptiX SDK** (Required for `RaySpace3D/query`).
 
-Since this repository uses Git submodules, ensure you initialize them after cloning:
+## Setup
 
-```bash
-git clone <this-repo-url>
-cd RaySpace3D-Evaluation
-git submodule update --init --recursive
-```
+1. **Clone the repository:**
+   ```bash
+   git clone --recursive <repo_url>
+   cd RaySpace3D-Evaluation
+   ```
 
-### Running Benchmarks
+2. **Copy Data:**
+   Use the `copy_data.sh` script to populate the monorepo with necessary data files.
+   ```bash
+   ./copy_data.sh
+   ```
 
-Navigate to the respective benchmark directory and follow the instructions in their local READMEs.
+3. **Build:**
+   Use the `build_all.sh` script to build all components.
+   ```bash
+   ./build_all.sh
+   # Or build specific components:
+   ./build_all.sh --only preprocess
+   ./build_all.sh --only query
+   ```
 
-**Example (PIP Benchmark):**
-```bash
-cd benchmarks/pip
-./run_benchmark.sh
-```
+4. **Test:**
+   Run `test_all.sh` to verify built executables and data presence.
+   ```bash
+   ./test_all.sh
+   ```
 
-**Example (Mesh Overlap Benchmark):**
+## Running Benchmarks
+
+### Mesh Overlap
+Located in `benchmarks/mesh_overlap`.
 ```bash
 cd benchmarks/mesh_overlap
 ./run_benchmark.sh
 ```
 
-### Developing Core Library
-
-The `src/RaySpace3D` directory is a submodule pointing to the `RaySpace3D` repository. Changes made here can be committed and pushed to the upstream `RaySpace3D` repository.
-
+### Point-in-Polygon (PIP)
+Located in `benchmarks/pip`.
 ```bash
-cd src/RaySpace3D
-# Make changes
-git add .
-git commit -m "Update core feature"
-git push
+cd benchmarks/pip
+./run_benchmark.sh
 ```

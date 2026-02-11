@@ -22,9 +22,9 @@ set -e
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
-# Default paths (relative to first_benchmark directory)
-QUERY_OBJ="../../../datasets/range_query/ranges/Cube_large.obj"
-POINTS_WKT="../../../datasets/range_query/points/uniform_points_10000000.wkt"
+# Default paths (relative to benchmarks/pip/ inside the monorepo)
+QUERY_OBJ="../../datasets/range_query/ranges/Cube_large.obj"
+POINTS_WKT="../../datasets/range_query/points/uniform_points_10000000.wkt"
 OUTPUT_JSON="results/grid_benchmark.json"
 WORKSPACE="workspace"
 
