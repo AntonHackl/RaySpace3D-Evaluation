@@ -35,6 +35,7 @@ NC='\033[0m'
 CLEAN=false
 ONLY=""
 JOBS=$(nproc 2>/dev/null || echo 4)
+EXTRA_ARGS=""
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -42,13 +43,22 @@ while [[ $# -gt 0 ]]; do
         --clean)   CLEAN=true; shift ;;
         --only)    ONLY="$2"; shift 2 ;;
         --jobs)    JOBS="$2"; shift 2 ;;
+        --)        shift; EXTRA_ARGS="$*"; break ;;
         -h|--help)
-            echo "Usage: $0 [--clean] [--only COMPONENT] [--jobs N]"
+            echo "Usage: $0 [--clean] [--only COMPONENT] [--jobs N] [-- EXTRA_CMAKE_ARGS]"
             echo ""
             echo "Components: preprocess, query, cgal, cuda, sql"
             exit 0
             ;;
-        *) echo "Unknown option: $1"; exit 1 ;;
+        *) 
+            if [[ "$1" == -D* ]]; then
+                EXTRA_ARGS="${EXTRA_ARGS} $1"
+                shift
+            else
+                echo "Unknown option: $1"
+                exit 1
+            fi
+            ;;
     esac
 done
 
@@ -88,18 +98,46 @@ build_cmake_project() {
     fi
 
     # Activate conda environment if specified
-    if [[ -n "$conda_env" ]]; then
+    if [[ -n "$conda_env" ]] && [[ -z "${NO_CONDA:-}" ]]; then
+        # Try to find conda if not in PATH
+        if ! command -v conda &> /dev/null; then
+            if [[ -f "/sc/home/anton.hackl/conda3/bin/conda" ]]; then
+                export PATH="/sc/home/anton.hackl/conda3/bin:$PATH"
+            fi
+        fi
+
         if ! conda env list 2>/dev/null | grep -q "^${conda_env} "; then
             echo -e "  ${YELLOW}WARNING${NC}: Conda environment '${conda_env}' not found."
-            echo -e "  Create it with: conda env create -f <environment.yml>"
             echo -e "  Attempting build with current environment..."
         else
-            eval "$(conda shell.bash hook 2>/dev/null)"
-            conda activate "$conda_env" 2>/dev/null || {
-                echo -e "  ${YELLOW}WARNING${NC}: Failed to activate conda env '${conda_env}'"
-                echo -e "  Attempting build with current environment..."
+            echo -e "  Activating conda environment: ${conda_env}"
+            # Initialize conda for the current shell
+            eval "$(conda shell.bash hook)"
+            conda activate "$conda_env" || {
+                echo -e "  ${RED}ERROR${NC}: Failed to activate conda env '${conda_env}'"
+                return 1
             }
+            echo -e "  ${GREEN}✓${NC} Environment activated: $(which g++)"
+
+            # --- Workaround: conda cross-compiler vs enroot/container sysroot ---
+            # Conda environments with compiler packages (e.g. gxx_linux-64) ship a
+            # cross-compiler toolchain whose linker references its own sysroot
+            # (x86_64-conda-linux-gnu/sysroot).  Inside an enroot container the
+            # system glibc differs, causing GLIBC_PRIVATE link errors.
+            # Fix: if the active g++ is conda's cross-compiler, tell CMake to use
+            # the system compiler/linker instead while keeping conda for library
+            # discovery (CGAL, Boost, tinyobjloader, etc.).
+            local active_gxx
+            active_gxx="$(which g++ 2>/dev/null || true)"
+            if [[ "$active_gxx" == *conda* ]]; then
+                if [[ -x /usr/bin/g++ ]]; then
+                    echo -e "  ${YELLOW}NOTE${NC}: Detected conda cross-compiler; overriding with system compiler"
+                    extra_cmake_args="${extra_cmake_args} -DCMAKE_CXX_COMPILER=/usr/bin/g++ -DCMAKE_C_COMPILER=/usr/bin/gcc"
+                fi
+            fi
         fi
+    elif [[ -n "${NO_CONDA:-}" ]]; then
+        echo -e "  ${CYAN}INFO${NC}: Skipping conda activation (NO_CONDA set)"
     fi
 
     # Clean if requested
@@ -177,7 +215,7 @@ if should_build "preprocess"; then
         "RaySpace3D Preprocess" \
         "$SCRIPT_DIR/src/RaySpace3D/preprocess" \
         "rayspace3d_preprocess" \
-        "" \
+        "$EXTRA_ARGS" \
         || true
 fi
 
@@ -205,7 +243,7 @@ if should_build "query"; then
         "RaySpace3D Query" \
         "$SCRIPT_DIR/src/RaySpace3D/query" \
         "rayspace3d_query_linux" \
-        "" \
+        "$EXTRA_ARGS" \
         || true
 fi
 
@@ -217,7 +255,7 @@ if should_build "cgal"; then
         "CGAL Baseline" \
         "$SCRIPT_DIR/baselines/RaySpace3DBaselines/CGAL" \
         "cgal_spatial" \
-        "" \
+        "$EXTRA_ARGS" \
         || true
 fi
 
@@ -229,7 +267,7 @@ if should_build "cuda"; then
         "CUDA Baseline" \
         "$SCRIPT_DIR/baselines/RaySpace3DBaselines/CUDA" \
         "cuda_baseline" \
-        "" \
+        "$EXTRA_ARGS" \
         || true
 fi
 
@@ -241,7 +279,7 @@ if should_build "sql"; then
         "SQL Baseline" \
         "$SCRIPT_DIR/baselines/RaySpace3DBaselines/SQL" \
         "spatial3d" \
-        "" \
+        "$EXTRA_ARGS" \
         || true
 fi
 
