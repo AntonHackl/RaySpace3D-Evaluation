@@ -2,7 +2,7 @@ import subprocess
 import time
 import json
 import numpy as np
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pathlib import Path
 from .base import OverlapBenchmarkAdapter, run_command_streaming
 
@@ -43,7 +43,7 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
 
         # Preprocess binary is in preprocess/build/bin
         self.preprocess_exec = self.rayspace_dir / "preprocess" / "build" / "bin" / "preprocess_dataset"
-
+        
     def check_preprocessed(self, file_path: str) -> bool:
         """Check if .pre file exists for the given .dt or .obj file in preprocessed dir."""
         input_path = Path(file_path)
@@ -109,6 +109,7 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
         f2 = str(p2) if p2.exists() else file2
 
         runtimes = []
+        breakdown_accum = {} # key: phase name, value: list of durations
         num_obj1 = 0
         num_obj2 = 0
         num_intersections = 0
@@ -172,7 +173,6 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
                             num_intersections = int(line.split("found")[1].split("unique")[0].strip())
                         elif "Final Estimated Pairs:" in line:
                             # For estimate-only mode (and useful diagnostic for estimated mode)
-                            # Example: "Final Estimated Pairs:     123456"
                             try:
                                 num_intersections = int(line.split(":", 1)[1].strip())
                             except ValueError:
@@ -188,10 +188,15 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
                 query_time = 0.0
                 found = False
                 
+                # Accumulate breakdown
                 for prefix in expected_prefixes:
-                    key = f"{prefix}1"
+                    key = f"{prefix}1" # Keys in json usually have '1' appended for the 1st run
                     if key in phases:
-                        query_time += phases[key].get("duration_ms", 0.0)
+                        duration = phases[key].get("duration_ms", 0.0)
+                        query_time += duration
+                        if prefix not in breakdown_accum:
+                            breakdown_accum[prefix] = []
+                        breakdown_accum[prefix].append(duration)
                         found = True
 
                 if not found:
@@ -213,12 +218,18 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
         if not runtimes:
             return {"error": "No timing results collected for Raytracer"}
 
+        # Calculate mean breakdown
+        breakdown_stats = {}
+        for phase, times in breakdown_accum.items():
+            breakdown_stats[phase] = np.mean(times)
+
         return {
             "mean": np.mean(runtimes),
             "min": np.min(runtimes),
             "max": np.max(runtimes),
             "std": np.std(runtimes),
             "raw_times": runtimes,
+            "breakdown": breakdown_stats,
             "num_obj1": num_obj1,
             "num_obj2": num_obj2,
             "num_intersections": num_intersections
