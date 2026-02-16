@@ -31,13 +31,7 @@ Monorepo for evaluating RaySpace3D against baselines (CGAL, CUDA, PostGIS) on va
    cd RaySpace3D-Evaluation
    ```
 
-2. **Copy Data:**
-   Use the `copy_data.sh` script to populate the monorepo with necessary data files.
-   ```bash
-   ./copy_data.sh
-   ```
-
-3. **Build:**
+2. **Build:**
    Use the `build_all.sh` script to build all components.
    ```bash
    ./build_all.sh
@@ -46,7 +40,7 @@ Monorepo for evaluating RaySpace3D against baselines (CGAL, CUDA, PostGIS) on va
    ./build_all.sh --only query
    ```
 
-4. **Test:**
+3. **Test:**
    Run `test_all.sh` to verify built executables and data presence.
    ```bash
    ./test_all.sh

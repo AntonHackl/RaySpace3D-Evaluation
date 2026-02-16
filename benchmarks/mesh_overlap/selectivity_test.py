@@ -9,6 +9,7 @@ import subprocess
 # Add current directory to path to import adapters
 sys.path.append(str(Path(__file__).parent))
 from adapters.raytracer_adapter import RaytracerAdapter
+from adapters.tdbase_adapter import TDBaseAdapter
 
 # Configuration
 SELECTIVITIES = [0.0001, 0.0005, 0.001, 0.005, 0.01]
@@ -17,8 +18,9 @@ MIN_SIZE = 1
 MAX_SIZE = 4
 GRID_CELL_SIZE = 5
 
-WORKSPACE_ROOT = Path(__file__).resolve().parent.parent
-RAYSPACE_DIR = WORKSPACE_ROOT / "RaySpace3D"
+WORKSPACE_ROOT = Path(__file__).resolve().parent.parent.parent
+RAYSPACE_DIR = WORKSPACE_ROOT / "src/RaySpace3D"
+TDBASE_DIR = WORKSPACE_ROOT / "baselines/RaySpace3DBaselines/tdbase"
 DATA_DIR = Path(__file__).parent / "data"
 RAW_DIR = DATA_DIR / "raw" / "selectivity_test"
 PREPROCESSED_DIR = DATA_DIR / "preprocessed" / "selectivity_test"
@@ -95,15 +97,26 @@ def main():
         # RaytracerAdapter.check_preprocessed() checks if .pre exists based on input filename
         # We assume if the file exists it was generated with the correct parameters (grid size).
         # To be safe, we could delete it, but for now we trust the flow or use distinct filenames if parameters changed repeatedly (they don't here).
-        print("Ensuring preprocessed files...")
+        print("Ensuring preprocessed files (Raytracer)...")
         adapter.preprocess_from_source(str(obj_a), str(dt_a))
         adapter.preprocess_from_source(str(obj_b), str(dt_b))
+
+        # Setup TDBase & Preprocess
+        tdbase_adapter = TDBaseAdapter(
+            str(TDBASE_DIR),
+            preprocessed_dir=str(PREPROCESSED_DIR)
+        )
+        print("Ensuring preprocessed files (TDBase)...")
+        # For TDBase, we convert obj to dt using the tool
+        # TDBaseAdapter uses preprocess_from_source(obj, dt)
+        tdbase_adapter.preprocess_from_source(str(obj_a), str(dt_a))
+        tdbase_adapter.preprocess_from_source(str(obj_b), str(dt_b))
 
         # 5. Run Benchmark
         print("Running benchmark...")
         
-        # Test both Exact and Estimated
-        modes = ["exact", "estimated"]
+        # Test both Exact, Estimated, and TDBase
+        modes = ["exact", "estimated", "tdbase"]
         res_per_sel = {
             "selectivity": selectivity, 
             "grid_resolution": grid_resolution, 
@@ -112,30 +125,40 @@ def main():
         }
         
         for mode in modes:
-            adapter.mode = mode
-            # Update executable manually as correct binary depends on mode
-            if mode == "exact":
-                adapter.executable = adapter.rayspace_dir / "query/build/bin/raytracer_mesh_overlap"
-                adapter.name = "Raytracer_exact"
-            elif mode == "estimated":
-                adapter.executable = adapter.rayspace_dir / "query/build/bin/raytracer_overlap_estimated"
-                adapter.name = "Raytracer_estimated"
+            current_adapter = None
+            if mode == "tdbase":
+                current_adapter = tdbase_adapter
+                # Update name for consistent result key
+                current_adapter.name = "tdbase"
+            else:
+                adapter.mode = mode
+                # Update executable manually as correct binary depends on mode
+                if mode == "exact":
+                    adapter.executable = adapter.rayspace_dir / "query/build/bin/raytracer_mesh_overlap"
+                    adapter.name = "exact" # For result key consistency in json
+                elif mode == "estimated":
+                    adapter.executable = adapter.rayspace_dir / "query/build/bin/raytracer_overlap_estimated"
+                    adapter.name = "estimated"
+                current_adapter = adapter
                 
-            results = adapter.run_overlap(
+            results = current_adapter.run_overlap(
                 str(obj_a),
                 str(obj_b),
                 num_runs=5
             )
             
+            # Use mode name as key in results
+            result_key = mode
+            
             if "error" in results:
-                print(f"[{mode}] Error: {results['error']}")
-                res_per_sel[mode] = {"error": results['error']}
+                print(f"[{result_key}] Error: {results['error']}")
+                res_per_sel[result_key] = {"error": results['error']}
             else:
-                print(f"[{mode}] Mean Time: {results['mean']:.4f} ms")
-                res_per_sel[mode] = {
+                print(f"[{result_key}] Mean Time: {results['mean']:.4f} ms")
+                res_per_sel[result_key] = {
                     "mean_ms": results['mean'],
                     "std_ms": results['std'],
-                    "intersections": results.get("num_intersections", 0)
+                    "intersections": results.get("num_intersections", 0) # TDBase might not return this yet or returns it differently
                 }
 
         summary_results.append(res_per_sel)

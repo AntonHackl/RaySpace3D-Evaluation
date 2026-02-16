@@ -22,10 +22,14 @@ def visualize_selectivity(summary_file, output_path=None):
     exact_stds = []
     est_means = []
     est_stds = []
+    tdbase_means = []
+    tdbase_stds = []
 
     # Filter data
     valid_selectivities = []
     for d in data:
+        # We require at least one successful run to plot something for this selectivity point
+        # But to keep indices aligned, let's just skip if basic ray tracing failed
         if "error" in d.get("exact", {}) or "error" in d.get("estimated", {}):
             continue
         valid_selectivities.append(d["selectivity"])
@@ -33,6 +37,13 @@ def visualize_selectivity(summary_file, output_path=None):
         exact_stds.append(d["exact"]["std_ms"])
         est_means.append(d["estimated"]["mean_ms"])
         est_stds.append(d["estimated"]["std_ms"])
+        
+        if "tdbase" in d and "error" not in d["tdbase"]:
+            tdbase_means.append(d["tdbase"]["mean_ms"])
+            tdbase_stds.append(d["tdbase"]["std_ms"])
+        else:
+            tdbase_means.append(None)
+            tdbase_stds.append(None)
 
     if not valid_selectivities:
         print("No valid data points found.")
@@ -56,6 +67,15 @@ def visualize_selectivity(summary_file, output_path=None):
                 marker='o', capsize=5, linestyle='-', color='#1f77b4')
     ax.errorbar(valid_selectivities, est_means, yerr=est_stds, label='Estimated Raytracer', 
                 marker='s', capsize=5, linestyle='--', color='#2ca02c')
+
+    # Plot TDBase if available
+    if any(x is not None for x in tdbase_means):
+        td_sel = [s for s, m in zip(valid_selectivities, tdbase_means) if m is not None]
+        td_means = [m for m in tdbase_means if m is not None]
+        td_stds = [s for s, m in zip(tdbase_stds, tdbase_means) if m is not None]
+        
+        ax.errorbar(td_sel, td_means, yerr=td_stds, label='TDBase',
+                    marker='^', capsize=5, linestyle='-.', color='#d62728')
 
     ax.set_xscale('log')
     ax.set_yscale('log')

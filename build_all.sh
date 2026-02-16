@@ -47,7 +47,7 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             echo "Usage: $0 [--clean] [--only COMPONENT] [--jobs N] [-- EXTRA_CMAKE_ARGS]"
             echo ""
-            echo "Components: preprocess, query, cgal, cuda, sql"
+            echo "Components: preprocess, query, tdbase, cgal, cuda, sql"
             exit 0
             ;;
         *) 
@@ -284,8 +284,19 @@ if should_build "sql"; then
 fi
 
 # -----------------------------------------------------------------------
-# Summary
+# 6. TDBase Baseline
 # -----------------------------------------------------------------------
+if should_build "tdbase"; then
+    # Pass USE_GPU=1 as an environment variable for the build command
+    # and also as a CMake flag just in case
+    export USE_GPU=1
+    build_cmake_project \
+        "TDBase Baseline" \
+        "$SCRIPT_DIR/baselines/RaySpace3DBaselines/tdbase/src" \
+        "tdbase_env" \
+        "-DUSE_GPU=ON $EXTRA_ARGS" \
+        || true
+fi
 echo ""
 echo "=============================================="
 echo "  Build Summary"
