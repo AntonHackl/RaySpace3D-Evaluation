@@ -2,21 +2,30 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import argparse
+import sys
 from pathlib import Path
 from datetime import datetime
 import subprocess 
+import json
+
+# Add current directory to path to import adapters
+sys.path.append(str(Path(__file__).parent))
 from adapters.raytracer_adapter import RaytracerAdapter
+from adapters.cgal_adapter import CGALAdapter
 
 # Configuration
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent.parent
 RAYSPACE_DIR = REPO_ROOT / "src/RaySpace3D"
+CGAL_DIR = REPO_ROOT / "baselines/RaySpace3DBaselines/CGAL"
 DATA_DIR = SCRIPT_DIR / "data"
 RAW_DIR = DATA_DIR / "raw"
 PREPROCESSED_DIR = DATA_DIR / "preprocessed"
 TIMINGS_DIR = DATA_DIR / "timings"
 FIGURES_DIR = SCRIPT_DIR / "figures"
 RUNS_DIR = SCRIPT_DIR / "runs"
+
+TIMEOUT_SECONDS = 120.0
 
 # Cube Counts for Dataset B (Dataset A is fixed at 200k)
 CUBE_COUNTS = [200000, 400000, 600000, 1000000]
@@ -27,6 +36,8 @@ def run_experiment(runs, grid_resolution):
     
     # Ensure directories exist
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    PREPROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    TIMINGS_DIR.mkdir(parents=True, exist_ok=True)
     
     # Setup Logging
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -54,13 +65,17 @@ def run_experiment(runs, grid_resolution):
         grid_resolution=grid_resolution,
         warmup_runs=1
     )
+
+    cgal_adapter = CGALAdapter(
+        str(CGAL_DIR),
+        preprocessed_dir=str(PREPROCESSED_DIR)
+    )
     
     results = {
         "counts": [],
-        "exact_times": [],
-        "estimated_times": [],
-        "exact_std": [],
-        "estimated_std": []
+        "exact": {"mean": [], "std": [], "breakdown": []},
+        "estimated": {"mean": [], "std": [], "breakdown": []},
+        "cgal": {"mean": [], "std": []}
     }
 
     filename_a = f"cubes_{FIXED_COUNT}.obj"
@@ -68,7 +83,7 @@ def run_experiment(runs, grid_resolution):
     
     if not f1_path.exists():
         print(f"Error: Dataset A ({f1_path}) not found!")
-        return
+        return None
 
     for count in CUBE_COUNTS:
         filename_b = f"cubes_{count // 1000}k_b.obj"
@@ -80,18 +95,12 @@ def run_experiment(runs, grid_resolution):
         
         print(f"\nProcessing: {filename_a} vs {filename_b}")
 
-        # Check/Run Preprocessing
+        # Check/Run Preprocessing (Exact/Estimated share preprocessed files)
         print("Checking preprocessing...")
-        for f in [f1_path, f2_path]:
-            # Use suffix .pre for checking, but adapter handles naming.
-            # We want to make sure we don't keep reprocessing if not needed.
-            # The adapter uses .with_suffix('.pre')
-            if not exact_adapter.check_preprocessed(str(f)):
-                print(f"Preprocessing {f.name}...")
-                # Note: We name the output .pre file based on the original .obj name
-                exact_adapter.preprocess_from_source(str(f), str(f), log_dir=str(run_log_dir))
-            else:
-                 print(f"Already preprocessed: {f.name}")
+        # Force preprocessing if not exists or ensure it's up to date
+        # Note: RaytracerAdapter.preprocess_from_source checks existence inside
+        exact_adapter.preprocess_from_source(str(f1_path), str(f1_path), log_dir=str(run_log_dir))
+        exact_adapter.preprocess_from_source(str(f2_path), str(f2_path), log_dir=str(run_log_dir))
 
         # Run Exact Benchmark
         print(f"Running Exact Mode ({runs} runs)...")
@@ -99,11 +108,12 @@ def run_experiment(runs, grid_resolution):
             str(f1_path), 
             str(f2_path), 
             runs,
-            log_dir=str(run_log_dir)
+            log_dir=str(run_log_dir),
+            timeout=TIMEOUT_SECONDS
         )
         if "error" in res_exact:
             print(f"Error in exact run: {res_exact['error']}")
-            continue
+            continue # Assuming if exact fails, we skip this point
             
         # Run Estimated Benchmark
         print(f"Running Estimated Mode ({runs} runs)...")
@@ -111,19 +121,43 @@ def run_experiment(runs, grid_resolution):
             str(f1_path), 
             str(f2_path), 
             runs,
-            log_dir=str(run_log_dir)
+            log_dir=str(run_log_dir),
+            timeout=TIMEOUT_SECONDS
         )
         if "error" in res_est:
             print(f"Error in estimated run: {res_est['error']}")
-            continue
+            # We continue even if estimated fails? Let's say yes for robustness
+            res_est = {"mean": 0, "std": 0, "breakdown": {}}
+
+        # Run CGAL Benchmark
+        print(f"Running CGAL Mode ({runs} runs)...")
+        res_cgal = cgal_adapter.run_overlap(
+            str(f1_path), 
+            str(f2_path), 
+            runs,
+            log_dir=str(run_log_dir),
+            timeout=TIMEOUT_SECONDS
+        )
+        if "error" in res_cgal:
+            print(f"Error in CGAL run: {res_cgal['error']}")
+            # Allow CGAL to fail (e.g. timeout)
+            res_cgal = {"mean": None, "std": None}
 
         results["counts"].append(count)
-        results["exact_times"].append(res_exact["mean"])
-        results["exact_std"].append(res_exact["std"])
-        results["estimated_times"].append(res_est["mean"])
-        results["estimated_std"].append(res_est["std"])
         
-        print(f"Done {count}: Exact={res_exact['mean']:.2f}ms, Est={res_est['mean']:.2f}ms")
+        results["exact"]["mean"].append(res_exact["mean"])
+        results["exact"]["std"].append(res_exact["std"])
+        results["exact"]["breakdown"].append(res_exact.get("breakdown", {}))
+        
+        results["estimated"]["mean"].append(res_est["mean"])
+        results["estimated"]["std"].append(res_est["std"])
+        results["estimated"]["breakdown"].append(res_est.get("breakdown", {}))
+        
+        results["cgal"]["mean"].append(res_cgal["mean"])
+        results["cgal"]["std"].append(res_cgal["std"])
+        
+        cgal_str = f"{res_cgal['mean']:.2f}ms" if res_cgal['mean'] else "TIMEOUT/ERR"
+        print(f"Done {count}: Exact={res_exact['mean']:.2f}ms, Est={res_est['mean']:.2f}ms, CGAL={cgal_str}")
 
     return results
 
@@ -132,49 +166,160 @@ def plot_results(results):
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     
     counts = results["counts"]
-    exact_times = results["exact_times"]
-    estimated_times = results["estimated_times"]
-    exact_std = results["exact_std"]
-    estimated_std = results["estimated_std"]
-    
     if not counts:
         print("No results to plot.")
         return
 
-    plt.figure(figsize=(10, 6))
+    fig, (ax_main, ax_breakdown) = plt.subplots(1, 2, figsize=(18, 8))
+
+    # --- Plot 1: Line Chart (Scaling) ---
+    ax_main.errorbar(counts, results["exact"]["mean"], yerr=results["exact"]["std"], 
+                     fmt='-o', label='Exact Raytracer', capsize=5, color='#1f77b4')
+    ax_main.errorbar(counts, results["estimated"]["mean"], yerr=results["estimated"]["std"], 
+                     fmt='--s', label='Estimated Raytracer', capsize=5, color='#2ca02c')
     
-    plt.errorbar(counts, exact_times, yerr=exact_std, fmt='-o', label='Exact', capsize=5)
-    plt.errorbar(counts, estimated_times, yerr=estimated_std, fmt='-o', label='Estimated', capsize=5)
+    # Filter valid CGAL points
+    cgal_valid_indices = [i for i, m in enumerate(results["cgal"]["mean"]) if m is not None]
+    if cgal_valid_indices:
+        cgal_counts = [counts[i] for i in cgal_valid_indices]
+        cgal_means = [results["cgal"]["mean"][i] for i in cgal_valid_indices]
+        cgal_stds = [results["cgal"]["std"][i] for i in cgal_valid_indices]
+        ax_main.errorbar(cgal_counts, cgal_means, yerr=cgal_stds, 
+                         fmt=':d', label='CGAL', capsize=5, color='#9467bd')
+
+    ax_main.set_xlabel('Number of Cubes in Dataset B (A=200k)', fontsize=12)
+    ax_main.set_ylabel('Execution Time (ms) [Log Scale]', fontsize=12)
+    ax_main.set_title('Scalability: Mesh Overlap Query Time', fontsize=14, fontweight='bold')
+    ax_main.set_yscale('log')
+    ax_main.legend(fontsize=12)
+    ax_main.grid(True, which="both", ls="-", alpha=0.2)
+    ax_main.set_xticks(counts)
+
+    # --- Plot 2: Breakdown Bar Chart (Exact & Estimated ONLY) ---
+    # Breakdown visual settings
+    phase_mapping = {
+        "selectivity estimation_": "Selectivity Est.",
+        "execute hash query_": "Hash Query",
+        "query_": "Ray Query",
+        "gpu deduplication_": "Deduplication",
+        "download results_": "Download"
+    }
+    ordered_phases_raw = [
+        "selectivity estimation_",
+        "query_",
+        "execute hash query_",
+        "gpu deduplication_",
+        "download results_"
+    ]
+    colors = {
+        "selectivity estimation_": "#ff9999", 
+        "query_": "#66b3ff",              
+        "execute hash query_": "#3399ff",   
+        "gpu deduplication_": "#99ff99",    
+        "download results_": "#ffcc99"      
+    }
     
-    plt.xlabel('Number of Cubes in Dataset B (Dataset A fixed at 200k)')
-    plt.ylabel('Execution Time (ms)')
-    plt.title('Scalability: Mesh Overlap Query Time (Cubes)')
-    plt.legend()
-    plt.grid(True)
+    # Collect active phases
+    all_active_phases = set(ordered_phases_raw)
+    for mode in ["exact", "estimated"]:
+        for bd in results[mode]["breakdown"]:
+            all_active_phases.update(bd.keys())
     
-    # Set x-axis ticks
-    plt.xticks(counts)
+    active_phases_ordered = [p for p in ordered_phases_raw if p in all_active_phases]
+    for p in all_active_phases:
+        if p not in active_phases_ordered: active_phases_ordered.append(p)
+
+    legend_handles = []
+    legend_labels = []
+    for phase in active_phases_ordered:
+        label = phase_mapping.get(phase, phase)
+        color = colors.get(phase, "#cccccc")
+        patch = plt.Rectangle((0, 0), 1, 1, fc=color, ec='white')
+        legend_handles.append(patch)
+        legend_labels.append(label)
+
+    modes_to_plot = ["exact", "estimated"]
+    num_modes = len(modes_to_plot)
+    group_width = 0.8
+    mode_width = group_width / num_modes
     
-    output_path = FIGURES_DIR / "mesh_overlap_cube_scalability.png"
+    # Use indices (0, 1, 2...) for x-axis of bar chart, label with counts
+    x_indices = range(len(counts))
+
+    for i, count_idx in enumerate(x_indices):
+        for j, mode in enumerate(modes_to_plot):
+            x_pos = i - group_width/2 + (j + 0.5) * mode_width
+            
+            # Get breakdown for this run
+            breakdown = results[mode]["breakdown"][i]
+            mean_time = results[mode]["mean"][i] # Fallback if no breakdown
+            
+            if not breakdown:
+                ax_breakdown.bar(x_pos, mean_time, mode_width, color="#cccccc", edgecolor='white', alpha=0.5)
+            else:
+                bottom = 0
+                for phase in active_phases_ordered:
+                    val = breakdown.get(phase, 0.0)
+                    if val > 0:
+                        ax_breakdown.bar(x_pos, val, mode_width, bottom=bottom, 
+                                         color=colors.get(phase, None), edgecolor='white')
+                        bottom += val
+
+    ax_breakdown.set_xticks(x_indices)
+    ax_breakdown.set_xticklabels([f"{c//1000}k" for c in counts])
+    ax_breakdown.set_xlabel('Dataset Size (Cubes)', fontsize=12)
+    ax_breakdown.set_ylabel('Query Time (ms)', fontsize=12)
+    ax_breakdown.set_title('Query Time Breakdown', fontsize=14, fontweight='bold')
+    ax_breakdown.grid(True, axis='y', which='both', ls='-', alpha=0.1)
+    
+    # Legend
+    ax_breakdown.legend(legend_handles, legend_labels, 
+                       bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
+
     plt.tight_layout()
-    plt.savefig(output_path)
-    print(f"Figure saved to {output_path}")
+    output_path = FIGURES_DIR / "mesh_overlap_cube_scalability.png"
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    print(f"Visualization saved to {output_path}")
+    
+    # Also save PDF
+    pdf_path = str(output_path).replace('.png', '.pdf')
+    plt.savefig(pdf_path, bbox_inches='tight')
+    print(f"PDF saved to {pdf_path}")
 
 def main():
     parser = argparse.ArgumentParser(description="Mesh Overlap Cube Scalability Experiment")
     parser.add_argument("--runs", type=int, default=5, help="Number of runs per method")
-    parser.add_argument("--grid-resolution", type=int, default=10, help="Grid resolution for RaySpace")
+    parser.add_argument("--grid-resolution", type=int, default=20, help="Grid resolution for RaySpace")
     args = parser.parse_args()
     
     results = run_experiment(args.runs, args.grid_resolution)
     
     if results and results["counts"]:
         print("\nResults Summary:")
-        print(f"{'Count':<10} {'Exact (ms)':<15} {'Estimated (ms)':<15}")
+        print(f"{'Count':<10} {'Exact (ms)':<15} {'Estimated (ms)':<15} {'CGAL (ms)':<15}")
         for i, n in enumerate(results["counts"]):
-            print(f"{n:<10} {results['exact_times'][i]:<15.2f} {results['estimated_times'][i]:<15.2f}")
+            ex = results['exact']['mean'][i]
+            est = results['estimated']['mean'][i]
+            cg = results['cgal']['mean'][i]
+            cg_str = f"{cg:.2f}" if cg else "N/A"
+            print(f"{n:<10} {ex:<15.2f} {est:<15.2f} {cg_str:<15}")
                 
         plot_results(results)
+        
+        # Save summary to json
+        out_json = RUNS_DIR / f"scalability_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        with open(out_json, 'w') as f:
+            # Convert numpy types to native for json serialization
+            clean_results = {}
+            for k, v in results.items():
+                if isinstance(v, dict):
+                    clean_results[k] = {ki: (vi.tolist() if isinstance(vi, np.ndarray) else vi) for ki, vi in v.items()}
+                elif isinstance(v, list):
+                     clean_results[k] = v
+                else:
+                    clean_results[k] = v
+            json.dump(clean_results, f, indent=4)
+        print(f"Raw results saved to {out_json}")
     else:
         print("No successful runs.")
 

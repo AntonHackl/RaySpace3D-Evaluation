@@ -7,9 +7,11 @@ from pathlib import Path
 import subprocess
 
 # Add current directory to path to import adapters
+# Add current directory to path to import adapters
 sys.path.append(str(Path(__file__).parent))
 from adapters.raytracer_adapter import RaytracerAdapter
 from adapters.tdbase_adapter import TDBaseAdapter
+from adapters.cgal_adapter import CGALAdapter
 
 # Configuration
 SELECTIVITIES = [0.0001, 0.0005, 0.001, 0.005, 0.01]
@@ -17,10 +19,12 @@ NUM_CUBES = 50000
 MIN_SIZE = 1
 MAX_SIZE = 4
 GRID_CELL_SIZE = 5
+TIMEOUT_SECONDS = 120.0  # 2 minutes timeout per run
 
 WORKSPACE_ROOT = Path(__file__).resolve().parent.parent.parent
 RAYSPACE_DIR = WORKSPACE_ROOT / "src/RaySpace3D"
 TDBASE_DIR = WORKSPACE_ROOT / "baselines/RaySpace3DBaselines/tdbase"
+CGAL_DIR = WORKSPACE_ROOT / "baselines/RaySpace3DBaselines/CGAL"
 DATA_DIR = Path(__file__).parent / "data"
 RAW_DIR = DATA_DIR / "raw" / "selectivity_test"
 PREPROCESSED_DIR = DATA_DIR / "preprocessed" / "selectivity_test"
@@ -112,11 +116,18 @@ def main():
         tdbase_adapter.preprocess_from_source(str(obj_a), str(dt_a))
         tdbase_adapter.preprocess_from_source(str(obj_b), str(dt_b))
 
+        # Setup CGAL
+        cgal_adapter = CGALAdapter(
+            str(CGAL_DIR),
+            preprocessed_dir=str(PREPROCESSED_DIR)
+        )
+        # CGAL uses the same preprocessed files as Raytracer (.pre), which are already generated.
+
         # 5. Run Benchmark
         print("Running benchmark...")
         
-        # Test both Exact, Estimated, and TDBase
-        modes = ["exact", "estimated", "tdbase"]
+        # Test both Exact, Estimated, TDBase, and CGAL
+        modes = ["exact", "estimated", "tdbase", "cgal"]
         res_per_sel = {
             "selectivity": selectivity, 
             "grid_resolution": grid_resolution, 
@@ -130,6 +141,9 @@ def main():
                 current_adapter = tdbase_adapter
                 # Update name for consistent result key
                 current_adapter.name = "tdbase"
+            elif mode == "cgal":
+                current_adapter = cgal_adapter
+                current_adapter.name = "cgal"
             else:
                 adapter.mode = mode
                 # Update executable manually as correct binary depends on mode
@@ -144,7 +158,8 @@ def main():
             results = current_adapter.run_overlap(
                 str(obj_a),
                 str(obj_b),
-                num_runs=5
+                num_runs=5,
+                timeout=TIMEOUT_SECONDS
             )
             
             # Use mode name as key in results
@@ -154,11 +169,20 @@ def main():
                 print(f"[{result_key}] Error: {results['error']}")
                 res_per_sel[result_key] = {"error": results['error']}
             else:
-                print(f"[{result_key}] Mean Time: {results['mean']:.4f} ms")
+                breakdown = results.get("breakdown", {})
+                mean_time = results['mean']
+                print(f"[{result_key}] Mean Time: {mean_time:.4f} ms")
+                
+                # Check for estimated mode to include download time in mean?
+                # The mean reported by run_overlap covers the total time measured by Python or the tool.
+                # In RaytracerAdapter, it sums up phases.
+                # The breakdown should already be correct.
+                
                 res_per_sel[result_key] = {
-                    "mean_ms": results['mean'],
+                    "mean_ms": mean_time,
                     "std_ms": results['std'],
-                    "intersections": results.get("num_intersections", 0) # TDBase might not return this yet or returns it differently
+                    "intersections": results.get("num_intersections", 0),
+                    "breakdown": breakdown
                 }
 
         summary_results.append(res_per_sel)

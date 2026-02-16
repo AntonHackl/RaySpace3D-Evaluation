@@ -39,6 +39,7 @@
 *.txt
 *.wkt
 *.csv
+*.pdf
 
 # Logs and Verify
 *.log
