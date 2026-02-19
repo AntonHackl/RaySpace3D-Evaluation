@@ -13,12 +13,14 @@ sys.path.append(str(Path(__file__).parent))
 from adapters.raytracer_adapter import RaytracerAdapter
 from adapters.cgal_adapter import CGALAdapter
 from adapters.touch_adapter import TOUCHAdapter
+from adapters.tdbase_adapter import TDBaseAdapter
 
 # Configuration
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent.parent
 RAYSPACE_DIR = REPO_ROOT / "src/RaySpace3D"
 CGAL_DIR = REPO_ROOT / "baselines/RaySpace3DBaselines/CGAL"
+TDBASE_DIR = REPO_ROOT / "baselines/RaySpace3DBaselines/tdbase"
 DATA_DIR = SCRIPT_DIR / "data"
 RAW_DIR = DATA_DIR / "raw"
 PREPROCESSED_DIR = DATA_DIR / "preprocessed"
@@ -28,12 +30,35 @@ RUNS_DIR = SCRIPT_DIR / "runs"
 
 TIMEOUT_SECONDS = 120.0
 
-# Cube Counts for Dataset B (Dataset A is fixed at 200k)
-CUBE_COUNTS = [200000, 400000, 600000, 1000000]
-FIXED_COUNT = "200k_a"
+# Nu Counts for Dataset B (Dataset A is fixed at corresponding vessel count)
+DEFAULT_NU_COUNTS = [200, 400, 600, 800]
 
-def run_experiment(runs, grid_resolution):
-    print("--- Starting Cube Scalability Experiment ---")
+def find_dataset_files(nu):
+    """Find the nuclei (n) and vessel (v) files for a given nu count."""
+    # Pattern 1: Short name (e.g. nu200_n_...)
+    # Pattern 2: TDBase naming (e.g. tdbase_n_nv150_nu200_n_...)
+    
+    # Dataset A: Vessel (v)
+    candidates_v = list(RAW_DIR.glob(f"*_v_*nu{nu}*.dt"))
+    # Filter to avoid matching other things if any
+    candidates_v = [c for c in candidates_v if "nv150" in c.name]
+    
+    # Dataset B: Nuclei (n)
+    candidates_n = list(RAW_DIR.glob(f"*_n_*nu{nu}*.dt"))
+    candidates_n = [c for c in candidates_n if "nv150" in c.name and "_n2_" not in c.name]
+
+    if not candidates_v or not candidates_n:
+        return None, None
+    
+    # Prefer non-tdbase prefixed if both exist? Actually usually only one exists or they are same.
+    # Sort to be deterministic
+    candidates_v.sort(key=lambda x: len(x.name))
+    candidates_n.sort(key=lambda x: len(x.name))
+    
+    return candidates_v[0], candidates_n[0]
+
+def run_experiment(runs, grid_resolution, nu_counts):
+    print(f"--- Starting Nu Scalability Experiment ({nu_counts}) ---")
     
     # Ensure directories exist
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
@@ -42,10 +67,11 @@ def run_experiment(runs, grid_resolution):
     
     # Setup Logging
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_name = f"cube_scalability_{runs}runs_{timestamp}"
+    run_name = f"nu_scalability_{runs}runs_{timestamp}"
     run_log_dir = RUNS_DIR / "logs" / run_name
     run_log_dir.mkdir(parents=True, exist_ok=True)
     print(f"Logging runs to: {run_log_dir}")
+    print(f"RaySpace Dir: {RAYSPACE_DIR}")
 
     # Initialize Adapters
     print("Initializing adapters...")
@@ -76,85 +102,79 @@ def run_experiment(runs, grid_resolution):
         str(CGAL_DIR),
         preprocessed_dir=str(PREPROCESSED_DIR)
     )
+
+    tdbase_adapter = TDBaseAdapter(
+        str(TDBASE_DIR),
+        preprocessed_dir=str(PREPROCESSED_DIR)
+    )
     
     results = {
         "counts": [],
         "exact": {"mean": [], "std": [], "breakdown": []},
         "estimated": {"mean": [], "std": [], "breakdown": []},
         "cgal": {"mean": [], "std": []},
-        "touch": {"mean": [], "std": []}
+        "touch": {"mean": [], "std": []},
+        "tdbase": {"mean": [], "std": []}
     }
 
-    filename_a = f"cubes_{FIXED_COUNT}.obj"
-    f1_path = RAW_DIR / filename_a
-    
-    if not f1_path.exists():
-        print(f"Error: Dataset A ({f1_path}) not found!")
-        return None
-
-    for count in CUBE_COUNTS:
-        filename_b = f"cubes_{count // 1000}k_b.obj"
-        f2_path = RAW_DIR / filename_b
+    for nu in nu_counts:
+        f_v_path, f_n_path = find_dataset_files(nu)
         
-        if not f2_path.exists():
-            print(f"Error: Dataset B ({f2_path}) not found! Skipping.")
+        if not f_v_path or not f_n_path:
+            print(f"Error: Datasets for nu={nu} not found in {RAW_DIR}! Skipping.")
             continue
         
-        print(f"\nProcessing: {filename_a} vs {filename_b}")
+        print(f"\nProcessing nu={nu}: {f_v_path.name} vs {f_n_path.name}")
 
-        # Check/Run Preprocessing (Exact/Estimated share preprocessed files)
+        # Check/Run Preprocessing for Raytracer (Generates .pre for CGAL/TOUCH too)
         print("Checking preprocessing...")
-        # Force preprocessing if not exists or ensure it's up to date
-        # Note: RaytracerAdapter.preprocess_from_source checks existence inside
-        exact_adapter.preprocess_from_source(str(f1_path), str(f1_path), log_dir=str(run_log_dir))
-        exact_adapter.preprocess_from_source(str(f2_path), str(f2_path), log_dir=str(run_log_dir))
+        exact_adapter.preprocess_from_source(str(f_v_path), str(f_v_path), log_dir=str(run_log_dir))
+        exact_adapter.preprocess_from_source(str(f_n_path), str(f_n_path), log_dir=str(run_log_dir))
 
         # Run Exact Benchmark
         print(f"Running Exact Mode ({runs} runs)...")
         res_exact = exact_adapter.run_overlap(
-            str(f1_path), 
-            str(f2_path), 
+            str(f_v_path), 
+            str(f_n_path), 
             runs,
             log_dir=str(run_log_dir),
             timeout=TIMEOUT_SECONDS
         )
         if "error" in res_exact:
             print(f"Error in exact run: {res_exact['error']}")
-            continue # Assuming if exact fails, we skip this point
+            res_exact = {"mean": 0, "std": 0, "breakdown": {}}
             
         # Run Estimated Benchmark
         print(f"Running Estimated Mode ({runs} runs)...")
         res_est = estimated_adapter.run_overlap(
-            str(f1_path), 
-            str(f2_path), 
+            str(f_v_path), 
+            str(f_n_path), 
             runs,
             log_dir=str(run_log_dir),
             timeout=TIMEOUT_SECONDS
         )
         if "error" in res_est:
             print(f"Error in estimated run: {res_est['error']}")
-            # We continue even if estimated fails? Let's say yes for robustness
             res_est = {"mean": 0, "std": 0, "breakdown": {}}
 
         # Run CGAL Benchmark
         print(f"Running CGAL Mode ({runs} runs)...")
         res_cgal = cgal_adapter.run_overlap(
-            str(f1_path), 
-            str(f2_path), 
+            str(f_v_path), 
+            str(f_n_path), 
             runs,
             log_dir=str(run_log_dir),
             timeout=TIMEOUT_SECONDS
         )
         if "error" in res_cgal:
             print(f"Error in CGAL run: {res_cgal['error']}")
-            # Allow CGAL to fail (e.g. timeout)
             res_cgal = {"mean": None, "std": None}
 
         # Run TOUCH Benchmark
         print(f"Running TOUCH Mode ({runs} runs)...")
         res_touch = touch_adapter.run_overlap(
-            str(f1_path), 
-            str(f2_path), 
+            str(f_v_path), 
+            str(f_n_path), 
             runs,
             log_dir=str(run_log_dir),
             timeout=TIMEOUT_SECONDS
@@ -163,7 +183,20 @@ def run_experiment(runs, grid_resolution):
             print(f"Error in TOUCH run: {res_touch['error']}")
             res_touch = {"mean": None, "std": None}
 
-        results["counts"].append(count)
+        # Run TDBase Benchmark
+        print(f"Running TDBase Mode ({runs} runs)...")
+        res_td = tdbase_adapter.run_overlap(
+            str(f_v_path), 
+            str(f_n_path), 
+            runs,
+            log_dir=str(run_log_dir),
+            timeout=TIMEOUT_SECONDS
+        )
+        if "error" in res_td:
+            print(f"Error in TDBase run: {res_td['error']}")
+            res_td = {"mean": None, "std": None}
+
+        results["counts"].append(nu)
         
         results["exact"]["mean"].append(res_exact["mean"])
         results["exact"]["std"].append(res_exact["std"])
@@ -178,10 +211,14 @@ def run_experiment(runs, grid_resolution):
         
         results["touch"]["mean"].append(res_touch["mean"])
         results["touch"]["std"].append(res_touch["std"])
+
+        results["tdbase"]["mean"].append(res_td["mean"])
+        results["tdbase"]["std"].append(res_td["std"])
         
         cgal_str = f"{res_cgal['mean']:.2f}ms" if res_cgal['mean'] else "TIMEOUT/ERR"
         touch_str = f"{res_touch['mean']:.2f}ms" if res_touch['mean'] else "TIMEOUT/ERR"
-        print(f"Done {count}: Exact={res_exact['mean']:.2f}ms, Est={res_est['mean']:.2f}ms, CGAL={cgal_str}, TOUCH={touch_str}")
+        td_str = f"{res_td['mean']:.2f}ms" if res_td['mean'] else "TIMEOUT/ERR"
+        print(f"Done nu={nu}: Exact={res_exact['mean']:.2f}ms, Est={res_est['mean']:.2f}ms, CGAL={cgal_str}, TOUCH={touch_str}, TDBase={td_str}")
 
     return results
 
@@ -194,7 +231,8 @@ def plot_results(results):
         print("No results to plot.")
         return
 
-    fig, (ax_main, ax_breakdown) = plt.subplots(1, 2, figsize=(18, 8))
+    # Create figure with 2 subplots (Line Chart and Breakdown Chart)
+    fig, (ax_main, ax_breakdown) = plt.subplots(1, 2, figsize=(20, 8))
 
     # --- Plot 1: Line Chart (Scaling) ---
     ax_main.errorbar(counts, results["exact"]["mean"], yerr=results["exact"]["std"], 
@@ -220,7 +258,16 @@ def plot_results(results):
         ax_main.errorbar(touch_counts, touch_means, yerr=touch_stds, 
                          fmt='-^', label='TOUCH', capsize=5, color='#8c564b')
 
-    ax_main.set_xlabel('Number of Cubes in Dataset B (A=200k)', fontsize=12)
+    # Filter valid TDBase points
+    td_valid_indices = [i for i, m in enumerate(results["tdbase"]["mean"]) if m is not None]
+    if td_valid_indices:
+        td_counts = [counts[i] for i in td_valid_indices]
+        td_means = [results["tdbase"]["mean"][i] for i in td_valid_indices]
+        td_stds = [results["tdbase"]["std"][i] for i in td_valid_indices]
+        ax_main.errorbar(td_counts, td_means, yerr=td_stds, 
+                         fmt='-.x', label='TDBase', capsize=5, color='#d62728')
+
+    ax_main.set_xlabel('Nuclei per Vessel (Total objects ≃ Nu * 300)', fontsize=12)
     ax_main.set_ylabel('Execution Time (ms) [Log Scale]', fontsize=12)
     ax_main.set_title('Scalability: Mesh Overlap Query Time', fontsize=14, fontweight='bold')
     ax_main.set_yscale('log')
@@ -229,7 +276,6 @@ def plot_results(results):
     ax_main.set_xticks(counts)
 
     # --- Plot 2: Breakdown Bar Chart (Exact & Estimated ONLY) ---
-    # Breakdown visual settings
     phase_mapping = {
         "selectivity estimation_": "Selectivity Est.",
         "execute hash query_": "Hash Query",
@@ -276,8 +322,7 @@ def plot_results(results):
     group_width = 0.8
     mode_width = group_width / num_modes
     
-    # Use indices (0, 1, 2...) for x-axis of bar chart, label with counts
-    x_indices = range(len(counts))
+    x_indices = np.arange(len(counts))
 
     for i, count_idx in enumerate(x_indices):
         for j, mode in enumerate(modes_to_plot):
@@ -285,10 +330,11 @@ def plot_results(results):
             
             # Get breakdown for this run
             breakdown = results[mode]["breakdown"][i]
-            mean_time = results[mode]["mean"][i] # Fallback if no breakdown
+            mean_time = results[mode]["mean"][i]
             
-            if not breakdown:
-                ax_breakdown.bar(x_pos, mean_time, mode_width, color="#cccccc", edgecolor='white', alpha=0.5)
+            if not breakdown or mean_time == 0:
+                # Add a zero or minimal bar if data missing
+                pass
             else:
                 bottom = 0
                 for phase in active_phases_ordered:
@@ -299,10 +345,10 @@ def plot_results(results):
                         bottom += val
 
     ax_breakdown.set_xticks(x_indices)
-    ax_breakdown.set_xticklabels([f"{c//1000}k" for c in counts])
-    ax_breakdown.set_xlabel('Dataset Size (Cubes)', fontsize=12)
+    ax_breakdown.set_xticklabels([str(c) for c in counts])
+    ax_breakdown.set_xlabel('Nuclei per Vessel', fontsize=12)
     ax_breakdown.set_ylabel('Query Time (ms)', fontsize=12)
-    ax_breakdown.set_title('Query Time Breakdown', fontsize=14, fontweight='bold')
+    ax_breakdown.set_title('RaySpace3D Query Time Breakdown', fontsize=14, fontweight='bold')
     ax_breakdown.grid(True, axis='y', which='both', ls='-', alpha=0.1)
     
     # Legend
@@ -310,7 +356,7 @@ def plot_results(results):
                        bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
 
     plt.tight_layout()
-    output_path = FIGURES_DIR / "mesh_overlap_cube_scalability.png"
+    output_path = FIGURES_DIR / "mesh_overlap_nu_scalability.png"
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     print(f"Visualization saved to {output_path}")
     
@@ -320,37 +366,45 @@ def plot_results(results):
     print(f"PDF saved to {pdf_path}")
 
 def main():
-    parser = argparse.ArgumentParser(description="Mesh Overlap Cube Scalability Experiment")
+    parser = argparse.ArgumentParser(description="Mesh Overlap Nu Scalability Experiment")
     parser.add_argument("--runs", type=int, default=5, help="Number of runs per method")
     parser.add_argument("--grid-resolution", type=int, default=20, help="Grid resolution for RaySpace")
+    parser.add_argument("--nu", type=int, nargs='+', help="Nu counts to test (e.g. 200 400 600 800)")
     args = parser.parse_args()
     
-    results = run_experiment(args.runs, args.grid_resolution)
+    nu_counts = args.nu if args.nu else DEFAULT_NU_COUNTS
+    
+    results = run_experiment(args.runs, args.grid_resolution, nu_counts)
     
     if results and results["counts"]:
         print("\nResults Summary:")
-        print(f"{'Count':<10} {'Exact (ms)':<15} {'Estimated (ms)':<15} {'CGAL (ms)':<15} {'TOUCH (ms)':<15}")
+        header = f"{'Nu':<10} {'Exact (ms)':<15} {'Estimated (ms)':<15} {'CGAL (ms)':<15} {'TOUCH (ms)':<15} {'TDBase (ms)':<15}"
+        print(header)
+        print("-" * len(header))
         for i, n in enumerate(results["counts"]):
             ex = results['exact']['mean'][i]
             est = results['estimated']['mean'][i]
             cg = results['cgal']['mean'][i]
             to = results['touch']['mean'][i]
+            td = results['tdbase']['mean'][i]
+            
             cg_str = f"{cg:.2f}" if cg else "N/A"
             to_str = f"{to:.2f}" if to else "N/A"
-            print(f"{n:<10} {ex:<15.2f} {est:<15.2f} {cg_str:<15} {to_str:<15}")
+            td_str = f"{td:.2f}" if td else "N/A"
+            
+            print(f"{n:<10} {ex:<15.2f} {est:<15.2f} {cg_str:<15} {to_str:<15} {td_str:<15}")
                 
         plot_results(results)
         
         # Save summary to json
-        out_json = RUNS_DIR / f"scalability_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        out_json = RUNS_DIR / f"nu_scalability_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         with open(out_json, 'w') as f:
-            # Convert numpy types to native for json serialization
             clean_results = {}
             for k, v in results.items():
                 if isinstance(v, dict):
                     clean_results[k] = {ki: (vi.tolist() if isinstance(vi, np.ndarray) else vi) for ki, vi in v.items()}
                 elif isinstance(v, list):
-                     clean_results[k] = v
+                    clean_results[k] = v
                 else:
                     clean_results[k] = v
             json.dump(clean_results, f, indent=4)

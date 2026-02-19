@@ -12,6 +12,7 @@ sys.path.append(str(Path(__file__).parent))
 from adapters.raytracer_adapter import RaytracerAdapter
 from adapters.tdbase_adapter import TDBaseAdapter
 from adapters.cgal_adapter import CGALAdapter
+from adapters.touch_adapter import TOUCHAdapter
 
 # Configuration
 SELECTIVITIES = [0.0001, 0.0005, 0.001, 0.005, 0.01]
@@ -41,6 +42,14 @@ def compute_universe_for_selectivity(target_selectivity, min_size, max_size):
     return universe_extent
 
 def main():
+    parser = argparse.ArgumentParser(description="Selectivity Benchmark for Mesh Overlap")
+    parser.add_argument("--approaches", type=str, nargs="+", 
+                        default=["exact", "estimated", "direct_estimation", "tdbase", "cgal", "touch"],
+                        choices=["exact", "estimated", "direct_estimation", "tdbase", "cgal", "touch"],
+                        help="Approaches to run")
+    parser.add_argument("--runs", type=int, default=5, help="Number of runs per selectivity")
+    args = parser.parse_args()
+
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     PREPROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     TIMINGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -116,18 +125,22 @@ def main():
         tdbase_adapter.preprocess_from_source(str(obj_a), str(dt_a))
         tdbase_adapter.preprocess_from_source(str(obj_b), str(dt_b))
 
-        # Setup CGAL
+        # Setup CGAL & TOUCH
         cgal_adapter = CGALAdapter(
             str(CGAL_DIR),
             preprocessed_dir=str(PREPROCESSED_DIR)
         )
-        # CGAL uses the same preprocessed files as Raytracer (.pre), which are already generated.
+        touch_adapter = TOUCHAdapter(
+            str(CGAL_DIR),
+            preprocessed_dir=str(PREPROCESSED_DIR)
+        )
+        # CGAL and TOUCH use the same preprocessed files as Raytracer (.pre), which are already generated.
 
         # 5. Run Benchmark
         print("Running benchmark...")
         
-        # Test both Exact, Estimated, TDBase, and CGAL
-        modes = ["exact", "estimated", "tdbase", "cgal"]
+        # Test requested modes
+        modes = args.approaches
         res_per_sel = {
             "selectivity": selectivity, 
             "grid_resolution": grid_resolution, 
@@ -144,6 +157,9 @@ def main():
             elif mode == "cgal":
                 current_adapter = cgal_adapter
                 current_adapter.name = "cgal"
+            elif mode == "touch":
+                current_adapter = touch_adapter
+                current_adapter.name = "touch"
             else:
                 adapter.mode = mode
                 # Update executable manually as correct binary depends on mode
@@ -153,12 +169,15 @@ def main():
                 elif mode == "estimated":
                     adapter.executable = adapter.rayspace_dir / "query/build/bin/raytracer_overlap_estimated"
                     adapter.name = "estimated"
+                elif mode == "direct_estimation":
+                    adapter.executable = adapter.rayspace_dir / "query/build/bin/raytracer_overlap_direct_estimation"
+                    adapter.name = "direct_estimation"
                 current_adapter = adapter
                 
             results = current_adapter.run_overlap(
                 str(obj_a),
                 str(obj_b),
-                num_runs=5,
+                num_runs=args.runs,
                 timeout=TIMEOUT_SECONDS
             )
             

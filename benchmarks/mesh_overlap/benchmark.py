@@ -6,7 +6,7 @@ import os
 import sys
 from pathlib import Path
 from datetime import datetime
-from adapters import TDBaseAdapter, CGALAdapter, RaytracerAdapter
+from adapters import TDBaseAdapter, CGALAdapter, TOUCHAdapter, RaytracerAdapter
 import numpy as np
 
 
@@ -76,8 +76,8 @@ def main():
     parser.add_argument("--dataset", type=str, default=DEFAULT_DATASET, 
                         choices=list(DATASETS.keys()),
                         help=f"Dataset configuration to use: {', '.join(DATASETS.keys())}")
-    parser.add_argument("--approaches", type=str, nargs="+", default=["cgal", "tdbase", "raytracer_exact", "raytracer_estimated"],
-                        choices=["cgal", "tdbase", "raytracer_exact", "raytracer_estimated", "raytracer_estimate_only"],
+    parser.add_argument("--approaches", type=str, nargs="+", default=["cgal", "touch", "tdbase", "raytracer_exact", "raytracer_estimated"],
+                        choices=["cgal", "touch", "tdbase", "raytracer_exact", "raytracer_estimated", "raytracer_estimate_only", "raytracer_overlap_direct_estimation"],
                         help="Approaches to run (default: all)")
     parser.add_argument("--file1", type=str, default=None, help="First dataset file (overrides --dataset)")
     parser.add_argument("--file2", type=str, default=None, help="Second dataset file (overrides --dataset)")
@@ -147,6 +147,8 @@ def main():
         adapters = []
         if "cgal" in args.approaches:
             adapters.append(CGALAdapter(str(CGAL_BASE_DIR), preprocessed_dir=str(preprocessed_dir), threads=args.threads))
+        if "touch" in args.approaches:
+            adapters.append(TOUCHAdapter(str(CGAL_BASE_DIR), preprocessed_dir=str(preprocessed_dir), threads=args.threads))
         if "tdbase" in args.approaches:
             adapters.append(TDBaseAdapter(str(TDBASE_DIR)))
         if "raytracer_exact" in args.approaches:
@@ -155,10 +157,14 @@ def main():
             adapters.append(RaytracerAdapter(str(RAYSPACE_DIR), mode="estimated", preprocessed_dir=str(preprocessed_dir), timings_dir=str(timings_dir), grid_resolution=args.grid_resolution, warmup_runs=args.raytracer_warmup_runs))
         if "raytracer_estimate_only" in args.approaches:
             adapters.append(RaytracerAdapter(str(RAYSPACE_DIR), mode="estimate_only", preprocessed_dir=str(preprocessed_dir), timings_dir=str(timings_dir), grid_resolution=args.grid_resolution, warmup_runs=args.raytracer_warmup_runs))
+        if "raytracer_overlap_direct_estimation" in args.approaches:
+            adapters.append(RaytracerAdapter(str(RAYSPACE_DIR), mode="direct_estimation", preprocessed_dir=str(preprocessed_dir), timings_dir=str(timings_dir), grid_resolution=args.grid_resolution, warmup_runs=args.raytracer_warmup_runs))
 
         all_results = {}
         ssot_stats = {"num_obj1": 0, "num_obj2": 0, "num_intersections": 0}
-        ssot_requested = ("raytracer_exact" in args.approaches) or ("raytracer_estimated" in args.approaches)
+        all_results = {}
+        ssot_stats = {"num_obj1": 0, "num_obj2": 0, "num_intersections": 0}
+        ssot_requested = any(x in args.approaches for x in ["raytracer_exact", "raytracer_estimated", "raytracer_overlap_direct_estimation"])
 
         # Preprocessing check for Raytracer and CGAL (use source files)
         rt_adapter = next((a for a in adapters if isinstance(a, RaytracerAdapter)), None)

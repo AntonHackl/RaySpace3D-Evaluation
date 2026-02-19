@@ -26,6 +26,10 @@ def visualize_selectivity(summary_file, output_path=None):
     tdbase_stds = []
     cgal_means = []
     cgal_stds = []
+    touch_means = []
+    touch_stds = []
+    direct_est_means = []
+    direct_est_stds = []
 
     # Filter data
     valid_selectivities = []
@@ -54,6 +58,20 @@ def visualize_selectivity(summary_file, output_path=None):
             cgal_means.append(None)
             cgal_stds.append(None)
 
+        if "touch" in d and "error" not in d["touch"]:
+            touch_means.append(d["touch"]["mean_ms"])
+            touch_stds.append(d["touch"]["std_ms"])
+        else:
+            touch_means.append(None)
+            touch_stds.append(None)
+
+        if "direct_estimation" in d and "error" not in d["direct_estimation"]:
+            direct_est_means.append(d["direct_estimation"]["mean_ms"])
+            direct_est_stds.append(d["direct_estimation"]["std_ms"])
+        else:
+            direct_est_means.append(None)
+            direct_est_stds.append(None)
+
     if not valid_selectivities:
         print("No valid data points found.")
         return
@@ -72,6 +90,10 @@ def visualize_selectivity(summary_file, output_path=None):
                 marker='o', capsize=5, linestyle='-', color='#1f77b4')
     ax_main.errorbar(valid_selectivities, est_means, yerr=est_stds, label='Estimated Raytracer', 
                 marker='s', capsize=5, linestyle='--', color='#2ca02c')
+    
+    if any(x is not None for x in direct_est_means):
+        ax_main.errorbar(valid_selectivities, direct_est_means, yerr=direct_est_stds, label='Direct Est. Raytracer', 
+                    marker='X', capsize=5, linestyle=':', color='#ff7f0e')
 
     if any(x is not None for x in tdbase_means):
         td_sel = [s for s, m in zip(valid_selectivities, tdbase_means) if m is not None]
@@ -88,6 +110,14 @@ def visualize_selectivity(summary_file, output_path=None):
         
         ax_main.errorbar(cgal_sel, cm, yerr=cs, label='CGAL',
                     marker='d', capsize=5, linestyle=':', color='#9467bd')
+
+    if any(x is not None for x in touch_means):
+        touch_sel = [s for s, m in zip(valid_selectivities, touch_means) if m is not None]
+        tm = [m for m in touch_means if m is not None]
+        ts = [s for s, m in zip(touch_stds, touch_means) if m is not None]
+        
+        ax_main.errorbar(touch_sel, tm, yerr=ts, label='TOUCH',
+                    marker='p', capsize=5, linestyle='-', color='#8c564b')
 
     ax_main.set_xscale('log')
     ax_main.set_yscale('log')
@@ -107,7 +137,7 @@ def visualize_selectivity(summary_file, output_path=None):
 
     # --- Plot 2: Breakdown Chart ---
     # Prepare data for breakdown
-    modes_in_data = ["exact", "estimated", "tdbase"]
+    modes_in_data = ["exact", "estimated", "direct_estimation", "tdbase", "cgal", "touch"]
     phase_mapping = {
         "selectivity estimation_": "Selectivity Est.",
         "execute hash query_": "Hash Query",
@@ -128,6 +158,15 @@ def visualize_selectivity(summary_file, output_path=None):
         "execute hash query_": "#3399ff",   # Darker Blue
         "gpu deduplication_": "#99ff99",    # Green-ish
         "download results_": "#ffcc99"      # Orange-ish
+    }
+    
+    mode_short_names = {
+        "exact": "Ex",
+        "estimated": "Est",
+        "direct_estimation": "Dir",
+        "tdbase": "TD",
+        "cgal": "CG",
+        "touch": "TO"
     }
 
     # Find all active phases in any mode/selectivity
@@ -182,10 +221,14 @@ def visualize_selectivity(summary_file, output_path=None):
                         ax_breakdown.bar(x_pos, val, mode_width, bottom=bottom, 
                                          color=colors.get(phase, None), edgecolor='white')
                         bottom += val
+            
+            # Add short label for mode
+            short_name = mode_short_names.get(mode, mode[:3])
+            ax_breakdown.text(x_pos, -2, short_name, ha='center', va='top', fontsize=8, rotation=45)
 
     ax_breakdown.set_xticks(range(num_selectivities))
     ax_breakdown.set_xticklabels([f"{s}" for s in valid_selectivities])
-    ax_breakdown.set_xlabel('Selectivity', fontsize=12)
+    ax_breakdown.set_xlabel('Selectivity (Grouped by Approach: Ex, Est, Dir, ...)', fontsize=12)
     ax_breakdown.set_ylabel('Query Time (ms)', fontsize=12)
     ax_breakdown.set_title('Query Time Breakdown', fontsize=14, fontweight='bold')
     ax_breakdown.grid(True, axis='y', which='both', ls='-', alpha=0.1)

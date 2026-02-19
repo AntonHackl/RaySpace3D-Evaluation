@@ -119,13 +119,24 @@ class TDBaseAdapter(OverlapBenchmarkAdapter):
                     prefix=f"[{self.name}]",
                 )
                 output = stdout_text + stderr_text
-                # Parse: "computation:    10.5554" 
-                match = re.search(r"computation:\s+([\d.]+)", output)
+                # Parse: "compute:        1.48621 s(8.46801%)" or "compute:        50.123 ms(..."
+                match = re.search(r"compute:\s+([\d.]+)\s+(s|ms)", output)
                 if match:
-                    runtimes.append(float(match.group(1)))
+                    val = float(match.group(1))
+                    unit = match.group(2)
+                    if unit == 's':
+                        val *= 1000.0
+                    runtimes.append(val)
                 else:
-                    print(f"[{self.name}] Error: Could not find 'computation' timing in output. Result:\n{output}")
-                    return {"error": "Computation timing not found"}
+                    # Fallback to the individual computation lines if summary is missing?
+                    # "computation for checking intersection takes 813.053000 ms"
+                    comp_matches = re.finditer(r"computation for checking intersection takes ([\d.]+) ms", output)
+                    comp_times = [float(m.group(1)) for m in comp_matches]
+                    if comp_times:
+                        runtimes.append(sum(comp_times))
+                    else:
+                        print(f"[{self.name}] Error: Could not find computation timing in output. Result:\n{output}")
+                        return {"error": "Computation timing not found"}
             except subprocess.TimeoutExpired:
                 print(f"[{self.name}] Timeout reached ({timeout}s)")
                 return {"error": f"Timeout reached ({timeout}s)"}

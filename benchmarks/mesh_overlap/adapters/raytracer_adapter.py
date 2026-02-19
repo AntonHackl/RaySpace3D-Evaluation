@@ -38,6 +38,8 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
             self.executable = query_bin_dir / "raytracer_mesh_overlap"
         elif self.mode in ("estimated", "estimate_only"):
             self.executable = query_bin_dir / "raytracer_overlap_estimated"
+        elif self.mode == "direct_estimation":
+            self.executable = query_bin_dir / "raytracer_overlap_direct_estimation"
         else:
             raise ValueError(f"Unknown mode: {self.mode}")
 
@@ -123,7 +125,7 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
 
         if self.mode == "exact":
             expected_prefixes = ["query_", "gpu deduplication_", "download results_"]
-        elif self.mode == "estimated":
+        elif self.mode in ("estimated", "direct_estimation"):
             # For estimated mode, include selectivity estimation in query time
             expected_prefixes = ["selectivity estimation_", "execute hash query_", "download results_"]
         else:
