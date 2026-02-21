@@ -20,18 +20,21 @@ def visualize_speedup(json_path, output_dir):
     
     plt.figure(figsize=(10, 6))
     
-    plt.plot(counts, exact_speedup, '-o', label='RaySpace Exact Speedup', color='#1f77b4', linewidth=2, markersize=8)
-    plt.plot(counts, estimated_speedup, '--s', label='RaySpace Estimated Speedup', color='#2ca02c', linewidth=2, markersize=8)
+    x = np.arange(len(counts))
+    width = 0.35
     
-    # Add labels on points
-    for i, (count, ex, est) in enumerate(zip(counts, exact_speedup, estimated_speedup)):
-        plt.text(count, ex + 0.5, f'{ex:.1f}x', ha='center', va='bottom', fontsize=10, fontweight='bold', color='#1f77b4')
-        plt.text(count, est - 1.5, f'{est:.1f}x', ha='center', va='top', fontsize=10, fontweight='bold', color='#2ca02c')
+    plt.bar(x - width/2, exact_speedup, width, label='RaySpace Exact Speedup', color='#1f77b4', alpha=0.8)
+    plt.bar(x + width/2, estimated_speedup, width, label='RaySpace Estimated Speedup', color='#2ca02c', alpha=0.8)
+    
+    # Add labels on top of bars
+    for i, (ex, est) in enumerate(zip(exact_speedup, estimated_speedup)):
+        plt.text(i - width/2, ex + 0.5, f'{ex:.1f}x', ha='center', va='bottom', fontsize=10, fontweight='bold')
+        plt.text(i + width/2, est + 0.5, f'{est:.1f}x', ha='center', va='bottom', fontsize=10, fontweight='bold', color='green')
 
     plt.xlabel('Nuclei per Vessel', fontsize=12)
     plt.ylabel('Speedup over TDBase (x)', fontsize=12)
     plt.title('RaySpace3D Speedup relative to TDBase', fontsize=14, fontweight='bold')
-    plt.xticks(counts)
+    plt.xticks(x, [str(c) for c in counts])
     plt.legend()
     plt.grid(True, axis='y', linestyle='--', alpha=0.7)
     
