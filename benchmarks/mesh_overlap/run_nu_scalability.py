@@ -84,9 +84,9 @@ def run_experiment(runs, grid_resolution, nu_counts):
         warmup_runs=1
     )
     
-    estimated_adapter = RaytracerAdapter(
+    direct_estimation_adapter = RaytracerAdapter(
         str(RAYSPACE_DIR), 
-        mode="estimated", 
+        mode="direct_estimation", 
         preprocessed_dir=str(PREPROCESSED_DIR), 
         timings_dir=str(TIMINGS_DIR),
         grid_resolution=grid_resolution,
@@ -111,7 +111,7 @@ def run_experiment(runs, grid_resolution, nu_counts):
     results = {
         "counts": [],
         "exact": {"mean": [], "std": [], "breakdown": []},
-        "estimated": {"mean": [], "std": [], "breakdown": []},
+        "direct_estimation": {"mean": [], "std": [], "breakdown": []},
         "cgal": {"mean": [], "std": []},
         "touch": {"mean": [], "std": []},
         "tdbase": {"mean": [], "std": []}
@@ -144,18 +144,18 @@ def run_experiment(runs, grid_resolution, nu_counts):
             print(f"Error in exact run: {res_exact['error']}")
             res_exact = {"mean": 0, "std": 0, "breakdown": {}}
             
-        # Run Estimated Benchmark
-        print(f"Running Estimated Mode ({runs} runs)...")
-        res_est = estimated_adapter.run_overlap(
+        # Run Direct Estimation Benchmark
+        print(f"Running Direct Estimation Mode ({runs} runs)...")
+        res_direct = direct_estimation_adapter.run_overlap(
             str(f_v_path), 
             str(f_n_path), 
             runs,
             log_dir=str(run_log_dir),
             timeout=TIMEOUT_SECONDS
         )
-        if "error" in res_est:
-            print(f"Error in estimated run: {res_est['error']}")
-            res_est = {"mean": 0, "std": 0, "breakdown": {}}
+        if "error" in res_direct:
+            print(f"Error in direct estimation run: {res_direct['error']}")
+            res_direct = {"mean": 0, "std": 0, "breakdown": {}}
 
         # Run CGAL Benchmark
         print(f"Running CGAL Mode ({runs} runs)...")
@@ -202,9 +202,9 @@ def run_experiment(runs, grid_resolution, nu_counts):
         results["exact"]["std"].append(res_exact["std"])
         results["exact"]["breakdown"].append(res_exact.get("breakdown", {}))
         
-        results["estimated"]["mean"].append(res_est["mean"])
-        results["estimated"]["std"].append(res_est["std"])
-        results["estimated"]["breakdown"].append(res_est.get("breakdown", {}))
+        results["direct_estimation"]["mean"].append(res_direct["mean"])
+        results["direct_estimation"]["std"].append(res_direct["std"])
+        results["direct_estimation"]["breakdown"].append(res_direct.get("breakdown", {}))
         
         results["cgal"]["mean"].append(res_cgal["mean"])
         results["cgal"]["std"].append(res_cgal["std"])
@@ -218,7 +218,7 @@ def run_experiment(runs, grid_resolution, nu_counts):
         cgal_str = f"{res_cgal['mean']:.2f}ms" if res_cgal['mean'] else "TIMEOUT/ERR"
         touch_str = f"{res_touch['mean']:.2f}ms" if res_touch['mean'] else "TIMEOUT/ERR"
         td_str = f"{res_td['mean']:.2f}ms" if res_td['mean'] else "TIMEOUT/ERR"
-        print(f"Done nu={nu}: Exact={res_exact['mean']:.2f}ms, Est={res_est['mean']:.2f}ms, CGAL={cgal_str}, TOUCH={touch_str}, TDBase={td_str}")
+        print(f"Done nu={nu}: Exact={res_exact['mean']:.2f}ms, Direct={res_direct['mean']:.2f}ms, CGAL={cgal_str}, TOUCH={touch_str}, TDBase={td_str}")
 
     return results
 
@@ -237,8 +237,8 @@ def plot_results(results):
     # --- Plot 1: Line Chart (Scaling) ---
     ax_main.errorbar(counts, results["exact"]["mean"], yerr=results["exact"]["std"], 
                      fmt='-o', label='Exact Raytracer', capsize=5, color='#1f77b4')
-    ax_main.errorbar(counts, results["estimated"]["mean"], yerr=results["estimated"]["std"], 
-                     fmt='--s', label='Estimated Raytracer', capsize=5, color='#2ca02c')
+    ax_main.errorbar(counts, results["direct_estimation"]["mean"], yerr=results["direct_estimation"]["std"], 
+                     fmt='--s', label='Direct Estimation Raytracer', capsize=5, color='#2ca02c')
     
     # Filter valid CGAL points
     cgal_valid_indices = [i for i, m in enumerate(results["cgal"]["mean"]) if m is not None]
@@ -275,7 +275,7 @@ def plot_results(results):
     ax_main.grid(True, which="both", ls="-", alpha=0.2)
     ax_main.set_xticks(counts)
 
-    # --- Plot 2: Breakdown Bar Chart (Exact & Estimated ONLY) ---
+    # --- Plot 2: Breakdown Bar Chart (Exact & Direct Estimation ONLY) ---
     phase_mapping = {
         "selectivity estimation_": "Selectivity Est.",
         "execute hash query_": "Hash Query",
@@ -300,7 +300,7 @@ def plot_results(results):
     
     # Collect active phases
     all_active_phases = set(ordered_phases_raw)
-    for mode in ["exact", "estimated"]:
+    for mode in ["exact", "direct_estimation"]:
         for bd in results[mode]["breakdown"]:
             all_active_phases.update(bd.keys())
     
@@ -317,7 +317,7 @@ def plot_results(results):
         legend_handles.append(patch)
         legend_labels.append(label)
 
-    modes_to_plot = ["exact", "estimated"]
+    modes_to_plot = ["exact", "direct_estimation"]
     num_modes = len(modes_to_plot)
     group_width = 0.8
     mode_width = group_width / num_modes
@@ -378,12 +378,12 @@ def main():
     
     if results and results["counts"]:
         print("\nResults Summary:")
-        header = f"{'Nu':<10} {'Exact (ms)':<15} {'Estimated (ms)':<15} {'CGAL (ms)':<15} {'TOUCH (ms)':<15} {'TDBase (ms)':<15}"
+        header = f"{'Nu':<10} {'Exact (ms)':<15} {'Direct Est (ms)':<15} {'CGAL (ms)':<15} {'TOUCH (ms)':<15} {'TDBase (ms)':<15}"
         print(header)
         print("-" * len(header))
         for i, n in enumerate(results["counts"]):
             ex = results['exact']['mean'][i]
-            est = results['estimated']['mean'][i]
+            direct = results['direct_estimation']['mean'][i]
             cg = results['cgal']['mean'][i]
             to = results['touch']['mean'][i]
             td = results['tdbase']['mean'][i]
@@ -392,7 +392,7 @@ def main():
             to_str = f"{to:.2f}" if to else "N/A"
             td_str = f"{td:.2f}" if td else "N/A"
             
-            print(f"{n:<10} {ex:<15.2f} {est:<15.2f} {cg_str:<15} {to_str:<15} {td_str:<15}")
+            print(f"{n:<10} {ex:<15.2f} {direct:<15.2f} {cg_str:<15} {to_str:<15} {td_str:<15}")
                 
         plot_results(results)
         
