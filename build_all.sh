@@ -292,7 +292,7 @@ if should_build "tdbase"; then
     export USE_GPU=1
     build_cmake_project \
         "TDBase Baseline" \
-        "$SCRIPT_DIR/baselines/RaySpace3DBaselines/tdbase/src" \
+        "$SCRIPT_DIR/baselines/RaySpace3DBaselines/tdbase_patch" \
         "tdbase_env" \
         "-DUSE_GPU=ON $EXTRA_ARGS" \
         || true

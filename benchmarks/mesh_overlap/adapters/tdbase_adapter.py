@@ -10,9 +10,19 @@ class TDBaseAdapter(OverlapBenchmarkAdapter):
     def __init__(self, tdbase_dir: str, preprocessed_dir: Optional[str] = None):
         super().__init__("TDBase")
         self.tdbase_dir = Path(tdbase_dir)
-        # Binary is in src/build/tdbase
-        self.executable = self.tdbase_dir / "src" / "build" / "tdbase"
-        self.obj_to_dt_exec = self.tdbase_dir / "src" / "build" / "obj_to_dt"
+        legacy_build_dir = self.tdbase_dir / "src" / "build"
+        patch_build_dir = self.tdbase_dir.parent / "tdbase_patch" / "build"
+        direct_build_dir = self.tdbase_dir / "build"
+
+        if (patch_build_dir / "tdbase").exists() and (patch_build_dir / "obj_to_dt").exists():
+            build_dir = patch_build_dir
+        elif (legacy_build_dir / "tdbase").exists() and (legacy_build_dir / "obj_to_dt").exists():
+            build_dir = legacy_build_dir
+        else:
+            build_dir = direct_build_dir
+
+        self.executable = build_dir / "tdbase"
+        self.obj_to_dt_exec = build_dir / "obj_to_dt"
         self.preprocessed_dir = Path(preprocessed_dir) if preprocessed_dir else None
         
         if self.preprocessed_dir:

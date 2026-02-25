@@ -20,7 +20,7 @@ export USE_GPU=TRUE
 THREADS=${SLURM_CPUS_PER_TASK:-20}
 
 BASE_DIR="/sc/home/anton.hackl/Spatial_Data_Management/RaySpace3D-Evaluation"
-TDBASE_BUILD_DIR="$BASE_DIR/baselines/RaySpace3DBaselines/tdbase/src/build"
+TDBASE_BUILD_DIR="$BASE_DIR/baselines/RaySpace3DBaselines/tdbase_patch/build"
 OUTPUT_DIR="$BASE_DIR/benchmarks/mesh_overlap/data/raw"
 
 mkdir -p $OUTPUT_DIR
