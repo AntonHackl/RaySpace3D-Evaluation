@@ -6,9 +6,37 @@ Reads the summary.json produced by selectivity_test.py and generates visualizati
 import io
 import json
 import argparse
+import re
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
+
+
+def phase_label(phase_key: str) -> str:
+    custom = {
+        "selectivity estimation": "Selectivity Estimation",
+        "execute hash query": "Hash Query (Total)",
+        "query": "Ray Query (Total)",
+        "gpu deduplication": "Deduplication",
+        "download results": "Download Results",
+        "raytrace_hash_mesh1tomesh2": "Raytrace Hash Mesh1→Mesh2",
+        "raytrace_hash_mesh2tomesh1": "Raytrace Hash Mesh2→Mesh1",
+        "raytrace_mesh1tomesh2_pass1": "Raytrace Mesh1→Mesh2 Pass1",
+        "raytrace_mesh2tomesh1_pass1": "Raytrace Mesh2→Mesh1 Pass1",
+        "raytrace_mesh1tomesh2_pass2": "Raytrace Mesh1→Mesh2 Pass2",
+        "raytrace_mesh2tomesh1_pass2": "Raytrace Mesh2→Mesh1 Pass2",
+        "raytrace_overlap_mesh1tomesh2_pass1": "Raytrace Overlap Mesh1→Mesh2 Pass1",
+        "raytrace_overlap_mesh2tomesh1_pass1": "Raytrace Overlap Mesh2→Mesh1 Pass1",
+        "raytrace_overlap_mesh1tomesh2_pass2": "Raytrace Overlap Mesh1→Mesh2 Pass2",
+        "raytrace_overlap_mesh2tomesh1_pass2": "Raytrace Overlap Mesh2→Mesh1 Pass2",
+        "raytrace_containment_mesh1tomesh2_pass1": "Raytrace Containment Mesh1→Mesh2 Pass1",
+        "raytrace_containment_mesh2tomesh1_pass1": "Raytrace Containment Mesh2→Mesh1 Pass1",
+        "raytrace_containment_mesh1tomesh2_pass2": "Raytrace Containment Mesh1→Mesh2 Pass2",
+        "raytrace_containment_mesh2tomesh1_pass2": "Raytrace Containment Mesh2→Mesh1 Pass2",
+    }
+    if phase_key in custom:
+        return custom[phase_key]
+    return re.sub(r"\s+", " ", phase_key.replace("_", " ")).strip().title()
 
 def visualize_selectivity(summary_file, output_path=None):
     with open(summary_file, 'r') as f:
@@ -138,27 +166,27 @@ def visualize_selectivity(summary_file, output_path=None):
     # --- Plot 2: Breakdown Chart ---
     # Prepare data for breakdown
     modes_in_data = ["exact", "estimated", "direct_estimation", "tdbase", "cgal", "touch"]
-    phase_mapping = {
-        "selectivity estimation_": "Selectivity Est.",
-        "execute hash query_": "Hash Query",
-        "query_": "Ray Query",
-        "gpu deduplication_": "Deduplication",
-        "download results_": "Download"
-    }
     ordered_phases_raw = [
-        "selectivity estimation_",
-        "query_",
-        "execute hash query_",
-        "gpu deduplication_",
-        "download results_"
+        "selectivity estimation",
+        "query",
+        "execute hash query",
+        "raytrace_hash_mesh1tomesh2",
+        "raytrace_hash_mesh2tomesh1",
+        "raytrace_mesh1tomesh2_pass1",
+        "raytrace_mesh2tomesh1_pass1",
+        "raytrace_mesh1tomesh2_pass2",
+        "raytrace_mesh2tomesh1_pass2",
+        "raytrace_overlap_mesh1tomesh2_pass1",
+        "raytrace_overlap_mesh2tomesh1_pass1",
+        "raytrace_overlap_mesh1tomesh2_pass2",
+        "raytrace_overlap_mesh2tomesh1_pass2",
+        "raytrace_containment_mesh1tomesh2_pass1",
+        "raytrace_containment_mesh2tomesh1_pass1",
+        "raytrace_containment_mesh1tomesh2_pass2",
+        "raytrace_containment_mesh2tomesh1_pass2",
+        "gpu deduplication",
+        "download results",
     ]
-    colors = {
-        "selectivity estimation_": "#ff9999", # Red-ish
-        "query_": "#66b3ff",              # Blue-ish
-        "execute hash query_": "#3399ff",   # Darker Blue
-        "gpu deduplication_": "#99ff99",    # Green-ish
-        "download results_": "#ffcc99"      # Orange-ish
-    }
     
     mode_short_names = {
         "exact": "Ex",
@@ -170,7 +198,7 @@ def visualize_selectivity(summary_file, output_path=None):
     }
 
     # Find all active phases in any mode/selectivity
-    all_active_phases = set(ordered_phases_raw) # Always include the ones we know
+    all_active_phases = set()
     for d in data:
         if d["selectivity"] not in valid_selectivities: continue
         for mode in modes_in_data:
@@ -188,11 +216,14 @@ def visualize_selectivity(summary_file, output_path=None):
     active_modes = [m for m in modes_in_data if any(m in d and "error" not in d[m] for d in data if d["selectivity"] in valid_selectivities)]
     num_modes = len(active_modes)
     
+    palette = plt.get_cmap("tab20")
+    colors = {phase: palette(i % 20) for i, phase in enumerate(active_phases_ordered)}
+
     legend_handles = []
     legend_labels = []
     for phase in active_phases_ordered:
-        label = phase_mapping.get(phase, phase)
-        color = colors.get(phase, "#cccccc")
+        label = phase_label(phase)
+        color = colors[phase]
         patch = plt.Rectangle((0, 0), 1, 1, fc=color, ec='white')
         legend_handles.append(patch)
         legend_labels.append(label)
@@ -219,7 +250,7 @@ def visualize_selectivity(summary_file, output_path=None):
                     val = breakdown.get(phase, 0.0)
                     if val > 0:
                         ax_breakdown.bar(x_pos, val, mode_width, bottom=bottom, 
-                                         color=colors.get(phase, None), edgecolor='white')
+                                         color=colors[phase], edgecolor='white')
                         bottom += val
             
             # Add short label for mode

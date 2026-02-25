@@ -1,6 +1,7 @@
 import subprocess
 import time
 import json
+import re
 import numpy as np
 from typing import Dict, Any, Optional, List
 from pathlib import Path
@@ -124,13 +125,24 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
             adapter_log_dir.mkdir(parents=True, exist_ok=True)
 
         if self.mode == "exact":
-            expected_prefixes = ["query_", "gpu deduplication_", "download results_"]
+            expected_prefixes = [
+                "raytrace_",
+                "gpu deduplication",
+                "download results",
+                "query",
+            ]
         elif self.mode in ("estimated", "direct_estimation"):
             # For estimated mode, include selectivity estimation in query time
-            expected_prefixes = ["selectivity estimation_", "execute hash query_", "download results_"]
+            expected_prefixes = [
+                "selectivity estimation",
+                "raytrace_hash_",
+                "execute hash query",
+                "download results",
+                "query",
+            ]
         else:
             # estimate_only
-            expected_prefixes = ["selectivity estimation_"]
+            expected_prefixes = ["selectivity estimation"]
 
         # Execute num_runs times, each with warmup
         for run_idx in range(num_runs):
@@ -187,19 +199,40 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
                     data = json.load(f)
 
                 phases = data.get("phases", {})
-                query_time = 0.0
-                found = False
-                
-                # Accumulate breakdown
-                for prefix in expected_prefixes:
-                    key = f"{prefix}1" # Keys in json usually have '1' appended for the 1st run
-                    if key in phases:
-                        duration = phases[key].get("duration_ms", 0.0)
-                        query_time += duration
-                        if prefix not in breakdown_accum:
-                            breakdown_accum[prefix] = []
-                        breakdown_accum[prefix].append(duration)
-                        found = True
+                phase_values = {}
+                for key, phase_data in phases.items():
+                    normalized_key = re.sub(r"_\d+$", "", key.lower())
+                    phase_values[normalized_key] = phase_values.get(normalized_key, 0.0) + phase_data.get("duration_ms", 0.0)
+
+                has_detailed_raytrace = any(k.startswith("raytrace_") for k in phase_values.keys())
+
+                if self.mode == "exact":
+                    query_time = phase_values.get("query", 0.0)
+                    if query_time <= 0.0:
+                        query_time = sum(v for k, v in phase_values.items() if k.startswith("raytrace_"))
+                        query_time += phase_values.get("gpu deduplication", 0.0)
+                    query_time += phase_values.get("download results", 0.0)
+                elif self.mode in ("estimated", "direct_estimation"):
+                    query_time = phase_values.get("selectivity estimation", 0.0)
+                    execute_hash = phase_values.get("execute hash query", 0.0)
+                    if execute_hash > 0.0:
+                        query_time += execute_hash
+                    else:
+                        query_time += sum(v for k, v in phase_values.items() if k.startswith("raytrace_hash_"))
+                    query_time += phase_values.get("download results", 0.0)
+                else:
+                    query_time = phase_values.get("selectivity estimation", 0.0)
+
+                found = query_time > 0.0
+
+                for normalized_key, duration in phase_values.items():
+                    if not any(normalized_key.startswith(prefix) for prefix in expected_prefixes):
+                        continue
+                    if has_detailed_raytrace and normalized_key in ("query", "execute hash query"):
+                        continue
+                    if normalized_key not in breakdown_accum:
+                        breakdown_accum[normalized_key] = []
+                    breakdown_accum[normalized_key].append(duration)
 
                 if not found:
                     return {"error": f"Expected timing phases not found in {json_output}"}

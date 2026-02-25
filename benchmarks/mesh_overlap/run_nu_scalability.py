@@ -7,6 +7,7 @@ from pathlib import Path
 from datetime import datetime
 import subprocess 
 import json
+import re
 
 # Add current directory to path to import adapters
 sys.path.append(str(Path(__file__).parent))
@@ -57,8 +58,12 @@ def find_dataset_files(nu):
     
     return candidates_v[0], candidates_n[0]
 
-def run_experiment(runs, grid_resolution, nu_counts):
+def run_experiment(runs, grid_resolution, nu_counts, approaches=None):
+    if approaches is None:
+        approaches = ["exact", "direct_estimation", "cgal", "touch", "tdbase"]
+    
     print(f"--- Starting Nu Scalability Experiment ({nu_counts}) ---")
+    print(f"Approaches: {approaches}")
     
     # Ensure directories exist
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
@@ -132,69 +137,79 @@ def run_experiment(runs, grid_resolution, nu_counts):
         exact_adapter.preprocess_from_source(str(f_n_path), str(f_n_path), log_dir=str(run_log_dir))
 
         # Run Exact Benchmark
-        print(f"Running Exact Mode ({runs} runs)...")
-        res_exact = exact_adapter.run_overlap(
-            str(f_v_path), 
-            str(f_n_path), 
-            runs,
-            log_dir=str(run_log_dir),
-            timeout=TIMEOUT_SECONDS
-        )
-        if "error" in res_exact:
-            print(f"Error in exact run: {res_exact['error']}")
-            res_exact = {"mean": 0, "std": 0, "breakdown": {}}
+        res_exact = {"mean": 0, "std": 0, "breakdown": {}}
+        if "exact" in approaches:
+            print(f"Running Exact Mode ({runs} runs)...")
+            res_exact = exact_adapter.run_overlap(
+                str(f_v_path), 
+                str(f_n_path), 
+                runs,
+                log_dir=str(run_log_dir),
+                timeout=TIMEOUT_SECONDS
+            )
+            if "error" in res_exact:
+                print(f"Error in exact run: {res_exact['error']}")
+                res_exact = {"mean": 0, "std": 0, "breakdown": {}}
             
         # Run Direct Estimation Benchmark
-        print(f"Running Direct Estimation Mode ({runs} runs)...")
-        res_direct = direct_estimation_adapter.run_overlap(
-            str(f_v_path), 
-            str(f_n_path), 
-            runs,
-            log_dir=str(run_log_dir),
-            timeout=TIMEOUT_SECONDS
-        )
-        if "error" in res_direct:
-            print(f"Error in direct estimation run: {res_direct['error']}")
-            res_direct = {"mean": 0, "std": 0, "breakdown": {}}
+        res_direct = {"mean": 0, "std": 0, "breakdown": {}}
+        if "direct_estimation" in approaches:
+            print(f"Running Direct Estimation Mode ({runs} runs)...")
+            res_direct = direct_estimation_adapter.run_overlap(
+                str(f_v_path), 
+                str(f_n_path), 
+                runs,
+                log_dir=str(run_log_dir),
+                timeout=TIMEOUT_SECONDS
+            )
+            if "error" in res_direct:
+                print(f"Error in direct estimation run: {res_direct['error']}")
+                res_direct = {"mean": 0, "std": 0, "breakdown": {}}
 
         # Run CGAL Benchmark
-        print(f"Running CGAL Mode ({runs} runs)...")
-        res_cgal = cgal_adapter.run_overlap(
-            str(f_v_path), 
-            str(f_n_path), 
-            runs,
-            log_dir=str(run_log_dir),
-            timeout=TIMEOUT_SECONDS
-        )
-        if "error" in res_cgal:
-            print(f"Error in CGAL run: {res_cgal['error']}")
-            res_cgal = {"mean": None, "std": None}
+        res_cgal = {"mean": None, "std": None}
+        if "cgal" in approaches:
+            print(f"Running CGAL Mode ({runs} runs)...")
+            res_cgal = cgal_adapter.run_overlap(
+                str(f_v_path), 
+                str(f_n_path), 
+                runs,
+                log_dir=str(run_log_dir),
+                timeout=TIMEOUT_SECONDS
+            )
+            if "error" in res_cgal:
+                print(f"Error in CGAL run: {res_cgal['error']}")
+                res_cgal = {"mean": None, "std": None}
 
         # Run TOUCH Benchmark
-        print(f"Running TOUCH Mode ({runs} runs)...")
-        res_touch = touch_adapter.run_overlap(
-            str(f_v_path), 
-            str(f_n_path), 
-            runs,
-            log_dir=str(run_log_dir),
-            timeout=TIMEOUT_SECONDS
-        )
-        if "error" in res_touch:
-            print(f"Error in TOUCH run: {res_touch['error']}")
-            res_touch = {"mean": None, "std": None}
+        res_touch = {"mean": None, "std": None}
+        if "touch" in approaches:
+            print(f"Running TOUCH Mode ({runs} runs)...")
+            res_touch = touch_adapter.run_overlap(
+                str(f_v_path), 
+                str(f_n_path), 
+                runs,
+                log_dir=str(run_log_dir),
+                timeout=TIMEOUT_SECONDS
+            )
+            if "error" in res_touch:
+                print(f"Error in TOUCH run: {res_touch['error']}")
+                res_touch = {"mean": None, "std": None}
 
         # Run TDBase Benchmark
-        print(f"Running TDBase Mode ({runs} runs)...")
-        res_td = tdbase_adapter.run_overlap(
-            str(f_v_path), 
-            str(f_n_path), 
-            runs,
-            log_dir=str(run_log_dir),
-            timeout=TIMEOUT_SECONDS
-        )
-        if "error" in res_td:
-            print(f"Error in TDBase run: {res_td['error']}")
-            res_td = {"mean": None, "std": None}
+        res_td = {"mean": None, "std": None}
+        if "tdbase" in approaches:
+            print(f"Running TDBase Mode ({runs} runs)...")
+            res_td = tdbase_adapter.run_overlap(
+                str(f_v_path), 
+                str(f_n_path), 
+                runs,
+                log_dir=str(run_log_dir),
+                timeout=TIMEOUT_SECONDS
+            )
+            if "error" in res_td:
+                print(f"Error in TDBase run: {res_td['error']}")
+                res_td = {"mean": None, "std": None}
 
         results["counts"].append(nu)
         
@@ -276,48 +291,83 @@ def plot_results(results):
     ax_main.set_xticks(counts)
 
     # --- Plot 2: Breakdown Bar Chart (Exact & Direct Estimation ONLY) ---
-    phase_mapping = {
-        "selectivity estimation_": "Selectivity Est.",
-        "execute hash query_": "Hash Query",
-        "query_": "Ray Query",
-        "gpu deduplication_": "Deduplication",
-        "download results_": "Download"
+    def normalize_phase_key(phase: str) -> str:
+        key = re.sub(r"_\d+$", "", phase.lower())
+        key = re.sub(r"_+$", "", key)
+        return key
+
+    phase_labels = {
+        "selectivity estimation": "Selectivity Est.",
+        "query": "Ray Query",
+        "execute hash query": "Hash Query",
+        "gpu deduplication": "Deduplication",
+        "download results": "Download",
+        "raytrace_mesh1tomesh2_pass1": "Raytrace M1→M2 (Pass 1)",
+        "raytrace_mesh2tomesh1_pass1": "Raytrace M2→M1 (Pass 1)",
+        "raytrace_mesh2tomesh1_pass2": "Raytrace M2→M1 (Pass 2)",
+        "raytrace_mesh1tomesh2_pass2": "Raytrace M1→M2 (Pass 2)",
+        "raytrace_hash_mesh1tomesh2": "Hash Raytrace M1→M2",
+        "raytrace_hash_mesh2tomesh1": "Hash Raytrace M2→M1",
     }
-    ordered_phases_raw = [
-        "selectivity estimation_",
-        "query_",
-        "execute hash query_",
-        "gpu deduplication_",
-        "download results_"
+    phase_order = [
+        "selectivity estimation",
+        "raytrace_mesh1tomesh2_pass1",
+        "raytrace_mesh2tomesh1_pass1",
+        "raytrace_mesh1tomesh2_pass2",
+        "raytrace_mesh2tomesh1_pass2",
+        "raytrace_hash_mesh1tomesh2",
+        "raytrace_hash_mesh2tomesh1",
+        "query",
+        "execute hash query",
+        "gpu deduplication",
+        "download results",
     ]
-    colors = {
-        "selectivity estimation_": "#ff9999", 
-        "query_": "#66b3ff",              
-        "execute hash query_": "#3399ff",   
-        "gpu deduplication_": "#99ff99",    
-        "download results_": "#ffcc99"      
+    phase_colors = {
+        "selectivity estimation": "#ff9896",
+        "raytrace_mesh1tomesh2_pass1": "#1f77b4",
+        "raytrace_mesh2tomesh1_pass1": "#17becf",
+        "raytrace_mesh2tomesh1_pass2": "#2ca02c",
+        "raytrace_mesh1tomesh2_pass2": "#9467bd",
+        "raytrace_hash_mesh1tomesh2": "#bcbd22",
+        "raytrace_hash_mesh2tomesh1": "#8c564b",
+        "query": "#aec7e8",
+        "execute hash query": "#7f7f7f",
+        "gpu deduplication": "#98df8a",
+        "download results": "#ffbb78",
     }
-    
-    # Collect active phases
-    all_active_phases = set(ordered_phases_raw)
-    for mode in ["exact", "direct_estimation"]:
+
+    modes_to_plot = [
+        mode for mode in ["exact", "direct_estimation"]
+        if any(m > 0 for m in results[mode]["mean"])
+    ]
+    if not modes_to_plot:
+        modes_to_plot = ["exact", "direct_estimation"]
+
+    normalized_breakdowns = {mode: [] for mode in modes_to_plot}
+    all_active_phases = set()
+    for mode in modes_to_plot:
         for bd in results[mode]["breakdown"]:
-            all_active_phases.update(bd.keys())
-    
-    active_phases_ordered = [p for p in ordered_phases_raw if p in all_active_phases]
-    for p in all_active_phases:
-        if p not in active_phases_ordered: active_phases_ordered.append(p)
+            merged = {}
+            for key, value in bd.items():
+                nk = normalize_phase_key(key)
+                merged[nk] = merged.get(nk, 0.0) + value
+            normalized_breakdowns[mode].append(merged)
+            all_active_phases.update(merged.keys())
+
+    active_phases_ordered = [p for p in phase_order if p in all_active_phases]
+    for p in sorted(all_active_phases):
+        if p not in active_phases_ordered:
+            active_phases_ordered.append(p)
 
     legend_handles = []
     legend_labels = []
     for phase in active_phases_ordered:
-        label = phase_mapping.get(phase, phase)
-        color = colors.get(phase, "#cccccc")
+        label = phase_labels.get(phase, phase.replace("_", " ").title())
+        color = phase_colors.get(phase, "#cccccc")
         patch = plt.Rectangle((0, 0), 1, 1, fc=color, ec='white')
         legend_handles.append(patch)
         legend_labels.append(label)
 
-    modes_to_plot = ["exact", "direct_estimation"]
     num_modes = len(modes_to_plot)
     group_width = 0.8
     mode_width = group_width / num_modes
@@ -329,7 +379,7 @@ def plot_results(results):
             x_pos = i - group_width/2 + (j + 0.5) * mode_width
             
             # Get breakdown for this run
-            breakdown = results[mode]["breakdown"][i]
+            breakdown = normalized_breakdowns[mode][i]
             mean_time = results[mode]["mean"][i]
             
             if not breakdown or mean_time == 0:
@@ -341,7 +391,7 @@ def plot_results(results):
                     val = breakdown.get(phase, 0.0)
                     if val > 0:
                         ax_breakdown.bar(x_pos, val, mode_width, bottom=bottom, 
-                                         color=colors.get(phase, None), edgecolor='white')
+                                         color=phase_colors.get(phase, "#cccccc"), edgecolor='white')
                         bottom += val
 
     ax_breakdown.set_xticks(x_indices)
@@ -350,10 +400,30 @@ def plot_results(results):
     ax_breakdown.set_ylabel('Query Time (ms)', fontsize=12)
     ax_breakdown.set_title('RaySpace3D Query Time Breakdown', fontsize=14, fontweight='bold')
     ax_breakdown.grid(True, axis='y', which='both', ls='-', alpha=0.1)
+
+    for j, mode in enumerate(modes_to_plot):
+        x_annot = 0 - group_width/2 + (j + 0.5) * mode_width
+        ax_breakdown.text(
+            x_annot,
+            -0.08,
+            "Exact" if mode == "exact" else "Direct",
+            ha='center',
+            va='top',
+            transform=ax_breakdown.get_xaxis_transform(),
+            fontsize=10,
+            color="#444444",
+        )
     
     # Legend
-    ax_breakdown.legend(legend_handles, legend_labels, 
-                       bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
+    ax_breakdown.legend(
+        legend_handles,
+        legend_labels,
+        bbox_to_anchor=(1.02, 1),
+        loc='upper left',
+        fontsize=9,
+        ncol=1,
+        frameon=True,
+    )
 
     plt.tight_layout()
     output_path = FIGURES_DIR / "mesh_overlap_nu_scalability.png"
@@ -370,11 +440,12 @@ def main():
     parser.add_argument("--runs", type=int, default=5, help="Number of runs per method")
     parser.add_argument("--grid-resolution", type=int, default=20, help="Grid resolution for RaySpace")
     parser.add_argument("--nu", type=int, nargs='+', help="Nu counts to test (e.g. 200 400 600 800)")
+    parser.add_argument("--approaches", type=str, nargs='+', choices=["exact", "direct_estimation", "cgal", "touch", "tdbase"], help="Approaches to run")
     args = parser.parse_args()
     
     nu_counts = args.nu if args.nu else DEFAULT_NU_COUNTS
     
-    results = run_experiment(args.runs, args.grid_resolution, nu_counts)
+    results = run_experiment(args.runs, args.grid_resolution, nu_counts, approaches=args.approaches)
     
     if results and results["counts"]:
         print("\nResults Summary:")

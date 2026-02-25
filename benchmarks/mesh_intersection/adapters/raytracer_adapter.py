@@ -1,6 +1,7 @@
 import subprocess
 import time
 import json
+import re
 import numpy as np
 from typing import Dict, Any, Optional
 from pathlib import Path
@@ -104,11 +105,22 @@ class RaytracerIntersectionAdapter(IntersectionBenchmarkAdapter):
             adapter_log_dir.mkdir(parents=True, exist_ok=True)
 
         if self.mode == "two_pass":
-            expected_prefixes = ["query_", "gpu deduplication_", "download results_"]
+            expected_prefixes = [
+                "raytrace_",
+                "gpu deduplication",
+                "download results",
+                "query",
+            ]
         elif self.mode == "estimated":
-            expected_prefixes = ["selectivity estimation_", "query_"]
+            expected_prefixes = [
+                "selectivity estimation",
+                "raytrace_hash_",
+                "execute hash query",
+                "download results",
+                "query",
+            ]
         else:
-            expected_prefixes = ["selectivity estimation_"]
+            expected_prefixes = ["selectivity estimation"]
 
         for run_idx in range(num_runs):
             json_output = self.timings_dir / f"timing_{self.mode}_{int(time.time())}_{run_idx}.json"
@@ -166,18 +178,40 @@ class RaytracerIntersectionAdapter(IntersectionBenchmarkAdapter):
                     data = json.load(f)
 
                 phases = data.get("phases", {})
-                query_time = 0.0
-                found = False
+                phase_values = {}
+                for key, phase_data in phases.items():
+                    normalized_key = re.sub(r"_\d+$", "", key.lower())
+                    phase_values[normalized_key] = phase_values.get(normalized_key, 0.0) + phase_data.get("duration_ms", 0.0)
 
-                for prefix in expected_prefixes:
-                    key = f"{prefix}1"
-                    if key in phases:
-                        duration = phases[key].get("duration_ms", 0.0)
-                        query_time += duration
-                        if prefix not in breakdown_accum:
-                            breakdown_accum[prefix] = []
-                        breakdown_accum[prefix].append(duration)
-                        found = True
+                has_detailed_raytrace = any(k.startswith("raytrace_") for k in phase_values.keys())
+
+                if self.mode == "two_pass":
+                    query_time = phase_values.get("query", 0.0)
+                    if query_time <= 0.0:
+                        query_time = sum(v for k, v in phase_values.items() if k.startswith("raytrace_"))
+                        query_time += phase_values.get("gpu deduplication", 0.0)
+                    query_time += phase_values.get("download results", 0.0)
+                elif self.mode == "estimated":
+                    query_time = phase_values.get("selectivity estimation", 0.0)
+                    execute_hash = phase_values.get("execute hash query", 0.0)
+                    if execute_hash > 0.0:
+                        query_time += execute_hash
+                    else:
+                        query_time += sum(v for k, v in phase_values.items() if k.startswith("raytrace_hash_"))
+                    query_time += phase_values.get("download results", 0.0)
+                else:
+                    query_time = phase_values.get("selectivity estimation", 0.0)
+
+                found = query_time > 0.0
+
+                for normalized_key, duration in phase_values.items():
+                    if not any(normalized_key.startswith(prefix) for prefix in expected_prefixes):
+                        continue
+                    if has_detailed_raytrace and normalized_key in ("query", "execute hash query"):
+                        continue
+                    if normalized_key not in breakdown_accum:
+                        breakdown_accum[normalized_key] = []
+                    breakdown_accum[normalized_key].append(duration)
 
                 if not found:
                     return {"error": f"Expected timing phases not found in {json_output}"}
