@@ -139,7 +139,7 @@ def main():
         print(f"Dataset 2: {file2_path}")
 
         all_results = {}
-        ssot_stats = {"num_obj1": 0, "num_obj2": 0, "num_intersections": 0}
+        ssot_stats = {"num_obj1": 0, "num_obj2": 0, "num_intersections": 0, "universe_extents1": [0.0, 0.0, 0.0], "universe_extents2": [0.0, 0.0, 0.0]}
 
         for adapter in adapters:
             print(f"\nRunning {adapter.name}...")
@@ -158,6 +158,8 @@ def main():
                     ssot_stats["num_obj1"] = results.get("num_obj1", 0)
                     ssot_stats["num_obj2"] = results.get("num_obj2", 0)
                     ssot_stats["num_intersections"] = results.get("num_intersections", 0)
+                    ssot_stats["universe_extents1"] = results.get("universe_extents1", [0.0, 0.0, 0.0])
+                    ssot_stats["universe_extents2"] = results.get("universe_extents2", [0.0, 0.0, 0.0])
 
         cross_product_size = ssot_stats["num_obj1"] * ssot_stats["num_obj2"]
         selectivity = ssot_stats["num_intersections"] / cross_product_size if cross_product_size > 0 else 0.0
@@ -182,9 +184,13 @@ def main():
                 "benchmark_log": str(benchmark_log_file) if benchmark_log_file else None,
                 "num_obj1": int(ssot_stats["num_obj1"]),
                 "num_obj2": int(ssot_stats["num_obj2"]),
+                "size_bytes1": file1_path.stat().st_size if file1_path.exists() else 0,
+                "size_bytes2": file2_path.stat().st_size if file2_path.exists() else 0,
                 "cross_product_size": int(cross_product_size),
                 "num_intersections": int(ssot_stats["num_intersections"]),
-                "selectivity": float(selectivity)
+                "selectivity": float(selectivity),
+                "universe_extents1": ssot_stats["universe_extents1"],
+                "universe_extents2": ssot_stats["universe_extents2"]
             },
             "results": all_results
         }

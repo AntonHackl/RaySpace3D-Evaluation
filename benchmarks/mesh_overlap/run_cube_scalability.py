@@ -179,6 +179,22 @@ def run_experiment(runs, grid_resolution):
         results["touch"]["mean"].append(res_touch["mean"])
         results["touch"]["std"].append(res_touch["std"])
         
+        # Add dataset sizes
+        if "num_obj1" not in results:
+             results["num_obj1"] = []
+             results["num_obj2"] = []
+             results["size_bytes1"] = []
+             results["size_bytes2"] = []
+             results["universe_extents1"] = []
+             results["universe_extents2"] = []
+        
+        results["num_obj1"].append(int(res_exact.get("num_obj1", 0)))
+        results["num_obj2"].append(int(res_exact.get("num_obj2", 0)))
+        results["size_bytes1"].append(f1_path.stat().st_size if f1_path.exists() else 0)
+        results["size_bytes2"].append(f2_path.stat().st_size if f2_path.exists() else 0)
+        results["universe_extents1"].append(res_exact.get("universe_extents1", [0.0, 0.0, 0.0]))
+        results["universe_extents2"].append(res_exact.get("universe_extents2", [0.0, 0.0, 0.0]))
+        
         cgal_str = f"{res_cgal['mean']:.2f}ms" if res_cgal['mean'] else "TIMEOUT/ERR"
         touch_str = f"{res_touch['mean']:.2f}ms" if res_touch['mean'] else "TIMEOUT/ERR"
         print(f"Done {count}: Exact={res_exact['mean']:.2f}ms, Est={res_est['mean']:.2f}ms, CGAL={cgal_str}, TOUCH={touch_str}")

@@ -145,7 +145,11 @@ def main():
             "selectivity": selectivity, 
             "grid_resolution": grid_resolution, 
             "universe": universe_extent,
-            "num_cubes": NUM_CUBES
+            "num_cubes": NUM_CUBES,
+            "size_bytes1": obj_a.stat().st_size if obj_a.exists() else 0,
+            "size_bytes2": obj_b.stat().st_size if obj_b.exists() else 0,
+            "universe_extents1": [0.0, 0.0, 0.0],
+            "universe_extents2": [0.0, 0.0, 0.0],
         }
         
         for mode in modes:
@@ -203,6 +207,10 @@ def main():
                     "intersections": results.get("num_intersections", 0),
                     "breakdown": breakdown
                 }
+                if "universe_extents1" in results:
+                    res_per_sel["universe_extents1"] = results["universe_extents1"]
+                if "universe_extents2" in results:
+                    res_per_sel["universe_extents2"] = results["universe_extents2"]
 
         summary_results.append(res_per_sel)
 

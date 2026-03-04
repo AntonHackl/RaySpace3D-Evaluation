@@ -189,6 +189,22 @@ def run_experiment(runs, grid_resolution):
         results["tdbase"]["mean"].append(res_td["mean"])
         results["tdbase"]["std"].append(res_td["std"])
         
+        # Add dataset sizes
+        if "num_obj1" not in results:
+             results["num_obj1"] = []
+             results["num_obj2"] = []
+             results["size_bytes1"] = []
+             results["size_bytes2"] = []
+             results["universe_extents1"] = []
+             results["universe_extents2"] = []
+        
+        results["num_obj1"].append(int(res_exact.get("num_obj1", 0)))
+        results["num_obj2"].append(int(res_exact.get("num_obj2", 0)))
+        results["size_bytes1"].append(f_a_path.stat().st_size if f_a_path.exists() else 0)
+        results["size_bytes2"].append(f_b_path.stat().st_size if f_b_path.exists() else 0)
+        results["universe_extents1"].append(res_exact.get("universe_extents1", [0.0, 0.0, 0.0]))
+        results["universe_extents2"].append(res_exact.get("universe_extents2", [0.0, 0.0, 0.0]))
+        
         td_str = f"{res_td['mean']:.2f}ms" if res_td['mean'] else "TIMEOUT/ERR"
         print(f"Done nu={nu}: Exact={res_exact['mean']:.2f}ms, Est={res_est['mean']:.2f}ms, TDBase={td_str}")
 

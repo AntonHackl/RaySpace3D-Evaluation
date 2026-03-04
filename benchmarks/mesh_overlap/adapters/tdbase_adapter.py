@@ -14,15 +14,19 @@ class TDBaseAdapter(OverlapBenchmarkAdapter):
         patch_build_dir = self.tdbase_dir.parent / "tdbase_patch" / "build"
         direct_build_dir = self.tdbase_dir / "build"
 
-        if (patch_build_dir / "tdbase").exists() and (patch_build_dir / "obj_to_dt").exists():
-            build_dir = patch_build_dir
-        elif (legacy_build_dir / "tdbase").exists() and (legacy_build_dir / "obj_to_dt").exists():
-            build_dir = legacy_build_dir
-        else:
-            build_dir = direct_build_dir
+        tdbase_candidates = [
+            patch_build_dir / "tdbase",
+            legacy_build_dir / "tdbase",
+            direct_build_dir / "tdbase",
+        ]
+        obj_to_dt_candidates = [
+            patch_build_dir / "obj_to_dt",
+            legacy_build_dir / "obj_to_dt",
+            direct_build_dir / "obj_to_dt",
+        ]
 
-        self.executable = build_dir / "tdbase"
-        self.obj_to_dt_exec = build_dir / "obj_to_dt"
+        self.executable = next((p for p in tdbase_candidates if p.exists()), tdbase_candidates[0])
+        self.obj_to_dt_exec = next((p for p in obj_to_dt_candidates if p.exists()), obj_to_dt_candidates[0])
         self.preprocessed_dir = Path(preprocessed_dir) if preprocessed_dir else None
         
         if self.preprocessed_dir:

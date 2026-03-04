@@ -115,6 +115,7 @@ def run_experiment(runs, grid_resolution, nu_counts, approaches=None):
     
     results = {
         "counts": [],
+        "enabled_approaches": approaches,
         "exact": {"mean": [], "std": [], "breakdown": []},
         "direct_estimation": {"mean": [], "std": [], "breakdown": []},
         "cgal": {"mean": [], "std": []},
@@ -131,13 +132,15 @@ def run_experiment(runs, grid_resolution, nu_counts, approaches=None):
         
         print(f"\nProcessing nu={nu}: {f_v_path.name} vs {f_n_path.name}")
 
-        # Check/Run Preprocessing for Raytracer (Generates .pre for CGAL/TOUCH too)
-        print("Checking preprocessing...")
-        exact_adapter.preprocess_from_source(str(f_v_path), str(f_v_path), log_dir=str(run_log_dir))
-        exact_adapter.preprocess_from_source(str(f_n_path), str(f_n_path), log_dir=str(run_log_dir))
+        # Check/Run Preprocessing for Raytracer (also used by CGAL/TOUCH adapters)
+        needs_preprocessing = any(a in approaches for a in ["exact", "direct_estimation", "cgal", "touch"])
+        if needs_preprocessing:
+            print("Checking preprocessing...")
+            exact_adapter.preprocess_from_source(str(f_v_path), str(f_v_path), log_dir=str(run_log_dir))
+            exact_adapter.preprocess_from_source(str(f_n_path), str(f_n_path), log_dir=str(run_log_dir))
 
         # Run Exact Benchmark
-        res_exact = {"mean": 0, "std": 0, "breakdown": {}}
+        res_exact = {"mean": None, "std": None, "breakdown": {}}
         if "exact" in approaches:
             print(f"Running Exact Mode ({runs} runs)...")
             res_exact = exact_adapter.run_overlap(
@@ -149,10 +152,10 @@ def run_experiment(runs, grid_resolution, nu_counts, approaches=None):
             )
             if "error" in res_exact:
                 print(f"Error in exact run: {res_exact['error']}")
-                res_exact = {"mean": 0, "std": 0, "breakdown": {}}
+                res_exact = {"mean": None, "std": None, "breakdown": {}}
             
         # Run Direct Estimation Benchmark
-        res_direct = {"mean": 0, "std": 0, "breakdown": {}}
+        res_direct = {"mean": None, "std": None, "breakdown": {}}
         if "direct_estimation" in approaches:
             print(f"Running Direct Estimation Mode ({runs} runs)...")
             res_direct = direct_estimation_adapter.run_overlap(
@@ -164,7 +167,7 @@ def run_experiment(runs, grid_resolution, nu_counts, approaches=None):
             )
             if "error" in res_direct:
                 print(f"Error in direct estimation run: {res_direct['error']}")
-                res_direct = {"mean": 0, "std": 0, "breakdown": {}}
+                res_direct = {"mean": None, "std": None, "breakdown": {}}
 
         # Run CGAL Benchmark
         res_cgal = {"mean": None, "std": None}
@@ -230,10 +233,41 @@ def run_experiment(runs, grid_resolution, nu_counts, approaches=None):
         results["tdbase"]["mean"].append(res_td["mean"])
         results["tdbase"]["std"].append(res_td["std"])
         
-        cgal_str = f"{res_cgal['mean']:.2f}ms" if res_cgal['mean'] else "TIMEOUT/ERR"
-        touch_str = f"{res_touch['mean']:.2f}ms" if res_touch['mean'] else "TIMEOUT/ERR"
-        td_str = f"{res_td['mean']:.2f}ms" if res_td['mean'] else "TIMEOUT/ERR"
-        print(f"Done nu={nu}: Exact={res_exact['mean']:.2f}ms, Direct={res_direct['mean']:.2f}ms, CGAL={cgal_str}, TOUCH={touch_str}, TDBase={td_str}")
+        # Add dataset sizes
+        if "num_obj1" not in results:
+             results["num_obj1"] = []
+             results["num_obj2"] = []
+             results["size_bytes1"] = []
+             results["size_bytes2"] = []
+             results["universe_extents1"] = []
+             results["universe_extents2"] = []
+        
+        # Use first available result for counts
+        found_counts = False
+        for res in [res_exact, res_direct]:
+            if "num_obj1" in res and res["num_obj1"] > 0:
+                results["num_obj1"].append(int(res["num_obj1"]))
+                results["num_obj2"].append(int(res["num_obj2"]))
+                results["universe_extents1"].append(res.get("universe_extents1", [0.0, 0.0, 0.0]))
+                results["universe_extents2"].append(res.get("universe_extents2", [0.0, 0.0, 0.0]))
+                found_counts = True
+                break
+        
+        if not found_counts:
+            results["num_obj1"].append(0)
+            results["num_obj2"].append(0)
+            results["universe_extents1"].append([0.0, 0.0, 0.0])
+            results["universe_extents2"].append([0.0, 0.0, 0.0])
+
+        results["size_bytes1"].append(f_v_path.stat().st_size if f_v_path.exists() else 0)
+        results["size_bytes2"].append(f_n_path.stat().st_size if f_n_path.exists() else 0)
+        
+        exact_str = f"{res_exact['mean']:.2f}ms" if res_exact['mean'] is not None else "N/A"
+        direct_str = f"{res_direct['mean']:.2f}ms" if res_direct['mean'] is not None else "N/A"
+        cgal_str = f"{res_cgal['mean']:.2f}ms" if res_cgal['mean'] is not None else "N/A"
+        touch_str = f"{res_touch['mean']:.2f}ms" if res_touch['mean'] is not None else "N/A"
+        td_str = f"{res_td['mean']:.2f}ms" if res_td['mean'] is not None else "N/A"
+        print(f"Done nu={nu}: Exact={exact_str}, Direct={direct_str}, CGAL={cgal_str}, TOUCH={touch_str}, TDBase={td_str}")
 
     return results
 
@@ -250,13 +284,28 @@ def plot_results(results):
     fig, (ax_main, ax_breakdown) = plt.subplots(1, 2, figsize=(20, 8))
 
     # --- Plot 1: Line Chart (Scaling) ---
-    ax_main.errorbar(counts, results["exact"]["mean"], yerr=results["exact"]["std"], 
-                     fmt='-o', label='Exact Raytracer', capsize=5, color='#1f77b4')
-    ax_main.errorbar(counts, results["direct_estimation"]["mean"], yerr=results["direct_estimation"]["std"], 
-                     fmt='--s', label='Direct Estimation Raytracer', capsize=5, color='#2ca02c')
+    enabled = set(results.get("enabled_approaches", ["exact", "direct_estimation", "cgal", "touch", "tdbase"]))
+
+    if "exact" in enabled:
+        exact_valid_indices = [i for i, m in enumerate(results["exact"]["mean"]) if m is not None]
+        if exact_valid_indices:
+            exact_counts = [counts[i] for i in exact_valid_indices]
+            exact_means = [results["exact"]["mean"][i] for i in exact_valid_indices]
+            exact_stds = [results["exact"]["std"][i] for i in exact_valid_indices]
+            ax_main.errorbar(exact_counts, exact_means, yerr=exact_stds,
+                            fmt='-o', label='Exact Raytracer', capsize=5, color='#1f77b4')
+
+    if "direct_estimation" in enabled:
+        direct_valid_indices = [i for i, m in enumerate(results["direct_estimation"]["mean"]) if m is not None]
+        if direct_valid_indices:
+            direct_counts = [counts[i] for i in direct_valid_indices]
+            direct_means = [results["direct_estimation"]["mean"][i] for i in direct_valid_indices]
+            direct_stds = [results["direct_estimation"]["std"][i] for i in direct_valid_indices]
+            ax_main.errorbar(direct_counts, direct_means, yerr=direct_stds,
+                            fmt='--s', label='Direct Estimation Raytracer', capsize=5, color='#2ca02c')
     
     # Filter valid CGAL points
-    cgal_valid_indices = [i for i, m in enumerate(results["cgal"]["mean"]) if m is not None]
+    cgal_valid_indices = [i for i, m in enumerate(results["cgal"]["mean"]) if m is not None] if "cgal" in enabled else []
     if cgal_valid_indices:
         cgal_counts = [counts[i] for i in cgal_valid_indices]
         cgal_means = [results["cgal"]["mean"][i] for i in cgal_valid_indices]
@@ -265,7 +314,7 @@ def plot_results(results):
                          fmt=':d', label='CGAL', capsize=5, color='#9467bd')
 
     # Filter valid TOUCH points
-    touch_valid_indices = [i for i, m in enumerate(results["touch"]["mean"]) if m is not None]
+    touch_valid_indices = [i for i, m in enumerate(results["touch"]["mean"]) if m is not None] if "touch" in enabled else []
     if touch_valid_indices:
         touch_counts = [counts[i] for i in touch_valid_indices]
         touch_means = [results["touch"]["mean"][i] for i in touch_valid_indices]
@@ -274,7 +323,7 @@ def plot_results(results):
                          fmt='-^', label='TOUCH', capsize=5, color='#8c564b')
 
     # Filter valid TDBase points
-    td_valid_indices = [i for i, m in enumerate(results["tdbase"]["mean"]) if m is not None]
+    td_valid_indices = [i for i, m in enumerate(results["tdbase"]["mean"]) if m is not None] if "tdbase" in enabled else []
     if td_valid_indices:
         td_counts = [counts[i] for i in td_valid_indices]
         td_means = [results["tdbase"]["mean"][i] for i in td_valid_indices]
@@ -338,10 +387,11 @@ def plot_results(results):
 
     modes_to_plot = [
         mode for mode in ["exact", "direct_estimation"]
-        if any(m > 0 for m in results[mode]["mean"])
+        if mode in enabled
+        if any((m is not None and m > 0) for m in results[mode]["mean"])
     ]
     if not modes_to_plot:
-        modes_to_plot = ["exact", "direct_estimation"]
+        modes_to_plot = []
 
     normalized_breakdowns = {mode: [] for mode in modes_to_plot}
     all_active_phases = set()
@@ -370,7 +420,7 @@ def plot_results(results):
 
     num_modes = len(modes_to_plot)
     group_width = 0.8
-    mode_width = group_width / num_modes
+    mode_width = group_width / num_modes if num_modes > 0 else group_width
     
     x_indices = np.arange(len(counts))
 
@@ -415,15 +465,16 @@ def plot_results(results):
         )
     
     # Legend
-    ax_breakdown.legend(
-        legend_handles,
-        legend_labels,
-        bbox_to_anchor=(1.02, 1),
-        loc='upper left',
-        fontsize=9,
-        ncol=1,
-        frameon=True,
-    )
+    if legend_handles:
+        ax_breakdown.legend(
+            legend_handles,
+            legend_labels,
+            bbox_to_anchor=(1.02, 1),
+            loc='upper left',
+            fontsize=9,
+            ncol=1,
+            frameon=True,
+        )
 
     plt.tight_layout()
     output_path = FIGURES_DIR / "mesh_overlap_nu_scalability.png"
@@ -459,11 +510,13 @@ def main():
             to = results['touch']['mean'][i]
             td = results['tdbase']['mean'][i]
             
-            cg_str = f"{cg:.2f}" if cg else "N/A"
-            to_str = f"{to:.2f}" if to else "N/A"
-            td_str = f"{td:.2f}" if td else "N/A"
+            ex_str = f"{ex:.2f}" if ex is not None else "N/A"
+            direct_str = f"{direct:.2f}" if direct is not None else "N/A"
+            cg_str = f"{cg:.2f}" if cg is not None else "N/A"
+            to_str = f"{to:.2f}" if to is not None else "N/A"
+            td_str = f"{td:.2f}" if td is not None else "N/A"
             
-            print(f"{n:<10} {ex:<15.2f} {direct:<15.2f} {cg_str:<15} {to_str:<15} {td_str:<15}")
+            print(f"{n:<10} {ex_str:<15} {direct_str:<15} {cg_str:<15} {to_str:<15} {td_str:<15}")
                 
         plot_results(results)
         

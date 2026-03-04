@@ -97,6 +97,8 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
         num_runs: int,
         timeout: Optional[float] = None,
         log_dir: Optional[str] = None,
+        query_direction: str = "both",
+        pairs_output: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Execute the overlap join query."""
         if not self.executable.exists():
@@ -116,6 +118,8 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
         num_obj1 = 0
         num_obj2 = 0
         num_intersections = 0
+        universe_extents1 = [0.0, 0.0, 0.0]
+        universe_extents2 = [0.0, 0.0, 0.0]
         
         print(f"[{self.name}] Running benchmark...")
 
@@ -158,6 +162,11 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
                 "--output", str(json_output)
             ]
 
+            if self.mode == "direct_estimation":
+                cmd.extend(["--query-direction", query_direction])
+                if pairs_output and run_idx == (num_runs - 1):
+                    cmd.extend(["--pairs-output", str(pairs_output)])
+
             if self.mode == "estimate_only":
                 cmd.append("--estimate-only")
             
@@ -175,7 +184,11 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
                 
                 # Parse summary from stdout on the first run
                 if run_idx == 0:
-                    for line in stdout_text.splitlines():
+                    lines = stdout_text.splitlines()
+                    def parse_vec3(l):
+                        return [float(p.strip()) for p in l.split("[")[1].split("]")[0].split(",")]
+                        
+                    for i, line in enumerate(lines):
                         if "Mesh1 objects:" in line:
                             num_obj1 = int(line.split(":")[1].strip())
                         elif "Mesh2 objects:" in line:
@@ -183,14 +196,29 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
                         elif "Unique object pairs:" in line:
                             num_intersections = int(line.split(":")[1].strip())
                         elif "Hash Table Query found" in line:
-                            # For estimated mode
                             num_intersections = int(line.split("found")[1].split("unique")[0].strip())
                         elif "Final Estimated Pairs:" in line:
-                            # For estimate-only mode (and useful diagnostic for estimated mode)
                             try:
                                 num_intersections = int(line.split(":", 1)[1].strip())
-                            except ValueError:
-                                pass
+                            except ValueError: pass
+                        elif "Universe Extents:" in line:
+                            try:
+                                ext = parse_vec3(line)
+                                universe_extents1 = ext
+                                universe_extents2 = ext
+                            except Exception: pass
+                        elif "Mesh1 Universe Min:" in line and (i+1) < len(lines) and "Mesh1 Universe Max:" in lines[i+1]:
+                            try:
+                                v_min = parse_vec3(line)
+                                v_max = parse_vec3(lines[i+1])
+                                universe_extents1 = [v_max[j] - v_min[j] for j in range(3)]
+                            except Exception: pass
+                        elif "Mesh2 Universe Min:" in line and (i+1) < len(lines) and "Mesh2 Universe Max:" in lines[i+1]:
+                            try:
+                                v_min = parse_vec3(line)
+                                v_max = parse_vec3(lines[i+1])
+                                universe_extents2 = [v_max[j] - v_min[j] for j in range(3)]
+                            except Exception: pass
 
                 if not json_output.exists():
                     return {"error": f"Timing JSON not found at {json_output}. Output:\n{stdout_text + stderr_text}"}
@@ -267,5 +295,7 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
             "breakdown": breakdown_stats,
             "num_obj1": num_obj1,
             "num_obj2": num_obj2,
-            "num_intersections": num_intersections
+            "num_intersections": num_intersections,
+            "universe_extents1": universe_extents1,
+            "universe_extents2": universe_extents2
         }
