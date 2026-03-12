@@ -2,10 +2,13 @@
 import argparse
 import json
 import sys
-from pathlib import Path
 from datetime import datetime
-from benchmarks.mesh_intersection.adapters.raytracer_adapter import RaytracerIntersectionAdapter
-from benchmarks.mesh_intersection.adapters.cgal_adapter import CGALIntersectionAdapter
+from pathlib import Path
+
+from benchmarks.mesh_containment.adapters import (
+    CGALContainmentAdapter,
+    RaytracerContainmentAdapter,
+)
 
 
 class _Tee:
@@ -22,12 +25,11 @@ class _Tee:
 
 
 DATASETS = {
+    "validation": ("validation_a.obj", "validation_b.obj"),
     "cubes_100k": ("cubes_100k.obj", "cubes_100k_v2.obj"),
     "cubes_100k_sel02": ("cubes_100k_s002_real.obj", "cubes_100k_s002_real_v2.obj"),
-    "cubes_1m": ("cubes_1m.obj", "cubes_1m_v2.obj"),
-    "cubes_1m_sel05": ("cubes_1m_s005.obj", "cubes_1m_s005_v2.obj"),
 }
-DEFAULT_DATASET = "cubes_100k"
+DEFAULT_DATASET = "validation"
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent.parent
@@ -49,21 +51,37 @@ def print_results(adapter_name, results):
         print(f"  Min:  {results['min']:.4f} ms")
         print(f"  Max:  {results['max']:.4f} ms")
         print(f"  Std:  {results['std']:.4f} ms")
+        if "num_containments" in results:
+            print(f"  Containment Pairs: {results['num_containments']}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Mesh Intersection Benchmark (Cube Datasets)")
+    parser = argparse.ArgumentParser(description="Mesh Containment Benchmark")
     parser.add_argument("--runs", type=int, default=5, help="Number of runs per adapter")
-    parser.add_argument("--dataset", type=str, default=DEFAULT_DATASET,
-                        choices=list(DATASETS.keys()),
-                        help=f"Dataset configuration: {', '.join(DATASETS.keys())}")
-    parser.add_argument("--approaches", type=str, nargs="+", default=["two_pass", "estimated"],
-                        choices=["two_pass", "estimated", "estimate_only", "cgal"],
-                        help="Approaches to run")
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default=DEFAULT_DATASET,
+        choices=list(DATASETS.keys()),
+        help=f"Dataset configuration: {', '.join(DATASETS.keys())}",
+    )
+    parser.add_argument(
+        "--approaches",
+        type=str,
+        nargs="+",
+        default=["raytracer", "cgal"],
+        choices=["raytracer", "cgal"],
+        help="Approaches to run",
+    )
     parser.add_argument("--file1", type=str, default=None, help="First dataset file (overrides --dataset)")
     parser.add_argument("--file2", type=str, default=None, help="Second dataset file (overrides --dataset)")
     parser.add_argument("--raw-dir", type=str, default=str(RAW_DIR), help="Directory containing raw data files")
-    parser.add_argument("--preprocessed-dir", type=str, default=str(PREPROCESSED_DIR), help="Directory for preprocessed files")
+    parser.add_argument(
+        "--preprocessed-dir",
+        type=str,
+        default=str(PREPROCESSED_DIR),
+        help="Directory for preprocessed files",
+    )
     parser.add_argument("--timings-dir", type=str, default=str(TIMINGS_DIR), help="Directory for timing JSON files")
     parser.add_argument("--grid-resolution", type=int, default=10, help="Grid resolution for preprocessing")
     parser.add_argument("--raytracer-warmup-runs", type=int, default=1, help="Warmup iterations per run")
@@ -117,32 +135,29 @@ def main():
 
     try:
         adapters = []
-        for approach in args.approaches:
-            if approach == "cgal":
-                adapters.append(
-                    CGALIntersectionAdapter(
-                        str(args.cgal_dir),
-                        preprocessed_dir=str(preprocessed_dir),
-                        threads=args.threads,
-                    )
+        if "raytracer" in args.approaches:
+            adapters.append(
+                RaytracerContainmentAdapter(
+                    str(RAYSPACE_DIR),
+                    preprocessed_dir=str(preprocessed_dir),
+                    timings_dir=str(timings_dir),
+                    grid_resolution=args.grid_resolution,
+                    warmup_runs=args.raytracer_warmup_runs,
                 )
-            else:
-                adapters.append(
-                    RaytracerIntersectionAdapter(
-                        str(RAYSPACE_DIR),
-                        mode=approach,
-                        preprocessed_dir=str(preprocessed_dir),
-                        timings_dir=str(timings_dir),
-                        grid_resolution=args.grid_resolution,
-                        warmup_runs=args.raytracer_warmup_runs,
-                    )
+            )
+        if "cgal" in args.approaches:
+            adapters.append(
+                CGALContainmentAdapter(
+                    str(args.cgal_dir),
+                    preprocessed_dir=str(preprocessed_dir),
+                    threads=args.threads,
                 )
+            )
 
-        needs_preprocess = any(a in args.approaches for a in ["two_pass", "estimated", "estimate_only", "cgal"])
+        needs_preprocess = any(a in args.approaches for a in ["raytracer", "cgal"])
         if needs_preprocess:
-            preprocess_adapter = RaytracerIntersectionAdapter(
+            preprocess_adapter = RaytracerContainmentAdapter(
                 str(RAYSPACE_DIR),
-                mode="two_pass",
                 preprocessed_dir=str(preprocessed_dir),
                 timings_dir=str(timings_dir),
                 grid_resolution=args.grid_resolution,
@@ -164,11 +179,11 @@ def main():
         print(f"Dataset 2: {file2_path}")
 
         all_results = {}
-        ssot_stats = {"num_obj1": 0, "num_obj2": 0, "num_intersections": 0, "universe_extents1": [0.0, 0.0, 0.0], "universe_extents2": [0.0, 0.0, 0.0]}
+        ssot_stats = {"num_obj1": 0, "num_obj2": 0, "num_containments": 0}
 
         for adapter in adapters:
             print(f"\nRunning {adapter.name}...")
-            results = adapter.run_intersection(
+            results = adapter.run_containment(
                 str(file1_path),
                 str(file2_path),
                 args.runs,
@@ -178,23 +193,23 @@ def main():
             print_results(adapter.name, results)
             all_results[adapter.name] = results
 
-            if "Raytracer" in adapter.name and "error" not in results:
-                if adapter.name == "Raytracer_two_pass" or ssot_stats["num_obj1"] == 0:
-                    ssot_stats["num_obj1"] = results.get("num_obj1", 0)
-                    ssot_stats["num_obj2"] = results.get("num_obj2", 0)
-                    ssot_stats["num_intersections"] = results.get("num_intersections", 0)
-                    ssot_stats["universe_extents1"] = results.get("universe_extents1", [0.0, 0.0, 0.0])
-                    ssot_stats["universe_extents2"] = results.get("universe_extents2", [0.0, 0.0, 0.0])
+            if adapter.name == "Raytracer" and "error" not in results:
+                ssot_stats["num_obj1"] = results.get("num_obj1", 0)
+                ssot_stats["num_obj2"] = results.get("num_obj2", 0)
+                ssot_stats["num_containments"] = results.get("num_containments", 0)
 
-        cross_product_size = ssot_stats["num_obj1"] * ssot_stats["num_obj2"]
-        selectivity = ssot_stats["num_intersections"] / cross_product_size if cross_product_size > 0 else 0.0
-
-        print("\n--- Join Statistics (SSOT) ---")
-        print(f"  Objects 1:     {ssot_stats['num_obj1']}")
-        print(f"  Objects 2:     {ssot_stats['num_obj2']}")
-        print(f"  Cross Product: {cross_product_size}")
-        print(f"  Intersections: {ssot_stats['num_intersections']}")
-        print(f"  Selectivity:   {selectivity:.8f}")
+        if ssot_stats["num_obj1"] > 0 and ssot_stats["num_obj2"] > 0:
+            cross_product_size = ssot_stats["num_obj1"] * ssot_stats["num_obj2"]
+            selectivity = ssot_stats["num_containments"] / cross_product_size if cross_product_size > 0 else 0.0
+            print("\n--- Containment Statistics (SSOT) ---")
+            print(f"  Objects 1:      {ssot_stats['num_obj1']}")
+            print(f"  Objects 2:      {ssot_stats['num_obj2']}")
+            print(f"  Cross Product:  {cross_product_size}")
+            print(f"  Containments:   {ssot_stats['num_containments']}")
+            print(f"  Selectivity:    {selectivity:.8f}")
+        else:
+            cross_product_size = 0
+            selectivity = 0.0
 
         output_file = RUNS_DIR / f"{run_name}.json"
         json_results = {
@@ -212,26 +227,16 @@ def main():
                 "size_bytes1": file1_path.stat().st_size if file1_path.exists() else 0,
                 "size_bytes2": file2_path.stat().st_size if file2_path.exists() else 0,
                 "cross_product_size": int(cross_product_size),
-                "num_intersections": int(ssot_stats["num_intersections"]),
+                "num_containments": int(ssot_stats["num_containments"]),
                 "selectivity": float(selectivity),
-                "universe_extents1": ssot_stats["universe_extents1"],
-                "universe_extents2": ssot_stats["universe_extents2"]
             },
-            "results": all_results
+            "results": all_results,
         }
 
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(json_results, f, indent=2)
-        print(f"\nSaved results to {output_file}")
 
-        # Automatically generate visualization
-        try:
-            from visualize_results import visualize_results
-            visualize_results(str(output_file))
-        except ImportError:
-            print("Warning: Could not import visualize_results.py for automatic plotting.")
-        except Exception as e:
-            print(f"Warning: Failed to generate visualization: {e}")
+        print(f"\nSaved results to {output_file}")
     finally:
         if tee_file_handle:
             tee_file_handle.flush()

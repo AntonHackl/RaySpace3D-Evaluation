@@ -7,7 +7,9 @@
 #   2. src/RaySpace3D/query       (raytracer, raytracer_filter_refine,
 #                                  raytracer_mesh_overlap, raytracer_mesh_intersection,
 #                                  raytracer_intersection_estimated, raytracer_overlap_estimated)
-#   3. baselines/RaySpace3DBaselines/CGAL  (cgal_query, cgal_overlap)
+#   3. baselines/RaySpace3DBaselines/CGAL  (cgal_query, cgal_overlap,
+#                                           cgal_touch, cgal_intersection,
+#                                           cgal_containment)
 #   4. baselines/RaySpace3DBaselines/CUDA  (cuda_query)
 #   5. baselines/RaySpace3DBaselines/SQL   (spatial_query)
 #

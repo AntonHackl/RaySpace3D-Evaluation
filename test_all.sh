@@ -206,7 +206,7 @@ if should_test "cgal"; then
 
     CGAL_BUILD="$SCRIPT_DIR/baselines/RaySpace3DBaselines/CGAL/build"
     
-    for exe_name in "cgal_query" "cgal_overlap"; do
+    for exe_name in "cgal_query" "cgal_overlap" "cgal_touch" "cgal_intersection" "cgal_containment"; do
         exe_path="${CGAL_BUILD}/${exe_name}"
         if check_executable "$exe_path"; then
             record_result "${exe_name} binary exists" "PASS"

@@ -58,12 +58,14 @@ def find_dataset_files(nu):
     
     return candidates_v[0], candidates_n[0]
 
-def run_experiment(runs, grid_resolution, nu_counts, approaches=None):
+def run_experiment(runs, grid_resolution, nu_counts, approaches=None, track_hash_contention=False):
     if approaches is None:
         approaches = ["exact", "direct_estimation", "cgal", "touch", "tdbase"]
     
     print(f"--- Starting Nu Scalability Experiment ({nu_counts}) ---")
     print(f"Approaches: {approaches}")
+    if track_hash_contention:
+        print("Direct estimation hash contention tracking: enabled")
     
     # Ensure directories exist
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
@@ -95,7 +97,8 @@ def run_experiment(runs, grid_resolution, nu_counts, approaches=None):
         preprocessed_dir=str(PREPROCESSED_DIR), 
         timings_dir=str(TIMINGS_DIR),
         grid_resolution=grid_resolution,
-        warmup_runs=1
+        warmup_runs=1,
+        track_hash_contention=track_hash_contention,
     )
 
     cgal_adapter = CGALAdapter(
@@ -492,11 +495,18 @@ def main():
     parser.add_argument("--grid-resolution", type=int, default=20, help="Grid resolution for RaySpace")
     parser.add_argument("--nu", type=int, nargs='+', help="Nu counts to test (e.g. 200 400 600 800)")
     parser.add_argument("--approaches", type=str, nargs='+', choices=["exact", "direct_estimation", "cgal", "touch", "tdbase"], help="Approaches to run")
+    parser.add_argument("--track-hash-contention", action="store_true", help="Enable direct-estimation hash contention tracking")
     args = parser.parse_args()
     
     nu_counts = args.nu if args.nu else DEFAULT_NU_COUNTS
     
-    results = run_experiment(args.runs, args.grid_resolution, nu_counts, approaches=args.approaches)
+    results = run_experiment(
+        args.runs,
+        args.grid_resolution,
+        nu_counts,
+        approaches=args.approaches,
+        track_hash_contention=args.track_hash_contention,
+    )
     
     if results and results["counts"]:
         print("\nResults Summary:")

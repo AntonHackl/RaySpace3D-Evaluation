@@ -16,6 +16,7 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
         timings_dir: str = "timings",
         grid_resolution: int = 10,
         warmup_runs: int = 10,
+        track_hash_contention: bool = False,
     ):
         """
         mode: 'exact' or 'estimated'
@@ -28,6 +29,7 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
         self.timings_dir = Path(timings_dir)
         self.grid_resolution = grid_resolution
         self.warmup_runs = warmup_runs
+        self.track_hash_contention = track_hash_contention
         # Ensure directories exist
         self.timings_dir.mkdir(parents=True, exist_ok=True)
         self.preprocessed_dir.mkdir(parents=True, exist_ok=True)
@@ -164,6 +166,8 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
 
             if self.mode == "direct_estimation":
                 cmd.extend(["--query-direction", query_direction])
+                if self.track_hash_contention:
+                    cmd.append("--track-hash-contention")
                 if pairs_output and run_idx == (num_runs - 1):
                     cmd.extend(["--pairs-output", str(pairs_output)])
 

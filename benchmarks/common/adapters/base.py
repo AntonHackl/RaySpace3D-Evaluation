@@ -131,3 +131,23 @@ class IntersectionBenchmarkAdapter(ABC):
         Returns a dictionary containing timing results and statistics.
         """
         pass
+
+
+class ContainmentBenchmarkAdapter(ABC):
+    def __init__(self, name: str):
+        self.name = name
+
+    @abstractmethod
+    def run_containment(
+        self,
+        file1: str,
+        file2: str,
+        num_runs: int,
+        timeout: Optional[float] = None,
+        log_dir: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Run strict containment join (B in A) between two files.
+        Returns a dictionary containing timing results and statistics.
+        """
+        pass

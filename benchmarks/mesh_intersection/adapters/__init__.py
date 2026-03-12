@@ -1,1 +1,2 @@
 from .raytracer_adapter import RaytracerIntersectionAdapter
+from .cgal_adapter import CGALIntersectionAdapter

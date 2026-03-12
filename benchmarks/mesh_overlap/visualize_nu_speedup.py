@@ -12,7 +12,16 @@ def visualize_speedup(json_path, output_dir):
     counts = data["counts"]
     tdbase_means = np.array(data["tdbase"]["mean"])
     exact_means = np.array(data["exact"]["mean"])
-    estimated_means = np.array(data["estimated"]["mean"])
+    
+    # Handle different names for estimated approach
+    if "estimated" in data:
+        estimated_means = np.array(data["estimated"]["mean"])
+    elif "direct_estimation" in data:
+        estimated_means = np.array(data["direct_estimation"]["mean"])
+    else:
+        # Fallback if neither is present
+        estimated_means = np.ones_like(exact_means) * np.nan
+        print("Warning: No estimated approach data found in JSON")
     
     # Calculate speedup
     exact_speedup = tdbase_means / exact_means
