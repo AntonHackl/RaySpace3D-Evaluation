@@ -17,10 +17,12 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
         grid_resolution: int = 10,
         warmup_runs: int = 10,
         track_hash_contention: bool = False,
+        hash_table_size: Optional[int] = None,
     ):
         """
         mode: 'exact' or 'estimated'
         grid_resolution: resolution for grid generation (default: 10)
+        hash_table_size: manually override hash table slot count for direct_estimation mode
         """
         super().__init__(f"Raytracer_{mode}")
         self.rayspace_dir = Path(rayspace_dir)
@@ -30,6 +32,7 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
         self.grid_resolution = grid_resolution
         self.warmup_runs = warmup_runs
         self.track_hash_contention = track_hash_contention
+        self.hash_table_size = hash_table_size
         # Ensure directories exist
         self.timings_dir.mkdir(parents=True, exist_ok=True)
         self.preprocessed_dir.mkdir(parents=True, exist_ok=True)
@@ -122,6 +125,10 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
         num_intersections = 0
         universe_extents1 = [0.0, 0.0, 0.0]
         universe_extents2 = [0.0, 0.0, 0.0]
+        hash_accesses = 0
+        hash_contentions = 0
+        contention_pct = 0.0
+        actual_hash_table_size = 0
         
         print(f"[{self.name}] Running benchmark...")
 
@@ -168,6 +175,8 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
                 cmd.extend(["--query-direction", query_direction])
                 if self.track_hash_contention:
                     cmd.append("--track-hash-contention")
+                if self.hash_table_size is not None:
+                    cmd.extend(["--hash-table-size", str(self.hash_table_size)])
                 if pairs_output and run_idx == (num_runs - 1):
                     cmd.extend(["--pairs-output", str(pairs_output)])
 
@@ -223,6 +232,23 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
                                 v_max = parse_vec3(lines[i+1])
                                 universe_extents2 = [v_max[j] - v_min[j] for j in range(3)]
                             except Exception: pass
+                        elif "Using Direct Estimated Hash Table Size:" in line:
+                            try:
+                                actual_hash_table_size = int(line.split(":", 1)[1].strip())
+                            except (ValueError, IndexError): pass
+                    # Parse contention from any run (last value wins)
+                    for line in lines:
+                        if "Hash contention (run" in line and "):" in line:
+                            try:
+                                # Format: "Hash contention (run N): X/Y accesses (Z%)"
+                                counts_part = line.split("):", 1)[1].strip()
+                                # counts_part: "X/Y accesses (Z%)"
+                                slash_part = counts_part.split(" accesses")[0].strip()
+                                hash_contentions = int(slash_part.split("/")[0])
+                                hash_accesses = int(slash_part.split("/")[1])
+                                pct_str = counts_part.split("(")[1].split("%")[0].strip()
+                                contention_pct = float(pct_str)
+                            except (ValueError, IndexError): pass
 
                 if not json_output.exists():
                     return {"error": f"Timing JSON not found at {json_output}. Output:\n{stdout_text + stderr_text}"}
@@ -301,5 +327,9 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
             "num_obj2": num_obj2,
             "num_intersections": num_intersections,
             "universe_extents1": universe_extents1,
-            "universe_extents2": universe_extents2
+            "universe_extents2": universe_extents2,
+            "hash_accesses": hash_accesses,
+            "hash_contentions": hash_contentions,
+            "contention_pct": contention_pct,
+            "actual_hash_table_size": actual_hash_table_size,
         }

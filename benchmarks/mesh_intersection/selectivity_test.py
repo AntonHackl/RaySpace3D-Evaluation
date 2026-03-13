@@ -1,9 +1,21 @@
 #!/usr/bin/env python3
 import argparse
 import json
-import subprocess
+import sys
+import time
 from pathlib import Path
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+from benchmarks.common.scenario_utils import (
+    canonical_cube_pair_paths,
+    ensure_cube_pair_dataset,
+    get_shared_data_dirs,
+    compute_universe_for_selectivity,
+)
+from benchmarks.mesh_intersection.adapters.cgal_adapter import CGALIntersectionAdapter
 from benchmarks.mesh_intersection.adapters.raytracer_adapter import RaytracerIntersectionAdapter
 
 
@@ -14,39 +26,29 @@ MAX_SIZE = 4
 GRID_CELL_SIZE = 5
 TIMEOUT_SECONDS = 120.0
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parent.parent
 RAYSPACE_DIR = REPO_ROOT / "src/RaySpace3D"
-DATA_DIR = SCRIPT_DIR / "data"
-RAW_DIR = DATA_DIR / "raw" / "selectivity_test"
-PREPROCESSED_DIR = DATA_DIR / "preprocessed" / "selectivity_test"
-TIMINGS_DIR = DATA_DIR / "timings" / "selectivity_test"
+CGAL_BASE_DIR = REPO_ROOT / "baselines" / "RaySpace3DBaselines" / "CGAL"
 RESULTS_DIR = SCRIPT_DIR / "results" / "selectivity_test"
-
-GENERATOR_SCRIPT = RAYSPACE_DIR / "scripts" / "generate_cubes_by_selectivity.py"
-
-
-def compute_universe_for_selectivity(target_selectivity, min_size, max_size):
-    avg_size = (min_size + max_size) / 2.0
-    if target_selectivity <= 0:
-        raise ValueError("Target selectivity must be positive")
-    universe_extent = (2.0 * avg_size) / (target_selectivity ** (1.0 / 3.0))
-    return universe_extent
+RUNS_DIR = SCRIPT_DIR / "runs"
 
 
 def main():
     parser = argparse.ArgumentParser(description="Selectivity Benchmark for Mesh Intersection")
     parser.add_argument("--approaches", type=str, nargs="+",
-                        default=["two_pass", "estimated"],
-                        choices=["two_pass", "estimated", "estimate_only"],
+                        default=["two_pass", "estimated", "cgal"],
+                        choices=["two_pass", "estimated", "estimate_only", "cgal"],
                         help="Approaches to run")
     parser.add_argument("--runs", type=int, default=5, help="Number of runs per selectivity")
     args = parser.parse_args()
 
-    RAW_DIR.mkdir(parents=True, exist_ok=True)
-    PREPROCESSED_DIR.mkdir(parents=True, exist_ok=True)
-    TIMINGS_DIR.mkdir(parents=True, exist_ok=True)
+    dirs = get_shared_data_dirs("selectivity")
+    raw_dir = dirs["raw"]
+    preprocessed_dir = dirs["preprocessed"]
+    timings_dir = dirs["timings"]
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    
+    cgal_adapter = CGALIntersectionAdapter(str(CGAL_BASE_DIR), preprocessed_dir=str(preprocessed_dir))
 
     summary_results = []
 
@@ -63,35 +65,36 @@ def main():
         print(f"Universe Extent: {universe_extent:.2f}")
         print(f"Grid Resolution: {grid_resolution} (Cell Size: {universe_extent / grid_resolution:.2f})")
 
-        file_suffix = str(selectivity).replace('.', '_')
-        obj_a = RAW_DIR / f"cubes_a_sel_{file_suffix}.obj"
-        obj_b = RAW_DIR / f"cubes_b_sel_{file_suffix}.obj"
+        obj_a, obj_b = canonical_cube_pair_paths(
+            raw_dir,
+            num_cubes_a=NUM_CUBES,
+            num_cubes_b=NUM_CUBES,
+            min_size=MIN_SIZE,
+            max_size=MAX_SIZE,
+            selectivity=selectivity,
+            seed=42,
+            grid_resolution=grid_resolution,
+        )
 
         dt_a = obj_a.with_suffix('.dt')
         dt_b = obj_b.with_suffix('.dt')
 
-        if not obj_a.exists() or not obj_b.exists():
-            print("Generating cubes...")
-            cmd = [
-                "python3", str(GENERATOR_SCRIPT),
-                "--num-cubes-a", str(NUM_CUBES),
-                "--num-cubes-b", str(NUM_CUBES),
-                "--min-size", str(MIN_SIZE),
-                "--max-size", str(MAX_SIZE),
-                "--selectivity", str(selectivity),
-                "--output-a", str(obj_a),
-                "--output-b", str(obj_b),
-                "--seed", "42"
-            ]
-            subprocess.run(cmd, check=True)
-        else:
-            print("Files already exist, skipping generation.")
+        ensure_cube_pair_dataset(
+            obj_a,
+            obj_b,
+            num_cubes_a=NUM_CUBES,
+            num_cubes_b=NUM_CUBES,
+            min_size=MIN_SIZE,
+            max_size=MAX_SIZE,
+            selectivity=selectivity,
+            seed=42,
+        )
 
         adapter = RaytracerIntersectionAdapter(
             str(RAYSPACE_DIR),
             mode="two_pass",
-            preprocessed_dir=str(PREPROCESSED_DIR),
-            timings_dir=str(TIMINGS_DIR),
+            preprocessed_dir=str(preprocessed_dir),
+            timings_dir=str(timings_dir),
             grid_resolution=grid_resolution,
             warmup_runs=2
         )
@@ -108,6 +111,25 @@ def main():
         }
 
         for mode in args.approaches:
+            if mode == "cgal":
+                cgal_results = cgal_adapter.run_intersection(
+                    str(obj_a),
+                    str(obj_b),
+                    num_runs=args.runs,
+                    timeout=TIMEOUT_SECONDS,
+                )
+                if "error" in cgal_results:
+                    print(f"[cgal] Error: {cgal_results['error']}")
+                    res_per_sel["cgal"] = {"error": cgal_results["error"]}
+                else:
+                    print(f"[cgal] Mean Time: {cgal_results['mean']:.4f} ms")
+                    res_per_sel["cgal"] = {
+                        "mean_ms": cgal_results["mean"],
+                        "std_ms": cgal_results["std"],
+                        "intersections": cgal_results.get("num_intersections", 0),
+                    }
+                continue
+
             adapter.mode = mode
             query_bin_dir = Path(str(RAYSPACE_DIR)) / "query" / "build" / "bin"
             if mode == "two_pass":
@@ -140,10 +162,31 @@ def main():
 
         summary_results.append(res_per_sel)
 
+    # Save to conventional results path
     summary_path = RESULTS_DIR / "summary.json"
     with open(summary_path, 'w', encoding='utf-8') as f:
         json.dump(summary_results, f, indent=4)
     print(f"\nSummary saved to {summary_path}")
+
+    # Also save with timestamp to runs/ directory
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    runs_path = RUNS_DIR / f"intersection_selectivity_{timestamp}.json"
+    
+    # Bundle metadata with results for the runs/ version
+    full_output = {
+        "metadata": {
+            "timestamp": timestamp,
+            "selectivities": SELECTIVITIES,
+            "num_cubes": NUM_CUBES,
+            "runs": args.runs,
+            "approaches": args.approaches
+        },
+        "results": summary_results
+    }
+    
+    with open(runs_path, 'w', encoding='utf-8') as f:
+        json.dump(full_output, f, indent=4)
+    print(f"Detailed run log saved to {runs_path}")
 
 
 if __name__ == "__main__":
