@@ -10,6 +10,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
 
+
+def _runtime_or_nan(entry):
+    """Return runtime mean or NaN when an approach failed for a data point."""
+    if not isinstance(entry, dict):
+        return np.nan
+    if "error" in entry:
+        return np.nan
+    return entry.get("mean", np.nan)
+
 def load_results(json_file):
     """Load benchmark results from JSON file."""
     with open(json_file, 'r') as f:
@@ -22,20 +31,84 @@ def visualize_results(json_file, output_dir=None):
     
     # Extract metadata
     metadata = data.get("metadata", {})
-    dataset = metadata.get("dataset", "unknown")
-    num_runs = metadata.get("num_runs", 0)
+    dataset = metadata.get("dataset", metadata.get("scenario", "unknown"))
+    num_runs = metadata.get("num_runs", metadata.get("runs", 0))
     timestamp = metadata.get("timestamp", "")
     
     # Extract results
     results = data.get("results", {})
-    
-    # Filter out failed adapters
+
+    # Handle cube scalability format: results is a list of per-count entries
+    if isinstance(results, list):
+        if not results:
+            print("No valid results to visualize")
+            return
+
+        approaches = metadata.get("approaches", [])
+        if not approaches:
+            # Infer approaches from the first entry when metadata is missing
+            first = results[0]
+            approaches = [
+                k for k, v in first.items()
+                if isinstance(v, dict) and ("mean" in v or "error" in v)
+            ]
+
+        x_counts = [entry.get("count_b", entry.get("count", i)) for i, entry in enumerate(results)]
+
+        fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+        for approach in approaches:
+            y = [_runtime_or_nan(entry.get(approach, {})) for entry in results]
+            ax.plot(x_counts, y, marker='o', linewidth=2, label=approach)
+
+        ax.set_xlabel("Count B (number of cubes)", fontsize=12)
+        ax.set_ylabel("Runtime (ms) [Log Scale]", fontsize=12)
+        ax.set_title(
+            f"Intersection Cube Scalability\n{dataset} ({num_runs} run{'s' if num_runs != 1 else ''})",
+            fontsize=14,
+            fontweight='bold',
+        )
+        ax.set_xscale('linear')
+        ax.set_yscale('log')
+        ax.grid(axis='both', which='both', alpha=0.3)
+        ax.legend(loc='best')
+        plt.tight_layout()
+
+        if output_dir is None:
+            output_dir = Path(__file__).parent / "figures"
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        output_name = f"intersection_cube_scalability_{timestamp}.png"
+        output_path = output_dir / output_name
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        print(f"Figure saved to {output_path}")
+
+        output_path_pdf = output_dir / f"intersection_cube_scalability_{timestamp}.pdf"
+        plt.savefig(output_path_pdf, bbox_inches='tight')
+        print(f"PDF saved to {output_path_pdf}")
+        plt.close()
+
+        print("\n" + "=" * 60)
+        print("Cube Scalability Summary")
+        print("=" * 60)
+        for entry in results:
+            count_b = entry.get("count_b", "?")
+            print(f"\ncount_b={count_b}:")
+            for approach in approaches:
+                approach_res = entry.get(approach, {})
+                if "error" in approach_res:
+                    print(f"  {approach}: {approach_res['error']}")
+                else:
+                    print(f"  {approach}: {approach_res.get('mean', float('nan')):.4f} ms")
+        return
+
+    # Handle adapter-summary format: results is a dict keyed by adapter
     valid_results = {name: res for name, res in results.items() if "error" not in res}
-    
+
     if not valid_results:
         print("No valid results to visualize")
         return
-    
+
     # Prepare data for plotting
     adapters = list(valid_results.keys())
     means = [valid_results[name]["mean"] for name in adapters]

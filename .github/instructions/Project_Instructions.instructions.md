@@ -103,9 +103,31 @@ and then store temporary files there.
 
 ---
 
+# Building Applications
+
+When compiling or building applications within this repository, Copilot **must only use the dedicated build script**. 
+
+## Dedicated Build Script
+
+Always use the following script to build applications:
+
+```bash
+./build_all.sh
+```
+
+## Building Specific Applications
+
+If you need to recompile only specific applications, do not guess the build commands or use standard toolchain commands directly. Instead, run the build script with the `--help` flag to determine the correct arguments:
+
+```bash
+./build_all.sh --help
+```
+
+---
+
 # Reason for These Rules
 
-GitHub Copilot's auto-approval and safety systems must be able to clearly determine that file operations occur **inside the project directory**.
+GitHub Copilot's auto-approval and safety systems must be able to clearly determine that file operations occur **inside the project directory**. 
 
 Using:
 
@@ -113,7 +135,7 @@ Using:
 * environment variables
 * dynamically constructed paths
 
-may prevent the system from verifying file locations and can block automatic approvals.
+may prevent the system from verifying file locations and can block automatic approvals. Additionally, strict adherence to the build script ensures consistency across all development environments.
 
 ---
 
@@ -127,3 +149,5 @@ Copilot must follow these rules:
 * Do **not write to system temp directories**
 * Use or create a **temporary directory inside the repository** instead
 * Ensure all referenced paths clearly reside **inside the repository**
+* **Only** build applications using `./build_all.sh`
+* Use `./build_all.sh --help` to determine the correct commands for recompiling specific applications
