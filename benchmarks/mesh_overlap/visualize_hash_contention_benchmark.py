@@ -2,9 +2,9 @@
 Visualize the results of run_hash_contention_benchmark.py.
 
 Produces a 3-panel figure:
-  Panel 1: Query time (ms) ± std  vs hash table size multiplier
-  Panel 2: Hash accesses and contentions  vs multiplier
-  Panel 3: Pairs found vs multiplier  (with reference line at true_result_count)
+    Panel 1: Query time (ms) ± std  vs hash table setting
+    Panel 2: Hash accesses and contentions  vs hash table setting
+    Panel 3: Pairs found vs hash table setting  (with reference line at true_result_count)
 """
 
 import argparse
@@ -65,19 +65,29 @@ def main():
     selectivity  = meta.get("selectivity", "?")
     timestamp_in = meta.get("timestamp", "")
 
-    # Sort by multiplier ascending (for consistent left-to-right x-axis)
-    results = sorted(results, key=lambda r: r["multiplier"])
-
-    multipliers  = [r["multiplier"]         for r in results]
     mean_times   = [safe_float(r.get("mean_time_ms"))  for r in results]
     std_times    = [safe_float(r.get("std_time_ms"), 0.0) for r in results]
     accesses     = [safe_int(r.get("hash_accesses"))   for r in results]
     contentions  = [safe_int(r.get("hash_contentions")) for r in results]
     pairs_timing = [safe_int(r.get("pairs_found_timing")) for r in results]
-    hash_sizes   = [safe_int(r.get("hash_table_size")) for r in results]
+    hash_sizes = []
+    x_labels = []
+    for r in results:
+        multiplier = r.get("multiplier")
+        size_kind = r.get("size_kind")
+        effective_size = safe_int(
+            r.get("actual_hash_table_size_timing") or r.get("actual_hash_table_size_contention") or r.get("hash_table_size"),
+            0,
+        )
+        if size_kind == "gpu_auto" or multiplier is None:
+            x_labels.append(f"GPU max\n({effective_size:,})")
+            hash_sizes.append(effective_size)
+        else:
+            m = safe_float(multiplier, float("nan"))
+            x_labels.append(f"{m:.1f}x\n({effective_size:,})")
+            hash_sizes.append(effective_size)
 
-    x = np.arange(len(multipliers))
-    x_labels = [f"{m:.1f}×\n({s:,})" for m, s in zip(multipliers, hash_sizes)]
+    x = np.arange(len(results))
 
     # ------------------------------------------------------------------ #
     fig, axes = plt.subplots(1, 3, figsize=(16, 5))
@@ -96,7 +106,7 @@ def main():
     )
     ax1.set_xticks(x)
     ax1.set_xticklabels(x_labels, fontsize=7)
-    ax1.set_xlabel("Hash table size multiplier\n(slots)", fontsize=9)
+    ax1.set_xlabel("Hash table setting\n(slots)", fontsize=9)
     ax1.set_ylabel("Query time (ms, log-scale)", fontsize=9)
     ax1.set_yscale("log")
     ax1.set_title("1. Query Time (log scale)", fontsize=10)
@@ -111,7 +121,7 @@ def main():
              label="Hash contentions")
     ax2.set_xticks(x)
     ax2.set_xticklabels(x_labels, fontsize=7)
-    ax2.set_xlabel("Hash table size multiplier\n(slots)", fontsize=9)
+    ax2.set_xlabel("Hash table setting\n(slots)", fontsize=9)
     ax2.set_ylabel("Count", fontsize=9)
     ax2.set_title("Hash Accesses & Contentions", fontsize=10)
     ax2.yaxis.set_major_formatter(mticker.FuncFormatter(
@@ -142,7 +152,7 @@ def main():
                     label=f"True result count ({true_count:,})")
     ax3.set_xticks(x)
     ax3.set_xticklabels(x_labels, fontsize=7)
-    ax3.set_xlabel("Hash table size multiplier\n(slots)", fontsize=9)
+    ax3.set_xlabel("Hash table setting\n(slots)", fontsize=9)
     ax3.set_ylabel("Pairs found", fontsize=9)
     ax3.set_title("Retrieved Pairs vs Hash Table Size", fontsize=10)
     ax3.yaxis.set_major_formatter(mticker.FuncFormatter(
@@ -158,8 +168,8 @@ def main():
     stem = f"hash_contention_benchmark_{ts}"
     png_path = output_dir / f"{stem}.png"
     pdf_path = output_dir / f"{stem}.pdf"
-    fig.savefig(png_path, dpi=150, bbox_inches="tight")
-    fig.savefig(pdf_path, bbox_inches="tight")
+    fig.savefig(str(png_path), dpi=150, bbox_inches="tight")
+    fig.savefig(str(pdf_path), bbox_inches="tight")
     print(f"Figure saved to:\n  {png_path}\n  {pdf_path}")
     plt.close(fig)
 

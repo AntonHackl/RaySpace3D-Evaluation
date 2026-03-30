@@ -18,11 +18,13 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
         warmup_runs: int = 10,
         track_hash_contention: bool = False,
         hash_table_size: Optional[int] = None,
+        hash_table_free_mem_fraction: Optional[float] = None,
     ):
         """
         mode: 'exact' or 'estimated'
         grid_resolution: resolution for grid generation (default: 10)
         hash_table_size: manually override hash table slot count for direct_estimation mode
+        hash_table_free_mem_fraction: fraction of currently free GPU memory to use for hash table size in direct_estimation mode
         """
         super().__init__(f"Raytracer_{mode}")
         self.rayspace_dir = Path(rayspace_dir)
@@ -33,6 +35,7 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
         self.warmup_runs = warmup_runs
         self.track_hash_contention = track_hash_contention
         self.hash_table_size = hash_table_size
+        self.hash_table_free_mem_fraction = hash_table_free_mem_fraction
         # Ensure directories exist
         self.timings_dir.mkdir(parents=True, exist_ok=True)
         self.preprocessed_dir.mkdir(parents=True, exist_ok=True)
@@ -104,6 +107,7 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
         log_dir: Optional[str] = None,
         query_direction: str = "both",
         pairs_output: Optional[str] = None,
+        estimate_only: bool = False,
     ) -> Dict[str, Any]:
         """Execute the overlap join query."""
         if not self.executable.exists():
@@ -123,6 +127,8 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
         num_obj1 = 0
         num_obj2 = 0
         num_intersections = 0
+        raw_estimated_pairs = 0
+        final_estimated_pairs = 0
         universe_extents1 = [0.0, 0.0, 0.0]
         universe_extents2 = [0.0, 0.0, 0.0]
         hash_accesses = 0
@@ -177,8 +183,12 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
                     cmd.append("--track-hash-contention")
                 if self.hash_table_size is not None:
                     cmd.extend(["--hash-table-size", str(self.hash_table_size)])
+                elif self.hash_table_free_mem_fraction is not None:
+                    cmd.extend(["--hash-table-free-mem-fraction", str(self.hash_table_free_mem_fraction)])
                 if pairs_output and run_idx == (num_runs - 1):
                     cmd.extend(["--pairs-output", str(pairs_output)])
+                if estimate_only:
+                    cmd.append("--estimate-only")
 
             if self.mode == "estimate_only":
                 cmd.append("--estimate-only")
@@ -195,60 +205,89 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
                     prefix=f"[{self.name}]",
                 )
                 
-                # Parse summary from stdout on the first run
-                if run_idx == 0:
-                    lines = stdout_text.splitlines()
-                    def parse_vec3(l):
-                        return [float(p.strip()) for p in l.split("[")[1].split("]")[0].split(",")]
-                        
-                    for i, line in enumerate(lines):
+                # Parse summary from stdout.
+                # Object counts/universe extents are taken from run 0, while pair/hash counters are
+                # updated from every run (last value wins) to reflect the latest measured execution.
+                lines = stdout_text.splitlines()
+
+                def parse_vec3(l):
+                    return [float(p.strip()) for p in l.split("[")[1].split("]")[0].split(",")]
+
+                for i, line in enumerate(lines):
+                    if run_idx == 0:
                         if "Mesh1 objects:" in line:
                             num_obj1 = int(line.split(":")[1].strip())
                         elif "Mesh2 objects:" in line:
                             num_obj2 = int(line.split(":")[1].strip())
                         elif "Unique object pairs:" in line:
                             num_intersections = int(line.split(":")[1].strip())
-                        elif "Hash Table Query found" in line:
-                            num_intersections = int(line.split("found")[1].split("unique")[0].strip())
-                        elif "Final Estimated Pairs:" in line:
-                            try:
-                                num_intersections = int(line.split(":", 1)[1].strip())
-                            except ValueError: pass
                         elif "Universe Extents:" in line:
                             try:
                                 ext = parse_vec3(line)
                                 universe_extents1 = ext
                                 universe_extents2 = ext
-                            except Exception: pass
-                        elif "Mesh1 Universe Min:" in line and (i+1) < len(lines) and "Mesh1 Universe Max:" in lines[i+1]:
+                            except Exception:
+                                pass
+                        elif "Mesh1 Universe Min:" in line and (i + 1) < len(lines) and "Mesh1 Universe Max:" in lines[i + 1]:
                             try:
                                 v_min = parse_vec3(line)
-                                v_max = parse_vec3(lines[i+1])
+                                v_max = parse_vec3(lines[i + 1])
                                 universe_extents1 = [v_max[j] - v_min[j] for j in range(3)]
-                            except Exception: pass
-                        elif "Mesh2 Universe Min:" in line and (i+1) < len(lines) and "Mesh2 Universe Max:" in lines[i+1]:
+                            except Exception:
+                                pass
+                        elif "Mesh2 Universe Min:" in line and (i + 1) < len(lines) and "Mesh2 Universe Max:" in lines[i + 1]:
                             try:
                                 v_min = parse_vec3(line)
-                                v_max = parse_vec3(lines[i+1])
+                                v_max = parse_vec3(lines[i + 1])
                                 universe_extents2 = [v_max[j] - v_min[j] for j in range(3)]
-                            except Exception: pass
-                        elif "Using Direct Estimated Hash Table Size:" in line:
-                            try:
-                                actual_hash_table_size = int(line.split(":", 1)[1].strip())
-                            except (ValueError, IndexError): pass
-                    # Parse contention from any run (last value wins)
-                    for line in lines:
-                        if "Hash contention (run" in line and "):" in line:
-                            try:
-                                # Format: "Hash contention (run N): X/Y accesses (Z%)"
-                                counts_part = line.split("):", 1)[1].strip()
-                                # counts_part: "X/Y accesses (Z%)"
-                                slash_part = counts_part.split(" accesses")[0].strip()
-                                hash_contentions = int(slash_part.split("/")[0])
-                                hash_accesses = int(slash_part.split("/")[1])
-                                pct_str = counts_part.split("(")[1].split("%")[0].strip()
-                                contention_pct = float(pct_str)
-                            except (ValueError, IndexError): pass
+                            except Exception:
+                                pass
+
+                    if "Raw Potential Pairs:" in line:
+                        try:
+                            raw_estimated_pairs = int(line.split(":", 1)[1].strip())
+                        except (ValueError, IndexError):
+                            pass
+                    elif "Final Estimated Pairs:" in line:
+                        try:
+                            final_estimated_pairs = int(line.split(":", 1)[1].strip())
+                        except (ValueError, IndexError):
+                            pass
+                    elif "Hash Table Query found" in line:
+                        try:
+                            num_intersections = int(line.split("found")[1].split("unique")[0].strip())
+                        except (ValueError, IndexError):
+                            pass
+                    elif "Using Direct Estimated Hash Table Size:" in line:
+                        try:
+                            actual_hash_table_size = int(line.split(":", 1)[1].strip())
+                        except (ValueError, IndexError):
+                            pass
+                    elif "Using Free GPU Memory Hash Table Size:" in line:
+                        try:
+                            actual_hash_table_size = int(line.split(":", 1)[1].strip())
+                        except (ValueError, IndexError):
+                            pass
+                    elif "Using Manual Hash Table Size:" in line:
+                        try:
+                            actual_hash_table_size = int(line.split(":", 1)[1].strip())
+                        except (ValueError, IndexError):
+                            pass
+
+                # Parse contention from any run (last value wins)
+                for line in lines:
+                    if "Hash contention (run" in line and "):" in line:
+                        try:
+                            # Format: "Hash contention (run N): X/Y accesses (Z%)"
+                            counts_part = line.split("):", 1)[1].strip()
+                            # counts_part: "X/Y accesses (Z%)"
+                            slash_part = counts_part.split(" accesses")[0].strip()
+                            hash_contentions = int(slash_part.split("/")[0])
+                            hash_accesses = int(slash_part.split("/")[1])
+                            pct_str = counts_part.split("(")[1].split("%")[0].strip()
+                            contention_pct = float(pct_str)
+                        except (ValueError, IndexError):
+                            pass
 
                 if not json_output.exists():
                     return {"error": f"Timing JSON not found at {json_output}. Output:\n{stdout_text + stderr_text}"}
@@ -326,6 +365,8 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
             "num_obj1": num_obj1,
             "num_obj2": num_obj2,
             "num_intersections": num_intersections,
+            "raw_estimated_pairs": raw_estimated_pairs,
+            "final_estimated_pairs": final_estimated_pairs,
             "universe_extents1": universe_extents1,
             "universe_extents2": universe_extents2,
             "hash_accesses": hash_accesses,

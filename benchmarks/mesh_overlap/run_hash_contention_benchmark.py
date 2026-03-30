@@ -4,7 +4,10 @@ Hash Contention Benchmark for Direct Estimation Overlap Query.
 Sweeps over hash table sizes expressed as multiples of the true result count,
 measuring query time and contention for each size.
 
-For each multiplier (default: 10x, 5x, 2x, 1.5x, 1x, 0.8x):
+First, a baseline run is executed with a configurable fraction of currently
+free GPU memory (default: 90%) for the hash table.
+
+Then, for each multiplier (default: 10x, 5x, 2x, 1.5x, 1x, 0.8x):
   - Timing run  : N measured runs, no contention tracking
   - Contention run: 1 run, contention tracking enabled
 
@@ -56,7 +59,7 @@ def parse_args():
     parser.add_argument("--seed",           type=int,   default=42,
                         help="Random seed for dataset generation")
     parser.add_argument("--timing-runs",    type=int,   default=5,
-                        help="Number of measured timing runs per multiplier")
+                        help="Number of measured timing runs per hash-table setting")
     parser.add_argument("--timeout",        type=float, default=120.0,
                         help="Per-query timeout in seconds for direct estimation runs")
     parser.add_argument("--warmup-runs",    type=int,   default=2,
@@ -66,6 +69,8 @@ def parse_args():
     parser.add_argument("--multipliers",    type=float, nargs="+",
                         default=[10.0, 5.0, 2.0, 1.5, 1.0, 0.8],
                         help="Hash table size multipliers (relative to true result count)")
+    parser.add_argument("--gpu-auto-free-mem-fraction", type=float, default=0.9,
+                        help="Fraction of currently free GPU memory to use for the gpu_auto hash-table step")
     parser.add_argument("--output-dir",     type=str,   default=str(RUNS_DIR),
                         help="Directory for output JSON files")
     parser.add_argument("--skip-rebuild",   action="store_true",
@@ -92,7 +97,8 @@ def run_cmd(cmd, desc):
 
 
 def make_adapter(rayspace_dir, preprocessed_dir, timings_dir, grid_resolution,
-                 warmup_runs, hash_table_size=None, track_hash_contention=False):
+                 warmup_runs, hash_table_size=None, track_hash_contention=False,
+                 hash_table_free_mem_fraction=None):
     return RaytracerAdapter(
         rayspace_dir=str(rayspace_dir),
         mode="direct_estimation",
@@ -102,6 +108,7 @@ def make_adapter(rayspace_dir, preprocessed_dir, timings_dir, grid_resolution,
         warmup_runs=warmup_runs,
         track_hash_contention=track_hash_contention,
         hash_table_size=hash_table_size,
+        hash_table_free_mem_fraction=hash_table_free_mem_fraction,
     )
 
 
@@ -186,12 +193,32 @@ def main():
     if true_result_count <= 0:
         print("WARNING: True result count is 0. Hash table multipliers will use minimum size of 1024.")
 
-    # ---- Step 5: Multiplier sweep ---------------------------------------
+    # ---- Step 5: Hash-size sweep ----------------------------------------
     results = []
+
+    sweep_configs = [{
+        "kind": "gpu_auto",
+        "label": f"GPU {args.gpu_auto_free_mem_fraction * 100:.0f}% free memory",
+        "multiplier": None,
+        "hash_size": None,
+        "hash_table_free_mem_fraction": args.gpu_auto_free_mem_fraction,
+    }]
     for multiplier in args.multipliers:
-        hash_size = max(1024, int(true_result_count * multiplier)) if true_result_count > 0 else 1024
+        sweep_configs.append({
+            "kind": "multiplier",
+            "label": f"{multiplier:.1f}x",
+            "multiplier": multiplier,
+            "hash_size": max(1024, int(true_result_count * multiplier)) if true_result_count > 0 else 1024,
+            "hash_table_free_mem_fraction": None,
+        })
+
+    for cfg in sweep_configs:
+        hash_size = cfg["hash_size"]
         print("\n" + "=" * 60)
-        print(f"Multiplier: {multiplier:.1f}x  →  hash_table_size = {hash_size:,}")
+        if cfg["kind"] == "gpu_auto":
+            print(f"Hash size mode: {cfg['label']} (auto)")
+        else:
+            print(f"Multiplier: {cfg['multiplier']:.1f}x  →  hash_table_size = {hash_size:,}")
         print("=" * 60)
 
         # --- Timing run (no contention tracking) ---
@@ -201,6 +228,7 @@ def main():
             args.grid_resolution, warmup_runs=args.warmup_runs,
             hash_table_size=hash_size,
             track_hash_contention=False,
+            hash_table_free_mem_fraction=cfg["hash_table_free_mem_fraction"],
         )
         timing_result = adapter_timing.run_overlap(
             str(dataset_a), str(dataset_b), num_runs=args.timing_runs, timeout=args.timeout
@@ -209,7 +237,7 @@ def main():
             print(f"  ERROR in timing run: {timing_result['error']}", file=sys.stderr)
             timing_result = {
                 "mean": None, "std": None, "raw_times": [],
-                "num_intersections": None, "actual_hash_table_size": hash_size,
+                "num_intersections": None, "actual_hash_table_size": hash_size or 0,
             }
 
         # --- Contention run (1 run, tracking enabled) ---
@@ -219,6 +247,7 @@ def main():
             args.grid_resolution, warmup_runs=args.warmup_runs,
             hash_table_size=hash_size,
             track_hash_contention=True,
+            hash_table_free_mem_fraction=cfg["hash_table_free_mem_fraction"],
         )
         contention_result = adapter_contention.run_overlap(
             str(dataset_a), str(dataset_b), num_runs=1, timeout=args.timeout
@@ -228,14 +257,17 @@ def main():
             contention_result = {
                 "hash_accesses": None, "hash_contentions": None,
                 "contention_pct": None, "num_intersections": None,
-                "actual_hash_table_size": hash_size,
+                "actual_hash_table_size": hash_size or 0,
             }
 
         entry = {
-            "multiplier":            multiplier,
+            "size_kind":             cfg["kind"],
+            "size_label":            cfg["label"],
+            "multiplier":            cfg["multiplier"],
             "hash_table_size":       hash_size,
-            "actual_hash_table_size_timing":    timing_result.get("actual_hash_table_size", hash_size),
-            "actual_hash_table_size_contention": contention_result.get("actual_hash_table_size", hash_size),
+            "hash_table_free_mem_fraction": cfg["hash_table_free_mem_fraction"],
+            "actual_hash_table_size_timing":    timing_result.get("actual_hash_table_size", hash_size or 0),
+            "actual_hash_table_size_contention": contention_result.get("actual_hash_table_size", hash_size or 0),
             "mean_time_ms":          timing_result.get("mean"),
             "std_time_ms":           timing_result.get("std"),
             "raw_times_ms":          timing_result.get("raw_times", []),
@@ -246,6 +278,9 @@ def main():
             "contention_pct":        contention_result.get("contention_pct"),
         }
         results.append(entry)
+
+        effective_hash_size = entry["actual_hash_table_size_timing"] or entry["hash_table_size"]
+        print(f"  effective hash table size = {effective_hash_size}")
 
         print(f"  mean_time_ms    = {entry['mean_time_ms']}")
         print(f"  pairs_found     = {entry['pairs_found_timing']}")
@@ -271,6 +306,8 @@ def main():
             "warmup_runs":     args.warmup_runs,
             "grid_resolution": args.grid_resolution,
             "multipliers":     args.multipliers,
+            "gpu_auto_free_mem_fraction": args.gpu_auto_free_mem_fraction,
+            "includes_gpu_auto_step": True,
             "dataset_a":       str(dataset_a),
             "dataset_b":       str(dataset_b),
         },

@@ -12,8 +12,7 @@ class CGALIntersectionAdapter(IntersectionBenchmarkAdapter):
         super().__init__("CGAL")
         self.cgal_dir = Path(cgal_dir)
         self.preprocessed_dir = Path(preprocessed_dir)
-        # Intersection baseline on CPU uses the stable overlap executable.
-        self.executable = self.cgal_dir / "build" / "cgal_overlap"
+        self.executable = self.cgal_dir / "build" / "cgal_intersection"
         self.threads = threads
 
     def run_intersection(
