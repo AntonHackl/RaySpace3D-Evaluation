@@ -5,7 +5,7 @@
 # Builds every CMake project:
 #   1. src/RaySpace3D/preprocess  (preprocess_dataset)
 #   2. src/RaySpace3D/query       (raytracer, raytracer_filter_refine,
-#                                  raytracer_mesh_overlap, raytracer_mesh_intersection,
+#                                  raytracer_mesh_overlap,
 #                                  raytracer_intersection_estimated, raytracer_overlap_estimated)
 #   3. baselines/RaySpace3DBaselines/CGAL  (cgal_query, cgal_overlap,
 #                                           cgal_touch, cgal_intersection,

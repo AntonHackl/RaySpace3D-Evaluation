@@ -55,7 +55,7 @@ def main():
     )
     intersection_adapter = RaytracerIntersectionAdapter(
         str(RAYSPACE_DIR),
-        mode="two_pass",
+        mode="estimated",
         preprocessed_dir=str(PREPROCESSED_DIR),
         timings_dir=str(TIMINGS_DIR),
         grid_resolution=10,
@@ -103,7 +103,7 @@ def main():
             "selectivity": cubes["selectivity"],
             "rayspace_modes": {
                 "overlap": "exact",
-                "intersection": "two_pass",
+                "intersection": "estimated",
                 "containment": "default",
             },
         },

@@ -35,8 +35,8 @@ RUNS_DIR = SCRIPT_DIR / "runs"
 def main():
     parser = argparse.ArgumentParser(description="Selectivity Benchmark for Mesh Intersection")
     parser.add_argument("--approaches", type=str, nargs="+",
-                        default=["two_pass", "estimated", "cgal"],
-                        choices=["two_pass", "estimated", "estimate_only", "cgal"],
+                        default=["estimated", "cgal"],
+                        choices=["estimated", "estimate_only", "cgal"],
                         help="Approaches to run")
     parser.add_argument("--runs", type=int, default=5, help="Number of runs per selectivity")
     args = parser.parse_args()
@@ -92,7 +92,7 @@ def main():
 
         adapter = RaytracerIntersectionAdapter(
             str(RAYSPACE_DIR),
-            mode="two_pass",
+            mode="estimated",
             preprocessed_dir=str(preprocessed_dir),
             timings_dir=str(timings_dir),
             grid_resolution=grid_resolution,
@@ -132,10 +132,7 @@ def main():
 
             adapter.mode = mode
             query_bin_dir = Path(str(RAYSPACE_DIR)) / "query" / "build" / "bin"
-            if mode == "two_pass":
-                adapter.executable = query_bin_dir / "raytracer_mesh_intersection"
-                adapter.name = f"Raytracer_{mode}"
-            elif mode in ("estimated", "estimate_only"):
+            if mode in ("estimated", "estimate_only"):
                 adapter.executable = query_bin_dir / "raytracer_intersection_estimated"
                 adapter.name = f"Raytracer_{mode}"
 

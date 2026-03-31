@@ -12,15 +12,16 @@ class RaytracerIntersectionAdapter(IntersectionBenchmarkAdapter):
     def __init__(
         self,
         rayspace_dir: str,
-        mode: str = "two_pass",
+        mode: str = "estimated",
         preprocessed_dir: str = "preprocessed",
         timings_dir: str = "timings",
         grid_resolution: int = 10,
         warmup_runs: int = 2,
     ):
-        super().__init__(f"Raytracer_{mode}")
+        normalized_mode = "estimated" if mode == "two_pass" else mode
+        super().__init__(f"Raytracer_{normalized_mode}")
         self.rayspace_dir = Path(rayspace_dir)
-        self.mode = mode
+        self.mode = normalized_mode
         self.preprocessed_dir = Path(preprocessed_dir)
         self.timings_dir = Path(timings_dir)
         self.grid_resolution = grid_resolution
@@ -30,9 +31,7 @@ class RaytracerIntersectionAdapter(IntersectionBenchmarkAdapter):
         self.preprocessed_dir.mkdir(parents=True, exist_ok=True)
 
         query_bin_dir = self.rayspace_dir / "query" / "build" / "bin"
-        if self.mode == "two_pass":
-            self.executable = query_bin_dir / "raytracer_mesh_intersection"
-        elif self.mode in ("estimated", "estimate_only"):
+        if self.mode in ("estimated", "estimate_only"):
             self.executable = query_bin_dir / "raytracer_intersection_estimated"
         else:
             raise ValueError(f"Unknown mode: {self.mode}")
@@ -106,14 +105,7 @@ class RaytracerIntersectionAdapter(IntersectionBenchmarkAdapter):
             adapter_log_dir = Path(log_dir) / self.name
             adapter_log_dir.mkdir(parents=True, exist_ok=True)
 
-        if self.mode == "two_pass":
-            expected_prefixes = [
-                "raytrace_",
-                "gpu deduplication",
-                "download results",
-                "query",
-            ]
-        elif self.mode == "estimated":
+        if self.mode == "estimated":
             expected_prefixes = [
                 "selectivity estimation",
                 "raytrace_hash_",
@@ -134,13 +126,7 @@ class RaytracerIntersectionAdapter(IntersectionBenchmarkAdapter):
                 "--output", str(json_output)
             ]
 
-            if self.mode == "two_pass":
-                cmd.extend([
-                    "--runs", "1",
-                    "--warmup-runs", str(self.warmup_runs),
-                    "--no-export"
-                ])
-            elif self.mode == "estimate_only":
+            if self.mode == "estimate_only":
                 cmd.append("--estimate-only")
 
             try:
@@ -209,13 +195,7 @@ class RaytracerIntersectionAdapter(IntersectionBenchmarkAdapter):
 
                 has_detailed_raytrace = any(k.startswith("raytrace_") for k in phase_values.keys())
 
-                if self.mode == "two_pass":
-                    query_time = phase_values.get("query", 0.0)
-                    if query_time <= 0.0:
-                        query_time = sum(v for k, v in phase_values.items() if k.startswith("raytrace_"))
-                        query_time += phase_values.get("gpu deduplication", 0.0)
-                    query_time += phase_values.get("download results", 0.0)
-                elif self.mode == "estimated":
+                if self.mode == "estimated":
                     query_time = phase_values.get("selectivity estimation", 0.0)
                     execute_hash = phase_values.get("execute hash query", 0.0)
                     if execute_hash > 0.0:

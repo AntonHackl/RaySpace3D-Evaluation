@@ -44,8 +44,8 @@ def main():
     parser.add_argument("--warmup-runs", type=int, default=1)
     parser.add_argument("--timeout", type=float, default=120.0)
     parser.add_argument("--approaches", type=str, nargs="+",
-                        default=["two_pass", "estimated", "cgal"],
-                        choices=["two_pass", "estimated", "estimate_only", "cgal"])
+                        default=["estimated", "cgal"],
+                        choices=["estimated", "estimate_only", "cgal"])
     args = parser.parse_args()
 
     dirs = get_shared_data_dirs("cube_scalability")
@@ -53,10 +53,6 @@ def main():
 
     universe_extent = compute_universe_for_selectivity(args.selectivity, args.min_size, args.max_size)
 
-    exact_adapter = RaytracerIntersectionAdapter(
-        str(RAYSPACE_DIR), mode="two_pass", preprocessed_dir=str(dirs["preprocessed"]),
-        timings_dir=str(dirs["timings"]), grid_resolution=args.grid_resolution, warmup_runs=args.warmup_runs,
-    )
     estimated_adapter = RaytracerIntersectionAdapter(
         str(RAYSPACE_DIR), mode="estimated", preprocessed_dir=str(dirs["preprocessed"]),
         timings_dir=str(dirs["timings"]), grid_resolution=args.grid_resolution, warmup_runs=args.warmup_runs,
@@ -88,8 +84,8 @@ def main():
         )
 
         for file_path in (fixed_a, ds_b):
-            if not exact_adapter.check_preprocessed(str(file_path)):
-                exact_adapter.preprocess_from_source(str(file_path), str(file_path))
+            if not estimated_adapter.check_preprocessed(str(file_path)):
+                estimated_adapter.preprocess_from_source(str(file_path), str(file_path))
 
         entry = {
             "count_a": args.fixed_count,
@@ -99,10 +95,6 @@ def main():
             "size_bytes_a": fixed_a.stat().st_size if fixed_a.exists() else 0,
             "size_bytes_b": ds_b.stat().st_size if ds_b.exists() else 0,
         }
-
-        if "two_pass" in args.approaches:
-            res = exact_adapter.run_intersection(str(fixed_a), str(ds_b), args.runs, timeout=args.timeout)
-            entry["two_pass"] = res
 
         if "estimated" in args.approaches:
             res = estimated_adapter.run_intersection(str(fixed_a), str(ds_b), args.runs, timeout=args.timeout)

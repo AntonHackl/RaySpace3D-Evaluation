@@ -51,6 +51,17 @@ All generated expectations are written to:
   - `runs/correctness_<timestamp>.json`
   - `runs/correctness_latest.json`
 
+- `run_overlap_disagreement_analysis.py`
+- Runs RaySpace direct-estimation overlap and CGAL overlap on the cubes_20k dataset,
+  computes pair disagreements, samples up to N mismatches (default 10,000), and
+  adjudicates sampled pairs using a cube AABB truth predicate with strict containment
+  excluded from overlap semantics.
+
+- `run_intersection_disagreement_analysis.py`
+- Runs RaySpace two-pass intersection and CGAL intersection on the cubes_20k dataset,
+  computes pair disagreements, samples up to N mismatches (default 10,000), and
+  adjudicates sampled pairs using a cube AABB intersection predicate.
+
 ## Usage
 
 Activate your conda environment first, then run:
@@ -67,6 +78,34 @@ After snapshotting (or to use the currently frozen values), run:
 conda activate spatial_benchmark
 python benchmarks/correctness_tests/run_correctness.py --operations overlap intersection containment --approaches rayspace cgal touch
 ```
+
+To inspect overlap disagreements and estimate which engine is correct on sampled mismatches:
+
+```bash
+conda activate spatial_benchmark
+python benchmarks/correctness_tests/run_overlap_disagreement_analysis.py --max-eval-pairs 10000 --seed 42
+```
+
+To inspect intersection disagreements and estimate which engine is correct on sampled mismatches:
+
+```bash
+conda activate spatial_benchmark
+python benchmarks/correctness_tests/run_intersection_disagreement_analysis.py --max-eval-pairs 10000 --seed 42
+```
+
+Artifacts for the disagreement analysis are written to:
+- `runs/overlap_disagreement_<timestamp>/summary.json`
+- `runs/overlap_disagreement_<timestamp>/sampled_pair_decisions.csv`
+- `runs/overlap_disagreement_latest.json`
+- `runs/intersection_disagreement_<timestamp>/summary.json`
+- `runs/intersection_disagreement_<timestamp>/sampled_pair_decisions.csv`
+- `runs/intersection_disagreement_latest.json`
+
+Important:
+- The script requires CGAL overlap binary support for `--output-csv`.
+- If you changed `baselines/RaySpace3DBaselines/CGAL/src/overlap_query.cpp`, rebuild via `./build_all.sh`.
+- Intersection disagreement analysis requires CGAL intersection binary support for `--output-csv`.
+- If you changed `baselines/RaySpace3DBaselines/CGAL/src/intersection_query.cpp`, rebuild via `./build_all.sh --only cgal`.
 
 Notes:
 - Current RaySpace 20k constants are already hardcoded in `run_correctness.py`.

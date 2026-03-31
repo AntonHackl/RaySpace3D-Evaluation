@@ -8,6 +8,7 @@ Generates:
 import json
 import argparse
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 import numpy as np
 from pathlib import Path
 
@@ -21,8 +22,11 @@ def visualize_selectivity(json_file, output_dir=None):
     """Generate visualizations from selectivity summary results."""
     data = load_results(json_file)
     
-    # Filter out entries with errors
-    valid_data = [d for d in data if "two_pass" in d and "error" not in d["two_pass"]]
+    # Filter out entries where all approaches errored/missing.
+    valid_data = [
+        d for d in data
+        if any(k in d and "error" not in d[k] for k in ("estimated", "estimate_only", "cgal"))
+    ]
     if not valid_data:
         print("No valid data to visualize")
         return
@@ -32,16 +36,25 @@ def visualize_selectivity(json_file, output_dir=None):
     # --- 1. Line Chart: Runtime vs Selectivity ---
     plt.figure(figsize=(10, 6))
     
-    approaches = []
-    if "two_pass" in valid_data[0]: approaches.append("two_pass")
-    if "estimated" in valid_data[0]: approaches.append("estimated")
+    approaches = [
+        app for app in ("estimated", "estimate_only", "cgal")
+        if any(app in d and "error" not in d[app] for d in valid_data)
+    ]
+    if not approaches:
+        print("No valid approaches to visualize")
+        return
     
-    colors = {"two_pass": "#1f77b4", "estimated": "#2ca02c"}
-    labels = {"two_pass": "Exact Query (Two-Pass)", "estimated": "Estimated Query"}
-    markers = {"two_pass": "o", "estimated": "s"}
+    colors = {"estimated": "#2ca02c", "estimate_only": "#17becf", "cgal": "#ff7f0e"}
+    labels = {"estimated": "Estimated Query", "estimate_only": "Estimate Only", "cgal": "CGAL"}
+    markers = {"estimated": "s", "estimate_only": "^", "cgal": "o"}
     
     for app in approaches:
-        runtimes = [d[app]["mean_ms"] for d in valid_data]
+        runtimes = []
+        for d in valid_data:
+            if app in d and "error" not in d[app]:
+                runtimes.append(d[app]["mean_ms"])
+            else:
+                runtimes.append(np.nan)
         plt.plot(selectivities, runtimes, marker=markers[app], linestyle='-', 
                  color=colors[app], label=labels[app], linewidth=2, markersize=8)
     
@@ -86,7 +99,10 @@ def visualize_selectivity(json_file, output_dir=None):
         "gpu deduplication": "#d62728"
     }
     # Add generic colors for any other keys
-    standard_colors = plt.cm.tab10.colors
+    standard_colors = [
+        "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+        "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
+    ]
     idx = 0
     for key in breakdown_keys:
         if key not in color_map:
@@ -108,7 +124,10 @@ def visualize_selectivity(json_file, output_dir=None):
         for key in breakdown_keys:
             vals = []
             for d in valid_data:
-                vals.append(d[app]["breakdown"].get(key, 0.0))
+                if app in d and "error" not in d[app]:
+                    vals.append(d[app].get("breakdown", {}).get(key, 0.0))
+                else:
+                    vals.append(0.0)
             
             ax.bar(x + offset, vals, width, bottom=bottom, label=f"{key} ({app})" if i==0 else None, 
                    color=color_map[key], alpha=0.8 if i==0 else 0.5)
@@ -120,11 +139,11 @@ def visualize_selectivity(json_file, output_dir=None):
     ax.set_xticklabels([f"Sel: {s}" for s in selectivities], rotation=45)
     
     # Custom legend to avoid duplication
-    from matplotlib.lines import Line2D
-    legend_elements = [Line2D([0], [0], color='black', alpha=0.8, lw=4, label='Exact (Solid)'),
-                       Line2D([0], [0], color='black', alpha=0.5, lw=4, label='Estimated (Faded)')]
+    legend_elements = []
+    legend_elements.append(Line2D([0], [0], color='black', alpha=0.8, lw=4, label='Primary (Solid)'))
+    legend_elements.append(Line2D([0], [0], color='black', alpha=0.5, lw=4, label='Secondary (Faded)'))
     for key in breakdown_keys:
-        legend_elements.append(plt.Rectangle((0,0),1,1, color=color_map[key], label=key))
+        legend_elements.append(Line2D([0], [0], color=color_map[key], lw=6, label=key))
     
     ax.legend(handles=legend_elements, loc='best')
     ax.grid(axis='y', linestyle='--', alpha=0.3)

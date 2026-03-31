@@ -39,17 +39,13 @@ def main():
     parser.add_argument("--warmup-runs", type=int, default=1)
     parser.add_argument("--timeout", type=float, default=3600.0)
     parser.add_argument("--approaches", type=str, nargs="+",
-                        default=["two_pass", "estimated", "cgal"],
-                        choices=["two_pass", "estimated", "estimate_only", "cgal"])
+                        default=["estimated", "cgal"],
+                        choices=["estimated", "estimate_only", "cgal"])
     args = parser.parse_args()
 
     dirs = get_shared_data_dirs("mesh_complexity")
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
 
-    two_pass = RaytracerIntersectionAdapter(
-        str(RAYSPACE_DIR), mode="two_pass", preprocessed_dir=str(dirs["preprocessed"]),
-        timings_dir=str(dirs["timings"]), grid_resolution=args.grid_resolution, warmup_runs=args.warmup_runs,
-    )
     estimated = RaytracerIntersectionAdapter(
         str(RAYSPACE_DIR), mode="estimated", preprocessed_dir=str(dirs["preprocessed"]),
         timings_dir=str(dirs["timings"]), grid_resolution=args.grid_resolution, warmup_runs=args.warmup_runs,
@@ -86,8 +82,8 @@ def main():
         )
 
         for file_path in (obj_a, obj_b):
-            if not two_pass.check_preprocessed(str(file_path)):
-                two_pass.preprocess_from_source(str(file_path), str(file_path))
+            if not estimated.check_preprocessed(str(file_path)):
+                estimated.preprocess_from_source(str(file_path), str(file_path))
 
         row = {
             "stage": stage,
@@ -98,8 +94,6 @@ def main():
             "size_bytes_b": obj_b.stat().st_size if obj_b.exists() else 0,
         }
 
-        if "two_pass" in args.approaches:
-            row["two_pass"] = two_pass.run_intersection(str(obj_a), str(obj_b), args.runs, timeout=args.timeout)
         if "estimated" in args.approaches:
             row["estimated"] = estimated.run_intersection(str(obj_a), str(obj_b), args.runs, timeout=args.timeout)
         if "estimate_only" in args.approaches:

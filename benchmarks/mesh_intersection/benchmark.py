@@ -57,8 +57,8 @@ def main():
     parser.add_argument("--dataset", type=str, default=DEFAULT_DATASET,
                         choices=list(DATASETS.keys()),
                         help=f"Dataset configuration: {', '.join(DATASETS.keys())}")
-    parser.add_argument("--approaches", type=str, nargs="+", default=["two_pass", "estimated"],
-                        choices=["two_pass", "estimated", "estimate_only", "cgal"],
+    parser.add_argument("--approaches", type=str, nargs="+", default=["estimated", "cgal"],
+                        choices=["estimated", "estimate_only", "cgal"],
                         help="Approaches to run")
     parser.add_argument("--file1", type=str, default=None, help="First dataset file (overrides --dataset)")
     parser.add_argument("--file2", type=str, default=None, help="Second dataset file (overrides --dataset)")
@@ -138,11 +138,11 @@ def main():
                     )
                 )
 
-        needs_preprocess = any(a in args.approaches for a in ["two_pass", "estimated", "estimate_only", "cgal"])
+        needs_preprocess = any(a in args.approaches for a in ["estimated", "estimate_only", "cgal"])
         if needs_preprocess:
             preprocess_adapter = RaytracerIntersectionAdapter(
                 str(RAYSPACE_DIR),
-                mode="two_pass",
+                mode="estimated",
                 preprocessed_dir=str(preprocessed_dir),
                 timings_dir=str(timings_dir),
                 grid_resolution=args.grid_resolution,
@@ -179,7 +179,7 @@ def main():
             all_results[adapter.name] = results
 
             if "Raytracer" in adapter.name and "error" not in results:
-                if adapter.name == "Raytracer_two_pass" or ssot_stats["num_obj1"] == 0:
+                if ssot_stats["num_obj1"] == 0:
                     ssot_stats["num_obj1"] = results.get("num_obj1", 0)
                     ssot_stats["num_obj2"] = results.get("num_obj2", 0)
                     ssot_stats["num_intersections"] = results.get("num_intersections", 0)

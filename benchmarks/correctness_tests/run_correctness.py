@@ -255,16 +255,6 @@ def run_intersection_checks(manifest, approaches):
         _prepare_preprocessed(mesh_a, mesh_b)
 
         if "rayspace" in filtered_approaches:
-            two_pass_adapter = RaytracerIntersectionAdapter(
-                str(RAYSPACE_DIR),
-                mode="two_pass",
-                preprocessed_dir=str(PREPROCESSED_DIR),
-                timings_dir=str(TIMINGS_DIR),
-                grid_resolution=10,
-                warmup_runs=2,
-            )
-            two_pass_out = two_pass_adapter.run_intersection(mesh_a, mesh_b, num_runs=1, timeout=TIMEOUT_SECONDS)
-
             estimated_adapter = RaytracerIntersectionAdapter(
                 str(RAYSPACE_DIR),
                 mode="estimated",
@@ -274,13 +264,6 @@ def run_intersection_checks(manifest, approaches):
                 warmup_runs=2,
             )
             estimated_out = estimated_adapter.run_intersection(mesh_a, mesh_b, num_runs=1, timeout=TIMEOUT_SECONDS)
-
-            if "error" in two_pass_out:
-                results[dataset_name]["rayspace_two_pass"] = {"pass": False, "error": two_pass_out["error"]}
-            else:
-                found = int(two_pass_out.get("num_intersections", 0))
-                expected = expected_manual_count if dataset_name == "manual" else int(RAYSPACE_20K_GROUND_TRUTH["intersection_num_pairs"])
-                results[dataset_name]["rayspace_two_pass"] = _build_check(found, expected)
 
             if "error" in estimated_out:
                 results[dataset_name]["rayspace_estimated"] = {"pass": False, "error": estimated_out["error"]}
@@ -399,7 +382,7 @@ def main():
             "notes": [
                 "TDBase intentionally excluded from this correctness suite.",
                 "Touching-only geometries are intentionally excluded from datasets.",
-                "RaySpace overlap executes exact + direct_estimation; intersection executes two_pass + estimated.",
+                "RaySpace overlap executes exact + direct_estimation; intersection executes estimated only.",
                 "RaySpace containment has no estimated binary in this codebase and is run in exact mode only.",
                 f"Estimated-mode tolerance: {ESTIMATED_RELATIVE_TOLERANCE:.2%} relative error.",
                 f"CGAL query tolerance (intersection/containment): {CGAL_QUERY_RELATIVE_TOLERANCE:.2%} relative error.",
