@@ -53,7 +53,6 @@ def run_benchmark(
     grid_res,
     dataset_set,
     intersection_query_direction,
-    containment_query_point,
     overlap_max_iterations,
     containment_max_iterations,
     hash_load_factor,
@@ -62,7 +61,6 @@ def run_benchmark(
     print("--- Starting Intersection vs Overlap Benchmark ---")
     print(f"Dataset set: {dataset_set}")
     print(f"Intersection query direction: {intersection_query_direction}")
-    print(f"Containment query point: {containment_query_point}")
     print(f"Overlap max iterations: {overlap_max_iterations}")
     print(f"Containment max iterations: {containment_max_iterations}")
     print(f"Hash load factor: {hash_load_factor}")
@@ -84,7 +82,6 @@ def run_benchmark(
         warmup_runs=2,
         intersection_extra_args=[
             "--query-direction", intersection_query_direction,
-            "--containment-query-point", containment_query_point,
             "--overlap-max-iterations", str(overlap_max_iterations),
             "--containment-max-iterations", str(containment_max_iterations),
             "--hash-load-factor", str(hash_load_factor),
@@ -148,7 +145,6 @@ def run_benchmark(
         "grid_resolution": grid_res,
         "dataset_set": dataset_set,
         "intersection_query_direction": intersection_query_direction,
-        "containment_query_point": containment_query_point,
         "overlap_max_iterations": overlap_max_iterations,
         "containment_max_iterations": containment_max_iterations,
         "hash_load_factor": hash_load_factor,
@@ -287,7 +283,6 @@ def write_readme_summary(result_obj, output_dir):
     lines.append(f"Runs per Dataset: {result_obj['runs_per_dataset']}")
     lines.append(f"Dataset Set: {result_obj.get('dataset_set', 'nu')}")
     lines.append(f"Intersection Query Direction: {result_obj.get('intersection_query_direction', 'both')}")
-    lines.append(f"Containment Query Point: {result_obj.get('containment_query_point', 'vertex')}")
     lines.append(f"Overlap Max Iterations: {result_obj.get('overlap_max_iterations', 100)}")
     lines.append(f"Containment Max Iterations: {result_obj.get('containment_max_iterations', 2048)}")
     lines.append(f"Hash Load Factor: {result_obj.get('hash_load_factor', 0.5)}")
@@ -313,7 +308,6 @@ def main():
     parser.add_argument("--grid-res", type=int, default=10)
     parser.add_argument("--dataset-set", choices=["nu", "cube"], default="nu")
     parser.add_argument("--intersection-query-direction", choices=["both", "mesh1_to_mesh2", "mesh2_to_mesh1"], default="both")
-    parser.add_argument("--containment-query-point", choices=["vertex", "centroid"], default="vertex")
     parser.add_argument("--overlap-max-iterations", type=int, default=100)
     parser.add_argument("--containment-max-iterations", type=int, default=512)
     parser.add_argument("--hash-load-factor", type=float, default=0.5)
@@ -325,7 +319,7 @@ def main():
         args.grid_res,
         args.dataset_set,
         args.intersection_query_direction,
-        args.containment_query_point,
+
         args.overlap_max_iterations,
         args.containment_max_iterations,
         args.hash_load_factor,

@@ -40,6 +40,159 @@ class AABB:
     max_z: float
 
 
+@dataclass(frozen=True)
+class ObjectHitStats:
+    ray_hits: int
+    target_count: int
+
+
+PairHitMap = Dict[str, Dict[Tuple[int, int], int]]
+
+
+def _axis_overlap(a_min: float, a_max: float, b_min: float, b_max: float) -> float:
+    return min(a_max, b_max) - max(a_min, b_min)
+
+
+def _write_bbox_report(
+    output_txt: Path,
+    sampled_pairs: List[Tuple[int, int]],
+    aabbs_a: Dict[int, AABB],
+    aabbs_b: Dict[int, AABB],
+    mesh1_to_mesh2_hits: Optional[Dict[int, ObjectHitStats]] = None,
+    mesh2_to_mesh1_hits: Optional[Dict[int, ObjectHitStats]] = None,
+    pair_hits: Optional[PairHitMap] = None,
+) -> None:
+    with open(output_txt, "w", encoding="utf-8") as handle:
+        handle.write("RaySpace-only Pair Inspection (Bounding Boxes)\n")
+        handle.write("=================================================\n\n")
+        for idx, (a_id, b_id) in enumerate(sampled_pairs, start=1):
+            a = aabbs_a.get(a_id)
+            b = aabbs_b.get(b_id)
+            handle.write(f"Pair {idx}: A={a_id}, B={b_id}\n")
+            if a is None or b is None:
+                handle.write("  Missing AABB data for one or both objects.\n\n")
+                continue
+
+            ox = _axis_overlap(a.min_x, a.max_x, b.min_x, b.max_x)
+            oy = _axis_overlap(a.min_y, a.max_y, b.min_y, b.max_y)
+            oz = _axis_overlap(a.min_z, a.max_z, b.min_z, b.max_z)
+
+            handle.write(
+                f"  A bbox: min=({a.min_x:.6f}, {a.min_y:.6f}, {a.min_z:.6f}) "
+                f"max=({a.max_x:.6f}, {a.max_y:.6f}, {a.max_z:.6f})\n"
+            )
+            handle.write(
+                f"  B bbox: min=({b.min_x:.6f}, {b.min_y:.6f}, {b.min_z:.6f}) "
+                f"max=({b.max_x:.6f}, {b.max_y:.6f}, {b.max_z:.6f})\n"
+            )
+            handle.write(f"  Axis overlaps: dx={ox:.6f}, dy={oy:.6f}, dz={oz:.6f}\n")
+            handle.write(
+                "  AABB intersects (strict): "
+                f"{(ox > 0.0 and oy > 0.0 and oz > 0.0)}\n\n"
+            )
+
+            a_hits = (mesh1_to_mesh2_hits or {}).get(a_id)
+            b_hits = (mesh2_to_mesh1_hits or {}).get(b_id)
+            if a_hits is not None:
+                handle.write(
+                    "  A as source (mesh1->mesh2): "
+                    f"ray_hits={a_hits.ray_hits}, target_count={a_hits.target_count}\n"
+                )
+            else:
+                handle.write("  A as source (mesh1->mesh2): no hit tracking data\n")
+            if b_hits is not None:
+                handle.write(
+                    "  B as source (mesh2->mesh1): "
+                    f"ray_hits={b_hits.ray_hits}, target_count={b_hits.target_count}\n\n"
+                )
+            else:
+                handle.write("  B as source (mesh2->mesh1): no hit tracking data\n\n")
+
+            pair_hit_a_to_b = (pair_hits or {}).get("mesh1_to_mesh2", {}).get((a_id, b_id))
+            pair_hit_b_to_a = (pair_hits or {}).get("mesh2_to_mesh1", {}).get((b_id, a_id))
+            if pair_hit_a_to_b is not None:
+                handle.write(f"  Specific pair hits A->B: {pair_hit_a_to_b}\n")
+            else:
+                handle.write("  Specific pair hits A->B: no data\n")
+            if pair_hit_b_to_a is not None:
+                handle.write(f"  Specific pair hits B->A: {pair_hit_b_to_a}\n\n")
+            else:
+                handle.write("  Specific pair hits B->A: no data\n\n")
+
+
+def _plot_pair_bbox_projections(
+    output_png: Path,
+    pair: Tuple[int, int],
+    a_box: AABB,
+    b_box: AABB,
+) -> None:
+    import importlib
+
+    plt = importlib.import_module("matplotlib.pyplot")
+    patches = importlib.import_module("matplotlib.patches")
+    Rectangle = patches.Rectangle
+
+    a_id, b_id = pair
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+
+    projections = [
+        ("XY", (a_box.min_x, a_box.min_y), a_box.max_x - a_box.min_x, a_box.max_y - a_box.min_y,
+         (b_box.min_x, b_box.min_y), b_box.max_x - b_box.min_x, b_box.max_y - b_box.min_y),
+        ("XZ", (a_box.min_x, a_box.min_z), a_box.max_x - a_box.min_x, a_box.max_z - a_box.min_z,
+         (b_box.min_x, b_box.min_z), b_box.max_x - b_box.min_x, b_box.max_z - b_box.min_z),
+        ("YZ", (a_box.min_y, a_box.min_z), a_box.max_y - a_box.min_y, a_box.max_z - a_box.min_z,
+         (b_box.min_y, b_box.min_z), b_box.max_y - b_box.min_y, b_box.max_z - b_box.min_z),
+    ]
+
+    for ax, (title, a_xy, a_w, a_h, b_xy, b_w, b_h) in zip(axes, projections):
+        rect_a = Rectangle(a_xy, a_w, a_h, fill=False, linewidth=2.0, edgecolor="tab:blue", label="A")
+        rect_b = Rectangle(b_xy, b_w, b_h, fill=False, linewidth=2.0, edgecolor="tab:orange", label="B")
+        ax.add_patch(rect_a)
+        ax.add_patch(rect_b)
+        ax.set_title(title)
+        ax.set_aspect("equal", adjustable="box")
+        ax.grid(True, alpha=0.3)
+
+        xs = [a_xy[0], a_xy[0] + a_w, b_xy[0], b_xy[0] + b_w]
+        ys = [a_xy[1], a_xy[1] + a_h, b_xy[1], b_xy[1] + b_h]
+        x_pad = (max(xs) - min(xs)) * 0.1 + 1e-6
+        y_pad = (max(ys) - min(ys)) * 0.1 + 1e-6
+        ax.set_xlim(min(xs) - x_pad, max(xs) + x_pad)
+        ax.set_ylim(min(ys) - y_pad, max(ys) + y_pad)
+
+    ox = _axis_overlap(a_box.min_x, a_box.max_x, b_box.min_x, b_box.max_x)
+    oy = _axis_overlap(a_box.min_y, a_box.max_y, b_box.min_y, b_box.max_y)
+    oz = _axis_overlap(a_box.min_z, a_box.max_z, b_box.min_z, b_box.max_z)
+    fig.suptitle(
+        f"Pair A={a_id}, B={b_id} | overlaps dx={ox:.4f}, dy={oy:.4f}, dz={oz:.4f}",
+        fontsize=11,
+    )
+    axes[0].legend(loc="best")
+    fig.tight_layout()
+    fig.savefig(str(output_png), dpi=180)
+    plt.close(fig)
+
+
+def _visualize_pairs(
+    output_dir: Path,
+    sampled_pairs: List[Tuple[int, int]],
+    aabbs_a: Dict[int, AABB],
+    aabbs_b: Dict[int, AABB],
+) -> List[str]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    generated: List[str] = []
+    for idx, pair in enumerate(sampled_pairs, start=1):
+        a_id, b_id = pair
+        a = aabbs_a.get(a_id)
+        b = aabbs_b.get(b_id)
+        if a is None or b is None:
+            continue
+        out_png = output_dir / f"pair_{idx:02d}_A{a_id}_B{b_id}.png"
+        _plot_pair_bbox_projections(out_png, pair, a, b)
+        generated.append(str(out_png))
+    return generated
+
+
 def _as_dt_name(path_str: str) -> str:
     return str(Path(path_str).with_suffix(".dt"))
 
@@ -83,6 +236,59 @@ def _read_pairs_csv(path: Path) -> Set[Tuple[int, int]]:
     return pairs
 
 
+def _read_object_hits_csv(path: Path) -> Dict[str, Dict[int, ObjectHitStats]]:
+    per_direction: Dict[str, Dict[int, ObjectHitStats]] = {
+        "mesh1_to_mesh2": {},
+        "mesh2_to_mesh1": {},
+    }
+    if not path.exists():
+        return per_direction
+
+    with open(path, "r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            direction = row.get("direction", "").strip()
+            if direction not in per_direction:
+                continue
+            try:
+                source_object_id = int(row.get("source_object_id", ""))
+                ray_hits = int(row.get("ray_hits", ""))
+                target_count = int(row.get("target_count", ""))
+            except ValueError:
+                continue
+            per_direction[direction][source_object_id] = ObjectHitStats(
+                ray_hits=ray_hits,
+                target_count=target_count,
+            )
+
+    return per_direction
+
+
+def _read_pair_hits_csv(path: Path) -> PairHitMap:
+    per_direction: PairHitMap = {
+        "mesh1_to_mesh2": {},
+        "mesh2_to_mesh1": {},
+    }
+    if not path.exists():
+        return per_direction
+
+    with open(path, "r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            direction = row.get("direction", "").strip()
+            if direction not in per_direction:
+                continue
+            try:
+                source_object_id = int(row.get("source_object_id", ""))
+                target_object_id = int(row.get("target_object_id", ""))
+                target_ray_hits = int(row.get("target_ray_hits", ""))
+            except ValueError:
+                continue
+            per_direction[direction][(source_object_id, target_object_id)] = target_ray_hits
+
+    return per_direction
+
+
 def _prepare_preprocessed(mesh_a: str, mesh_b: str, grid_resolution: int):
     prep = RaytracerIntersectionAdapter(
         str(RAYSPACE_DIR),
@@ -101,6 +307,8 @@ def _run_rayspace_intersection_pairs(
     pre_mesh_b: Path,
     output_csv: Path,
     output_timing_json: Path,
+    output_object_hits_csv: Optional[Path],
+    output_pair_hits_csv: Optional[Path],
     run_dir: Path,
     warmup_runs: int,
 ) -> Dict[str, Any]:
@@ -116,7 +324,14 @@ def _run_rayspace_intersection_pairs(
         str(pre_mesh_b),
         "--output",
         str(output_timing_json),
+        "--pairs-output",
+        str(output_csv),
     ]
+    if output_pair_hits_csv is not None:
+        cmd.extend([
+            "--pair-hits-output",
+            str(output_pair_hits_csv),
+        ])
 
     try:
         cp = subprocess.run(
@@ -138,12 +353,13 @@ def _run_rayspace_intersection_pairs(
     timing_match = re.search(r"Query Time:.*?\(([\d.]+) ms\)", output)
     count_match = re.search(r"Actual Intersection Pairs:\s*(\d+)", output)
 
-    # Estimated intersection currently exposes counts/timings, but not pair-level CSV export.
-    pairs: Set[Tuple[int, int]] = set()
+    pairs: Set[Tuple[int, int]] = _read_pairs_csv(output_csv)
 
     return {
         "pairs": pairs,
-        "pairs_csv": None,
+        "pairs_csv": str(output_csv),
+        "object_hits_csv": str(output_object_hits_csv) if output_object_hits_csv is not None else None,
+        "pair_hits_csv": str(output_pair_hits_csv) if output_pair_hits_csv is not None else None,
         "num_pairs_from_csv": len(pairs),
         "num_pairs_reported": int(count_match.group(1)) if count_match else None,
         "timing_ms": float(timing_match.group(1)) if timing_match else None,
@@ -310,6 +526,16 @@ def main():
     parser.add_argument("--warmup-runs", type=int, default=1)
     parser.add_argument("--mesh-a", type=str, default=None, help="Override mesh A path")
     parser.add_argument("--mesh-b", type=str, default=None, help="Override mesh B path")
+    parser.add_argument("--inspect-only-rayspace", type=int, default=10,
+                        help="Number of random RaySpace-only disagreement pairs to inspect with bbox report and images")
+    parser.add_argument("--rayspace-pairs-csv", type=str, default=None,
+                        help="Optional existing RaySpace pairs CSV to analyze (skips running RaySpace query)")
+    parser.add_argument("--cgal-pairs-csv", type=str, default=None,
+                        help="Optional existing CGAL pairs CSV to analyze (skips running CGAL query)")
+    parser.add_argument("--rayspace-object-hits-csv", type=str, default=None,
+                        help="Optional existing RaySpace object hit tracking CSV")
+    parser.add_argument("--rayspace-pair-hits-csv", type=str, default=None,
+                        help="Optional existing RaySpace per-pair hit tracking CSV")
     args = parser.parse_args()
 
     if args.max_eval_pairs <= 0:
@@ -331,36 +557,76 @@ def main():
     rs_pairs_csv = run_dir / "rayspace_intersection_pairs.csv"
     rs_timing_json = run_dir / "rayspace_intersection_timing.json"
     cgal_pairs_csv = run_dir / "cgal_intersection_pairs.csv"
+    rs_object_hits_csv = run_dir / "rayspace_object_hits.csv"
+    rs_pair_hits_csv = run_dir / "rayspace_pair_hits.csv"
     cgal_log = run_dir / "cgal_intersection.log"
     details_csv = run_dir / "sampled_pair_decisions.csv"
     report_json = run_dir / "summary.json"
     latest_json = RUNS_DIR / "intersection_disagreement_latest.json"
 
-    print("Preparing preprocessed inputs...")
-    _prepare_preprocessed(mesh_a, mesh_b, args.grid_resolution)
+    use_existing_pair_csvs = bool(args.rayspace_pairs_csv and args.cgal_pairs_csv)
+    if use_existing_pair_csvs:
+        print("Using existing pair CSVs for disagreement analysis...")
+        rs_pairs = _read_pairs_csv(Path(args.rayspace_pairs_csv))
+        cgal_pairs = _read_pairs_csv(Path(args.cgal_pairs_csv))
+        rs_result = {
+            "pairs": rs_pairs,
+            "pairs_csv": str(args.rayspace_pairs_csv),
+            "object_hits_csv": args.rayspace_object_hits_csv,
+            "pair_hits_csv": args.rayspace_pair_hits_csv,
+            "num_pairs_from_csv": len(rs_pairs),
+            "num_pairs_reported": len(rs_pairs),
+            "timing_ms": None,
+        }
+        cgal_result = {
+            "pairs": cgal_pairs,
+            "pairs_csv": str(args.cgal_pairs_csv),
+            "num_pairs_from_csv": len(cgal_pairs),
+            "num_pairs_reported": len(cgal_pairs),
+            "timing_ms": None,
+        }
+    else:
+        print("Preparing preprocessed inputs...")
+        _prepare_preprocessed(mesh_a, mesh_b, args.grid_resolution)
 
-    pre_a = PREPROCESSED_DIR / Path(mesh_a).with_suffix(".pre").name
-    pre_b = PREPROCESSED_DIR / Path(mesh_b).with_suffix(".pre").name
+        pre_a = PREPROCESSED_DIR / Path(mesh_a).with_suffix(".pre").name
+        pre_b = PREPROCESSED_DIR / Path(mesh_b).with_suffix(".pre").name
 
-    print("Running RaySpace intersection (estimated mode)...")
-    rs_result = _run_rayspace_intersection_pairs(
-        pre_a,
-        pre_b,
-        rs_pairs_csv,
-        rs_timing_json,
-        run_dir,
-        args.warmup_runs,
-    )
-    if "error" in rs_result:
-        raise RuntimeError(f"RaySpace intersection failed: {rs_result['error']}")
+        print("Running RaySpace intersection (estimated mode)...")
+        rs_result = _run_rayspace_intersection_pairs(
+            pre_a,
+            pre_b,
+            rs_pairs_csv,
+            rs_timing_json,
+            rs_object_hits_csv,
+            rs_pair_hits_csv,
+            run_dir,
+            args.warmup_runs,
+        )
+        if "error" in rs_result:
+            raise RuntimeError(f"RaySpace intersection failed: {rs_result['error']}")
 
-    print("Running CGAL intersection with pair export...")
-    cgal_result = _run_cgal_intersection_pairs(pre_a, pre_b, cgal_pairs_csv, args.threads, cgal_log)
-    if "error" in cgal_result:
-        raise RuntimeError(cgal_result["error"])
+        print("Running CGAL intersection with pair export...")
+        cgal_result = _run_cgal_intersection_pairs(pre_a, pre_b, cgal_pairs_csv, args.threads, cgal_log)
+        if "error" in cgal_result:
+            raise RuntimeError(cgal_result["error"])
 
     rs_pairs = rs_result["pairs"]
     cgal_pairs = cgal_result["pairs"]
+    object_hits_csv_path = rs_result.get("object_hits_csv")
+    pair_hits_csv_path = rs_result.get("pair_hits_csv")
+    object_hits: Dict[str, Dict[int, ObjectHitStats]] = {
+        "mesh1_to_mesh2": {},
+        "mesh2_to_mesh1": {},
+    }
+    pair_hits: PairHitMap = {
+        "mesh1_to_mesh2": {},
+        "mesh2_to_mesh1": {},
+    }
+    if object_hits_csv_path:
+        object_hits = _read_object_hits_csv(Path(object_hits_csv_path))
+    if pair_hits_csv_path:
+        pair_hits = _read_pair_hits_csv(Path(pair_hits_csv_path))
 
     if rs_pairs:
         only_rs = sorted(rs_pairs - cgal_pairs)
@@ -428,6 +694,24 @@ def main():
         writer.writeheader()
         writer.writerows(decisions)
 
+    inspected_only_rs: List[Tuple[int, int]] = []
+    bbox_report_txt = run_dir / "only_rayspace_sample_bboxes.txt"
+    visuals_dir = run_dir / "only_rayspace_visualizations"
+    generated_visuals: List[str] = []
+    if args.inspect_only_rayspace > 0 and only_rs and aabbs_a and aabbs_b:
+        inspect_count = min(args.inspect_only_rayspace, len(only_rs))
+        inspected_only_rs = random.Random(args.seed + 1001).sample(only_rs, inspect_count)
+        _write_bbox_report(
+            bbox_report_txt,
+            inspected_only_rs,
+            aabbs_a,
+            aabbs_b,
+            object_hits.get("mesh1_to_mesh2"),
+            object_hits.get("mesh2_to_mesh1"),
+            pair_hits,
+        )
+        generated_visuals = _visualize_pairs(visuals_dir, inspected_only_rs, aabbs_a, aabbs_b)
+
     summary = {
         "metadata": {
             "run_name": run_name,
@@ -452,6 +736,7 @@ def main():
             "sampled_pairs": len(sampled),
             "sampled_only_rayspace": sum(1 for _, b in sampled if b == "only_rayspace"),
             "sampled_only_cgal": sum(1 for _, b in sampled if b == "only_cgal"),
+            "inspected_only_rayspace_pairs": len(inspected_only_rs),
         },
         "adjudication": {
             "rayspace_correct": rayspace_correct,
@@ -471,14 +756,25 @@ def main():
         },
         "artifacts": {
             "rayspace_pairs_csv": rs_result.get("pairs_csv"),
+            "rayspace_object_hits_csv": object_hits_csv_path,
+            "rayspace_pair_hits_csv": pair_hits_csv_path,
             "rayspace_timing_json": str(rs_timing_json),
             "cgal_pairs_csv": str(cgal_pairs_csv),
             "cgal_log": str(cgal_log),
             "sampled_decisions_csv": str(details_csv),
+            "only_rayspace_bbox_report_txt": str(bbox_report_txt) if inspected_only_rs else None,
+            "only_rayspace_visualization_dir": str(visuals_dir) if generated_visuals else None,
         },
+        "inspected_only_rayspace_pairs": [
+            {"a_object_id": int(a), "b_object_id": int(b)} for (a, b) in inspected_only_rs
+        ],
+        "generated_visualizations": generated_visuals,
         "notes": [
             "Intersection benchmarks now run RaySpace estimated mode only.",
             "Pair-level disagreement sampling requires RaySpace pair CSV export, which is unavailable in the current estimated binary.",
+            "Use --rayspace-pairs-csv and --cgal-pairs-csv to inspect historical pair-level disagreement runs.",
+            "When object hit tracking CSV is available, inspected RaySpace-only pairs include per-object ray hit and target counts.",
+            "When pair hit tracking CSV is available, inspected RaySpace-only pairs include specific A->B and B->A hit counts.",
         ],
     }
 
@@ -502,6 +798,9 @@ def main():
     print(f"Summary JSON:          {report_json}")
     print(f"Latest JSON:           {latest_json}")
     print(f"Details CSV:           {details_csv}")
+    if inspected_only_rs:
+        print(f"BBox report (.txt):    {bbox_report_txt}")
+        print(f"Visualization dir:     {visuals_dir}")
 
 
 if __name__ == "__main__":
