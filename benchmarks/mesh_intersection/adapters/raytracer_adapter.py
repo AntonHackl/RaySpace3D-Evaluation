@@ -78,6 +78,7 @@ class RaytracerIntersectionAdapter(IntersectionBenchmarkAdapter):
         num_runs: int,
         timeout: Optional[float] = None,
         log_dir: Optional[str] = None,
+        extra_args: Optional[list[str]] = None,
     ) -> Dict[str, Any]:
         if not self.executable.exists():
             return {"error": f"Executable not found: {self.executable}"}
@@ -125,6 +126,9 @@ class RaytracerIntersectionAdapter(IntersectionBenchmarkAdapter):
                 "--mesh2", f2,
                 "--output", str(json_output)
             ]
+
+            if extra_args:
+                cmd.extend(extra_args)
 
             if self.mode == "estimate_only":
                 cmd.append("--estimate-only")

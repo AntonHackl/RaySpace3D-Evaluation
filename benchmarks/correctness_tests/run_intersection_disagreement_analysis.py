@@ -311,6 +311,7 @@ def _run_rayspace_intersection_pairs(
     output_pair_hits_csv: Optional[Path],
     run_dir: Path,
     warmup_runs: int,
+    use_anyhit_containment: bool,
 ) -> Dict[str, Any]:
     executable = RAYSPACE_DIR / "query" / "build" / "bin" / "raytracer_intersection_estimated"
     if not executable.exists():
@@ -332,6 +333,8 @@ def _run_rayspace_intersection_pairs(
             "--pair-hits-output",
             str(output_pair_hits_csv),
         ])
+    if use_anyhit_containment:
+        cmd.append("--use-anyhit-containment")
 
     try:
         cp = subprocess.run(
@@ -536,6 +539,8 @@ def main():
                         help="Optional existing RaySpace object hit tracking CSV")
     parser.add_argument("--rayspace-pair-hits-csv", type=str, default=None,
                         help="Optional existing RaySpace per-pair hit tracking CSV")
+    parser.add_argument("--use-anyhit-containment", action="store_true",
+                        help="Run RaySpace estimated intersection with AnyHit containment mode")
     args = parser.parse_args()
 
     if args.max_eval_pairs <= 0:
@@ -602,6 +607,7 @@ def main():
             rs_pair_hits_csv,
             run_dir,
             args.warmup_runs,
+            args.use_anyhit_containment,
         )
         if "error" in rs_result:
             raise RuntimeError(f"RaySpace intersection failed: {rs_result['error']}")
@@ -722,6 +728,7 @@ def main():
             "seed": args.seed,
             "threads": args.threads,
             "rayspace_mode": "estimated",
+            "use_anyhit_containment": args.use_anyhit_containment,
         },
         "pair_counts": {
             "rayspace_pairs": len(rs_pairs),

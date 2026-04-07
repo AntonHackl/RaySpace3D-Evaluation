@@ -293,7 +293,7 @@ def run_intersection_checks(manifest, approaches):
     return results
 
 
-def run_containment_checks(manifest, approaches):
+def run_containment_checks(manifest, approaches, use_anyhit_point_in_mesh: bool = False):
     filtered_approaches = [a for a in approaches if a != "touch"]
 
     manual = manifest["manual"]["containment"]
@@ -321,6 +321,7 @@ def run_containment_checks(manifest, approaches):
                 timings_dir=str(TIMINGS_DIR),
                 grid_resolution=10,
                 warmup_runs=1,
+                use_anyhit_point_in_mesh=use_anyhit_point_in_mesh,
             )
             out = adapter.run_containment(mesh_a, mesh_b, num_runs=1, timeout=TIMEOUT_SECONDS)
             if "error" in out:
@@ -367,6 +368,11 @@ def main():
         choices=["rayspace", "cgal", "touch"],
         help="Approaches to run. TOUCH is overlap-only.",
     )
+    parser.add_argument(
+        "--use-anyhit-point-in-mesh",
+        action="store_true",
+        help="Use AnyHit point-in-mesh mode for RaySpace containment runs",
+    )
     args = parser.parse_args()
 
     manifest = _load_manifest()
@@ -384,6 +390,7 @@ def main():
                 "Touching-only geometries are intentionally excluded from datasets.",
                 "RaySpace overlap executes exact + direct_estimation; intersection executes estimated only.",
                 "RaySpace containment has no estimated binary in this codebase and is run in exact mode only.",
+                f"RaySpace containment AnyHit point-in-mesh: {'enabled' if args.use_anyhit_point_in_mesh else 'disabled'}.",
                 f"Estimated-mode tolerance: {ESTIMATED_RELATIVE_TOLERANCE:.2%} relative error.",
                 f"CGAL query tolerance (intersection/containment): {CGAL_QUERY_RELATIVE_TOLERANCE:.2%} relative error.",
             ],
@@ -396,7 +403,11 @@ def main():
     if "intersection" in args.operations:
         summary["results"]["intersection"] = run_intersection_checks(manifest, args.approaches)
     if "containment" in args.operations:
-        summary["results"]["containment"] = run_containment_checks(manifest, args.approaches)
+        summary["results"]["containment"] = run_containment_checks(
+            manifest,
+            args.approaches,
+            use_anyhit_point_in_mesh=args.use_anyhit_point_in_mesh,
+        )
 
     all_checks = []
     for operation_result in summary["results"].values():

@@ -17,6 +17,7 @@ class RaytracerContainmentAdapter(ContainmentBenchmarkAdapter):
         timings_dir: str = "timings",
         grid_resolution: int = 10,
         warmup_runs: int = 1,
+        use_anyhit_point_in_mesh: bool = False,
     ):
         super().__init__("Raytracer")
         self.rayspace_dir = Path(rayspace_dir)
@@ -24,6 +25,7 @@ class RaytracerContainmentAdapter(ContainmentBenchmarkAdapter):
         self.timings_dir = Path(timings_dir)
         self.grid_resolution = grid_resolution
         self.warmup_runs = warmup_runs
+        self.use_anyhit_point_in_mesh = use_anyhit_point_in_mesh
 
         self.preprocessed_dir.mkdir(parents=True, exist_ok=True)
         self.timings_dir.mkdir(parents=True, exist_ok=True)
@@ -106,6 +108,8 @@ class RaytracerContainmentAdapter(ContainmentBenchmarkAdapter):
                 "--warmup-runs", str(self.warmup_runs),
                 "--no-export",
             ]
+            if self.use_anyhit_point_in_mesh:
+                cmd.append("--use-anyhit-point-in-mesh")
 
             try:
                 log_path = None
