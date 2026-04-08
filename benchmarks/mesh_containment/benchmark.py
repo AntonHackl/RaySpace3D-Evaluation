@@ -85,6 +85,11 @@ def main():
     parser.add_argument("--timings-dir", type=str, default=str(TIMINGS_DIR), help="Directory for timing JSON files")
     parser.add_argument("--grid-resolution", type=int, default=10, help="Grid resolution for preprocessing")
     parser.add_argument("--raytracer-warmup-runs", type=int, default=1, help="Warmup iterations per run")
+    parser.add_argument(
+        "--include-overlap-pairs",
+        action="store_true",
+        help="Include overlap/touch pairs in Raytracer containment output (union of overlap + strict containment)",
+    )
     parser.add_argument("--cgal-dir", type=str, default=str(CGAL_BASE_DIR), help="Path to CGAL baseline directory")
     parser.add_argument("--threads", type=int, default=None, help="Number of threads for CGAL")
     parser.add_argument("--timeout", type=float, default=120.0, help="Timeout per run in seconds")
@@ -143,6 +148,7 @@ def main():
                     timings_dir=str(timings_dir),
                     grid_resolution=args.grid_resolution,
                     warmup_runs=args.raytracer_warmup_runs,
+                    include_overlap_pairs=args.include_overlap_pairs,
                 )
             )
         if "cgal" in args.approaches:
@@ -162,6 +168,7 @@ def main():
                 timings_dir=str(timings_dir),
                 grid_resolution=args.grid_resolution,
                 warmup_runs=0,
+                include_overlap_pairs=args.include_overlap_pairs,
             )
             print("\n--- Ensuring datasets are preprocessed ---")
             for f_dt, f_src in [(file1_path, file1_source), (file2_path, file2_source)]:

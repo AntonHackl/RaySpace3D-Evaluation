@@ -67,7 +67,7 @@ def parse_args():
     parser.add_argument("--grid-resolution",type=int,   default=10,
                         help="Grid resolution for preprocessing")
     parser.add_argument("--multipliers",    type=float, nargs="+",
-                        default=[10.0, 5.0, 2.0, 1.5, 1.0, 0.8],
+                        default=[100.0, 50.0, 20.0, 10.0, 5.0, 2.0, 1.5, 1.0, 0.8],
                         help="Hash table size multipliers (relative to true result count)")
     parser.add_argument("--gpu-auto-free-mem-fraction", type=float, default=0.9,
                         help="Fraction of currently free GPU memory to use for the gpu_auto hash-table step")
@@ -79,8 +79,6 @@ def parse_args():
                         help="Skip dataset generation if OBJ files already exist")
     parser.add_argument("--skip-preprocess",action="store_true",
                         help="Skip preprocessing if .pre files already exist")
-    parser.add_argument("--no-visualize",   action="store_true",
-                        help="Do not auto-launch the visualization script after completion")
     return parser.parse_args()
 
 
@@ -98,7 +96,6 @@ def run_cmd(cmd, desc):
 
 def make_adapter(rayspace_dir, preprocessed_dir, timings_dir, grid_resolution,
                  warmup_runs, hash_table_size=None, track_hash_contention=False,
-                 hash_table_free_mem_fraction=None):
     return RaytracerAdapter(
         rayspace_dir=str(rayspace_dir),
         mode="direct_estimation",

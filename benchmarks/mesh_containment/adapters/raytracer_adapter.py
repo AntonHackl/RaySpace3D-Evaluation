@@ -18,6 +18,7 @@ class RaytracerContainmentAdapter(ContainmentBenchmarkAdapter):
         grid_resolution: int = 10,
         warmup_runs: int = 1,
         use_anyhit_point_in_mesh: bool = False,
+        include_overlap_pairs: bool = False,
     ):
         super().__init__("Raytracer")
         self.rayspace_dir = Path(rayspace_dir)
@@ -26,6 +27,7 @@ class RaytracerContainmentAdapter(ContainmentBenchmarkAdapter):
         self.grid_resolution = grid_resolution
         self.warmup_runs = warmup_runs
         self.use_anyhit_point_in_mesh = use_anyhit_point_in_mesh
+        self.include_overlap_pairs = include_overlap_pairs
 
         self.preprocessed_dir.mkdir(parents=True, exist_ok=True)
         self.timings_dir.mkdir(parents=True, exist_ok=True)
@@ -91,6 +93,8 @@ class RaytracerContainmentAdapter(ContainmentBenchmarkAdapter):
         num_obj1 = 0
         num_obj2 = 0
         num_containments = 0
+        num_overlaps = 0
+        num_reported_pairs = 0
 
         adapter_log_dir = None
         if log_dir:
@@ -110,6 +114,8 @@ class RaytracerContainmentAdapter(ContainmentBenchmarkAdapter):
             ]
             if self.use_anyhit_point_in_mesh:
                 cmd.append("--use-anyhit-point-in-mesh")
+            if self.include_overlap_pairs:
+                cmd.append("--include-overlap-pairs")
 
             try:
                 log_path = None
@@ -134,6 +140,12 @@ class RaytracerContainmentAdapter(ContainmentBenchmarkAdapter):
                     match = re.search(r"Containment pairs \(B in A\):\s*(\d+)", output)
                     if match:
                         num_containments = int(match.group(1))
+                    match = re.search(r"Overlap/Touch pairs \(A vs B\):\s*(\d+)", output)
+                    if match:
+                        num_overlaps = int(match.group(1))
+                    match = re.search(r"Reported pairs:\s*(\d+)", output)
+                    if match:
+                        num_reported_pairs = int(match.group(1))
 
                 if not json_output.exists():
                     return {"error": f"Timing JSON not found at {json_output}"}
@@ -193,5 +205,7 @@ class RaytracerContainmentAdapter(ContainmentBenchmarkAdapter):
             "num_obj1": int(num_obj1),
             "num_obj2": int(num_obj2),
             "num_containments": int(num_containments),
+            "num_overlaps": int(num_overlaps),
+            "num_reported_pairs": int(num_reported_pairs or num_containments),
             "breakdown": breakdown_stats,
         }

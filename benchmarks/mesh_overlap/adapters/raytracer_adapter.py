@@ -17,6 +17,7 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
         grid_resolution: int = 10,
         warmup_runs: int = 10,
         track_hash_contention: bool = False,
+        use_alpha_correction: bool = True,
         hash_table_size: Optional[int] = None,
         hash_table_free_mem_fraction: Optional[float] = None,
     ):
@@ -34,6 +35,7 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
         self.grid_resolution = grid_resolution
         self.warmup_runs = warmup_runs
         self.track_hash_contention = track_hash_contention
+        self.use_alpha_correction = use_alpha_correction
         self.hash_table_size = hash_table_size
         self.hash_table_free_mem_fraction = hash_table_free_mem_fraction
         # Ensure directories exist
@@ -179,6 +181,8 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
 
             if self.mode == "direct_estimation":
                 cmd.extend(["--query-direction", query_direction])
+                if not self.use_alpha_correction:
+                    cmd.append("--no-alpha-correction")
                 if self.track_hash_contention:
                     cmd.append("--track-hash-contention")
                 if self.hash_table_size is not None:

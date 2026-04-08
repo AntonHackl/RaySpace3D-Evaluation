@@ -62,6 +62,11 @@ All generated expectations are written to:
   computes pair disagreements, samples up to N mismatches (default 10,000), and
   adjudicates sampled pairs using a cube AABB intersection predicate.
 
+- `run_containment_disagreement_analysis.py`
+- Runs RaySpace containment and CGAL containment on the cubes_20k dataset,
+  computes pair disagreements, samples up to N mismatches (default 10,000), and
+  adjudicates sampled pairs using a strict cube AABB containment predicate.
+
 ## Usage
 
 Activate your conda environment first, then run:
@@ -93,6 +98,23 @@ conda activate spatial_benchmark
 python benchmarks/correctness_tests/run_intersection_disagreement_analysis.py --max-eval-pairs 10000 --seed 42
 ```
 
+To inspect containment disagreements and estimate which engine is correct on sampled mismatches:
+
+```bash
+conda activate spatial_benchmark
+python benchmarks/correctness_tests/run_containment_disagreement_analysis.py --max-eval-pairs 10000 --seed 42
+```
+
+To analyze existing pair snapshots (without re-running queries):
+
+```bash
+conda activate spatial_benchmark
+python benchmarks/correctness_tests/run_containment_disagreement_analysis.py \
+  --rayspace-pairs-csv tmp/rayspace_containment_pairs.csv \
+  --cgal-pairs-csv tmp/cgal_containment_pairs.csv \
+  --max-eval-pairs 10000 --seed 42
+```
+
 Artifacts for the disagreement analysis are written to:
 - `runs/overlap_disagreement_<timestamp>/summary.json`
 - `runs/overlap_disagreement_<timestamp>/sampled_pair_decisions.csv`
@@ -100,6 +122,9 @@ Artifacts for the disagreement analysis are written to:
 - `runs/intersection_disagreement_<timestamp>/summary.json`
 - `runs/intersection_disagreement_<timestamp>/sampled_pair_decisions.csv`
 - `runs/intersection_disagreement_latest.json`
+- `runs/containment_disagreement_<timestamp>/summary.json`
+- `runs/containment_disagreement_<timestamp>/sampled_pair_decisions.csv`
+- `runs/containment_disagreement_latest.json`
 
 Important:
 - The script requires CGAL overlap binary support for `--output-csv`.

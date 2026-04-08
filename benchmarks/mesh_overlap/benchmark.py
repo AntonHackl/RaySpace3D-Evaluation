@@ -86,6 +86,7 @@ def main():
     parser.add_argument("--timings-dir", type=str, default=str(TIMINGS_DIR), help="Directory for timing JSON files (default: mesh_overlap_benchmark/data/timings)")
     parser.add_argument("--grid-resolution", type=int, default=10, help="Grid resolution for RaySpace preprocessing (default: 10)")
     parser.add_argument("--raytracer-warmup-runs", type=int, default=1, help="Warmup iterations per raytracer invocation (default: 1; set 0 to disable)")
+    parser.add_argument("--raytracer-disable-alpha-correction", action="store_true", help="Disable alpha correction in raytracer_overlap_direct_estimation")
     parser.add_argument("--timeout", type=float, default=120.0, help="Timeout for query execution in seconds (default: 120.0)")
     parser.add_argument("--threads", type=int, default=None, help="Number of threads for parallel approaches (default: all available)")
     parser.add_argument("--log-dir", type=str, default=str(RUNS_DIR / "logs"), help="Directory to write run logs (default: mesh_overlap_benchmark/runs/logs)")
@@ -158,7 +159,7 @@ def main():
         if "raytracer_estimate_only" in args.approaches:
             adapters.append(RaytracerAdapter(str(RAYSPACE_DIR), mode="estimate_only", preprocessed_dir=str(preprocessed_dir), timings_dir=str(timings_dir), grid_resolution=args.grid_resolution, warmup_runs=args.raytracer_warmup_runs))
         if "raytracer_overlap_direct_estimation" in args.approaches:
-            adapters.append(RaytracerAdapter(str(RAYSPACE_DIR), mode="direct_estimation", preprocessed_dir=str(preprocessed_dir), timings_dir=str(timings_dir), grid_resolution=args.grid_resolution, warmup_runs=args.raytracer_warmup_runs))
+            adapters.append(RaytracerAdapter(str(RAYSPACE_DIR), mode="direct_estimation", preprocessed_dir=str(preprocessed_dir), timings_dir=str(timings_dir), grid_resolution=args.grid_resolution, warmup_runs=args.raytracer_warmup_runs, use_alpha_correction=not args.raytracer_disable_alpha_correction))
 
         all_results = {}
         ssot_stats = {"num_obj1": 0, "num_obj2": 0, "num_intersections": 0, "universe_extents1": [0.0, 0.0, 0.0], "universe_extents2": [0.0, 0.0, 0.0]}

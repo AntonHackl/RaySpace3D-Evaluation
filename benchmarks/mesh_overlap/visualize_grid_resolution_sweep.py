@@ -33,6 +33,10 @@ def parse_args():
                         help="Path to JSON produced by run_grid_resolution_sweep.py")
     parser.add_argument("--output-dir", type=str, default=str(FIGURES_DIR),
                         help="Directory for saved figures")
+    parser.add_argument("--run-type", type=str, default=None,
+                        help="Run type to visualize from merged JSON (e.g., cubes, nu)")
+    parser.add_argument("--output-stem", type=str, default=None,
+                        help="Optional output filename stem (without extension)")
     return parser.parse_args()
 
 
@@ -80,8 +84,25 @@ def main():
     with open(args.input, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    meta = data["metadata"]
-    results = sorted(data["results"], key=lambda r: r["grid_resolution"])
+    run_label = None
+    if "runs" in data:
+        runs = data.get("runs", [])
+        if args.run_type is None:
+            if len(runs) != 1:
+                raise ValueError("Merged input contains multiple run types. Pass --run-type.")
+            selected = runs[0]
+        else:
+            selected = next((r for r in runs if r.get("run_type") == args.run_type), None)
+            if selected is None:
+                available = [r.get("run_type") for r in runs]
+                raise ValueError(f"Run type '{args.run_type}' not found. Available: {available}")
+        meta = selected["metadata"]
+        results = sorted(selected["results"], key=lambda r: r["grid_resolution"])
+        run_label = selected.get("display_name") or selected.get("run_type")
+    else:
+        meta = data["metadata"]
+        results = sorted(data["results"], key=lambda r: r["grid_resolution"])
+        run_label = meta.get("display_name") or meta.get("run_type")
 
     grid_res = np.array([safe_int(r.get("grid_resolution")) for r in results], dtype=float)
 
@@ -105,11 +126,12 @@ def main():
     ground_truth = safe_int(meta.get("ground_truth_pairs_exact_overlap"), 0)
 
     fig, axes = plt.subplots(1, 3, figsize=(19, 6.2))
+    if run_label is None:
+        run_label = "dataset"
+
     fig.suptitle(
         (
-            "Estimated Overlap Grid Sweep "
-            f"| cubes={meta.get('num_cubes', '?'):,}, size={meta.get('cube_size', '?')}, "
-            f"universe={meta.get('target_universe', '?')} "
+            f"Estimated Overlap Grid Sweep ({run_label}) "
             f"| GT pairs={ground_truth:,}"
         ),
         fontsize=12,
@@ -177,7 +199,12 @@ def main():
     plt.tight_layout()
 
     ts = time.strftime("%Y%m%d_%H%M%S")
-    stem = f"grid_resolution_sweep_{ts}"
+    if args.output_stem:
+        stem = f"{args.output_stem}_{ts}"
+    elif args.run_type:
+        stem = f"grid_resolution_sweep_{args.run_type}_{ts}"
+    else:
+        stem = f"grid_resolution_sweep_{ts}"
     png_path = output_dir / f"{stem}.png"
     pdf_path = output_dir / f"{stem}.pdf"
 

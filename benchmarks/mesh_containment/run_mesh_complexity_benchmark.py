@@ -36,6 +36,7 @@ def main():
     parser.add_argument("--grid-resolution", type=int, default=20)
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--warmup-runs", type=int, default=1)
+    parser.add_argument("--include-overlap-pairs", action="store_true")
     parser.add_argument("--timeout", type=float, default=3600.0)
     parser.add_argument("--approaches", type=str, nargs="+", default=["raytracer", "cgal"], choices=["raytracer", "cgal"])
     args = parser.parse_args()
@@ -46,6 +47,7 @@ def main():
     raytracer = RaytracerContainmentAdapter(
         str(RAYSPACE_DIR), preprocessed_dir=str(dirs["preprocessed"]),
         timings_dir=str(dirs["timings"]), grid_resolution=args.grid_resolution, warmup_runs=args.warmup_runs,
+        include_overlap_pairs=args.include_overlap_pairs,
     )
     cgal = CGALContainmentAdapter(str(CGAL_BASE_DIR), preprocessed_dir=str(dirs["preprocessed"]))
 
@@ -113,6 +115,7 @@ def main():
             "grid_resolution": args.grid_resolution,
             "runs": args.runs,
             "warmup_runs": args.warmup_runs,
+            "include_overlap_pairs": args.include_overlap_pairs,
             "timeout_seconds": args.timeout,
             "approaches": args.approaches,
             "shared_data_root": str(dirs["root"]),

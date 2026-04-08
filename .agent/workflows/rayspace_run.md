@@ -7,7 +7,10 @@ There are some irregularities when ssh-ing into this cluster: Sometimes we land 
 When we are on just on the host node and not in the container, you MUST wrap the command using the `enroot` container.
 
 **Command Wrapper:**
-`enroot start --root --rw --mount /sc/home/anton.hackl:/sc/home/anton.hackl pyxis_rayspace bash -c "<command>"`
+`enroot start --root --rw \
+  --mount /sc/home/anton.hackl/:/sc/home/anton.hackl/,/sc/projects/sci-zacharatou/chair/RaySpace/:/sc/projects/sci-zacharatou/chair/RaySpace/ \
+  pyxis_rayspace \
+  bash -c "<command>"`
 
 **Rules:**
 1. Only use this wrapper when executing commands directly via `run_command` in the chat.
