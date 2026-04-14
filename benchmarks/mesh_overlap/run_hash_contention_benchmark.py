@@ -20,6 +20,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
 
 # ---------------------------------------------------------------------------
 # Repo-relative constants (identical convention to benchmark.py)
@@ -120,6 +121,7 @@ def main():
     args = parse_args()
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_hash_contention")
 
     PREPROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     TIMINGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -289,12 +291,14 @@ def main():
         print(f"  contention_pct  = {entry['contention_pct']}")
 
     # ---- Step 6: Save JSON ----------------------------------------------
-    timestamp = time.strftime("%Y%m%d_%H%M%S")
-    output_json = output_dir / f"hash_contention_benchmark_{timestamp}.json"
+    output_json = Path(run_layout["results_json"])
+    timestamp = run_layout["timestamp"]
 
     output = {
         "metadata": {
             "timestamp":       timestamp,
+            "run_name":        run_layout["run_name"],
+            "run_dir":         str(run_layout["run_dir"]),
             "num_cubes":       args.num_cubes,
             "selectivity":     args.selectivity,
             "min_size":        args.min_size,
@@ -314,8 +318,10 @@ def main():
         "results": results,
     }
 
-    with open(output_json, "w") as f:
-        json.dump(output, f, indent=2)
+    write_json(output_json, output)
+    # Keep legacy output-dir alias for compatibility.
+    legacy_latest = output_dir / "hash_contention_benchmark_latest.json"
+    write_json(legacy_latest, output)
     print(f"\nResults saved to: {output_json}")
 
     # ---- Step 7: Visualize ----------------------------------------------

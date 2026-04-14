@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 import sys
 import time
@@ -172,3 +173,40 @@ def write_json(path: Path, payload) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
+
+
+def create_benchmark_run_layout(
+    benchmark_dir: Path,
+    benchmark_name: str,
+    *,
+    timestamp: str | None = None,
+) -> Dict[str, Path | str]:
+    ts = timestamp or timestamp_tag()
+    run_name = f"{benchmark_name}_{ts}"
+    runs_dir = benchmark_dir / "runs"
+    run_dir = runs_dir / run_name
+    logs_dir = run_dir / "logs"
+    figures_dir = run_dir / "figures"
+    results_json = run_dir / "results.json"
+
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    figures_dir.mkdir(parents=True, exist_ok=True)
+
+    return {
+        "timestamp": ts,
+        "run_name": run_name,
+        "runs_dir": runs_dir,
+        "run_dir": run_dir,
+        "logs_dir": logs_dir,
+        "figures_dir": figures_dir,
+        "results_json": results_json,
+    }
+
+
+def write_latest_json_alias(latest_path: Path, payload) -> None:
+    write_json(latest_path, payload)
+
+
+def copy_to_latest_file(source_path: Path, latest_path: Path) -> None:
+    latest_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source_path, latest_path)

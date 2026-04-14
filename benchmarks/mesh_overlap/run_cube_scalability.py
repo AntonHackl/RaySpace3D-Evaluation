@@ -7,6 +7,7 @@ from pathlib import Path
 from datetime import datetime
 import subprocess 
 import json
+from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
 
 # Add current directory to path to import adapters
 sys.path.append(str(Path(__file__).parent))
@@ -32,19 +33,13 @@ TIMEOUT_SECONDS = 120.0
 CUBE_COUNTS = [200000, 400000, 600000, 1000000]
 FIXED_COUNT = "200k_a"
 
-def run_experiment(runs, grid_resolution):
+def run_experiment(runs, grid_resolution, run_log_dir):
     print("--- Starting Cube Scalability Experiment ---")
     
     # Ensure directories exist
-    RUNS_DIR.mkdir(parents=True, exist_ok=True)
     PREPROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     TIMINGS_DIR.mkdir(parents=True, exist_ok=True)
-    
-    # Setup Logging
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_name = f"cube_scalability_{runs}runs_{timestamp}"
-    run_log_dir = RUNS_DIR / "logs" / run_name
-    run_log_dir.mkdir(parents=True, exist_ok=True)
+
     print(f"Logging runs to: {run_log_dir}")
 
     # Initialize Adapters
@@ -201,9 +196,9 @@ def run_experiment(runs, grid_resolution):
 
     return results
 
-def plot_results(results):
+def plot_results(results, figures_dir):
     print("\nPlotting results...")
-    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+    figures_dir.mkdir(parents=True, exist_ok=True)
     
     counts = results["counts"]
     if not counts:
@@ -326,7 +321,7 @@ def plot_results(results):
                        bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
 
     plt.tight_layout()
-    output_path = FIGURES_DIR / "mesh_overlap_cube_scalability.png"
+    output_path = figures_dir / "mesh_overlap_cube_scalability.png"
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     print(f"Visualization saved to {output_path}")
     
@@ -341,7 +336,10 @@ def main():
     parser.add_argument("--grid-resolution", type=int, default=20, help="Grid resolution for RaySpace")
     args = parser.parse_args()
     
-    results = run_experiment(args.runs, args.grid_resolution)
+    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_cube_scalability")
+    run_log_dir = Path(run_layout["logs_dir"])
+    figures_dir = Path(run_layout["figures_dir"])
+    results = run_experiment(args.runs, args.grid_resolution, run_log_dir)
     
     if results and results["counts"]:
         print("\nResults Summary:")
@@ -355,21 +353,31 @@ def main():
             to_str = f"{to:.2f}" if to else "N/A"
             print(f"{n:<10} {ex:<15.2f} {est:<15.2f} {cg_str:<15} {to_str:<15}")
                 
-        plot_results(results)
+        plot_results(results, figures_dir)
         
-        # Save summary to json
-        out_json = RUNS_DIR / f"scalability_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        with open(out_json, 'w') as f:
-            # Convert numpy types to native for json serialization
-            clean_results = {}
-            for k, v in results.items():
-                if isinstance(v, dict):
-                    clean_results[k] = {ki: (vi.tolist() if isinstance(vi, np.ndarray) else vi) for ki, vi in v.items()}
-                elif isinstance(v, list):
-                     clean_results[k] = v
-                else:
-                    clean_results[k] = v
-            json.dump(clean_results, f, indent=4)
+        # Save summary to canonical run results path
+        out_json = Path(run_layout["results_json"])
+        clean_results = {}
+        for k, v in results.items():
+            if isinstance(v, dict):
+                clean_results[k] = {ki: (vi.tolist() if isinstance(vi, np.ndarray) else vi) for ki, vi in v.items()}
+            elif isinstance(v, list):
+                clean_results[k] = v
+            else:
+                clean_results[k] = v
+        write_json(
+            out_json,
+            {
+                "metadata": {
+                    "timestamp": run_layout["timestamp"],
+                    "run_name": run_layout["run_name"],
+                    "run_dir": str(run_layout["run_dir"]),
+                    "runs": args.runs,
+                    "grid_resolution": args.grid_resolution,
+                },
+                "results": clean_results,
+            },
+        )
         print(f"Raw results saved to {out_json}")
     else:
         print("No successful runs.")

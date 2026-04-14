@@ -18,6 +18,7 @@ from benchmarks.mesh_containment.adapters.raytracer_adapter import RaytracerCont
 from benchmarks.mesh_intersection.adapters.cgal_adapter import CGALIntersectionAdapter
 from benchmarks.mesh_containment.adapters.cgal_adapter import CGALContainmentAdapter
 from benchmarks.common.adapters.base import run_command_streaming
+from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_latest_json_alias, write_json
 
 RAW_DIR = SCRIPT_DIR / "data" / "raw"
 PREPROCESSED_DIR = SCRIPT_DIR / "data" / "preprocessed"
@@ -376,13 +377,15 @@ def main():
     args = parser.parse_args()
 
     manifest = _load_manifest()
-    RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "correctness")
     PREPROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     TIMINGS_DIR.mkdir(parents=True, exist_ok=True)
 
     summary = {
         "metadata": {
-            "timestamp": time.strftime("%Y%m%d_%H%M%S"),
+            "timestamp": run_layout["timestamp"],
+            "run_name": run_layout["run_name"],
+            "run_dir": str(run_layout["run_dir"]),
             "operations": args.operations,
             "approaches": args.approaches,
             "notes": [
@@ -417,12 +420,10 @@ def main():
 
     summary["status"] = "PASS" if all_checks and all(all_checks) else "FAIL"
 
-    output_path = RUNS_DIR / f"correctness_{summary['metadata']['timestamp']}.json"
+    output_path = Path(run_layout["results_json"])
     latest_path = RUNS_DIR / "correctness_latest.json"
-    with open(output_path, "w", encoding="utf-8") as handle:
-        json.dump(summary, handle, indent=2)
-    with open(latest_path, "w", encoding="utf-8") as handle:
-        json.dump(summary, handle, indent=2)
+    write_json(output_path, summary)
+    write_latest_json_alias(latest_path, summary)
 
     print(f"Wrote: {output_path}")
     print(f"Wrote: {latest_path}")

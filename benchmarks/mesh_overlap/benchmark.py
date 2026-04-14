@@ -5,9 +5,9 @@ import json
 import os
 import sys
 from pathlib import Path
-from datetime import datetime
 from adapters import TDBaseAdapter, CGALAdapter, TOUCHAdapter, RaytracerAdapter
 import numpy as np
+from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
 
 
 class _Tee:
@@ -89,7 +89,7 @@ def main():
     parser.add_argument("--raytracer-disable-alpha-correction", action="store_true", help="Disable alpha correction in raytracer_overlap_direct_estimation")
     parser.add_argument("--timeout", type=float, default=120.0, help="Timeout for query execution in seconds (default: 120.0)")
     parser.add_argument("--threads", type=int, default=None, help="Number of threads for parallel approaches (default: all available)")
-    parser.add_argument("--log-dir", type=str, default=str(RUNS_DIR / "logs"), help="Directory to write run logs (default: mesh_overlap_benchmark/runs/logs)")
+    parser.add_argument("--log-dir", type=str, default=None, help="Deprecated: logs are written inside each run folder")
     parser.add_argument("--no-logs", action="store_true", help="Disable writing benchmark/adapters logs to files")
     
     args = parser.parse_args()
@@ -126,18 +126,17 @@ def main():
     # Ensure directories exist
     preprocessed_dir.mkdir(parents=True, exist_ok=True)
     timings_dir.mkdir(parents=True, exist_ok=True)
-    RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "mesh_overlap_benchmark")
 
     # Prepare run output names early so we can log the whole run
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_name = f"{args.dataset}_{args.runs}runs_{timestamp}"
+    timestamp = run_layout["timestamp"]
+    run_name = run_layout["run_name"]
 
     run_log_dir = None
     benchmark_log_file = None
     tee_file_handle = None
     if not args.no_logs:
-        run_log_dir = Path(args.log_dir) / run_name
-        run_log_dir.mkdir(parents=True, exist_ok=True)
+        run_log_dir = Path(run_layout["logs_dir"])
         benchmark_log_file = run_log_dir / "benchmark.log"
         tee_file_handle = open(benchmark_log_file, "w", encoding="utf-8")
         sys.stdout = _Tee(sys.stdout, tee_file_handle)
@@ -240,7 +239,7 @@ def main():
             print("  SSOT not computed (no exact/estimated join was requested).")
 
         # Save results to runs directory with timestamp
-        output_file = RUNS_DIR / f"{run_name}.json"
+        output_file = Path(run_layout["results_json"])
 
         # Convert numpy types to native python for json serialization
         json_results = {
@@ -251,6 +250,7 @@ def main():
                 "file2": file2_path.name,
                 "num_runs": args.runs,
                 "run_name": run_name,
+                "run_dir": str(run_layout["run_dir"]),
                 "log_dir": str(run_log_dir) if run_log_dir else None,
                 "benchmark_log": str(benchmark_log_file) if benchmark_log_file else None,
                 "num_obj1": int(ssot_stats["num_obj1"]),
@@ -281,8 +281,7 @@ def main():
                     for k, v in res.items()
                 }
 
-        with open(output_file, 'w') as f:
-            json.dump(json_results, f, indent=4)
+        write_json(output_file, json_results)
         print(f"\nResults saved to {output_file}")
     finally:
         # Restore streams before closing the tee log file (prevents flush-on-exit issues)

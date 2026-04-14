@@ -12,15 +12,15 @@ from benchmarks.common.scenario_utils import (
     RAYSPACE_DIR,
     canonical_sphere_pair_paths,
     count_vertices,
+    create_benchmark_run_layout,
     ensure_sphere_pair_dataset,
     get_shared_data_dirs,
-    timestamp_tag,
+    write_json,
 )
 from benchmarks.mesh_containment.adapters.cgal_adapter import CGALContainmentAdapter
 from benchmarks.mesh_containment.adapters.raytracer_adapter import RaytracerContainmentAdapter
 
 
-RUNS_DIR = SCRIPT_DIR / "runs"
 CGAL_BASE_DIR = REPO_ROOT / "baselines" / "RaySpace3DBaselines" / "CGAL"
 SPHERE_TEMPLATE_DIR = REPO_ROOT / "benchmarks" / "mesh_overlap" / "data" / "single_obj_files"
 
@@ -42,7 +42,7 @@ def main():
     args = parser.parse_args()
 
     dirs = get_shared_data_dirs("mesh_complexity")
-    RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "containment_mesh_complexity")
 
     raytracer = RaytracerContainmentAdapter(
         str(RAYSPACE_DIR), preprocessed_dir=str(dirs["preprocessed"]),
@@ -105,7 +105,9 @@ def main():
         "metadata": {
             "scenario": "mesh_complexity",
             "query_type": "containment",
-            "timestamp": timestamp_tag(),
+            "timestamp": run_layout["timestamp"],
+            "run_name": run_layout["run_name"],
+            "run_dir": str(run_layout["run_dir"]),
             "stages": args.stages,
             "num_objects": args.num_objects,
             "selectivity": args.selectivity,
@@ -124,9 +126,8 @@ def main():
         "results": results,
     }
 
-    out = RUNS_DIR / f"containment_mesh_complexity_{timestamp_tag()}.json"
-    with open(out, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2)
+    out = run_layout["results_json"]
+    write_json(out, payload)
     print(f"Saved: {out}")
 
 

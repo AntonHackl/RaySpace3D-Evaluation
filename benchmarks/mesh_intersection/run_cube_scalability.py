@@ -12,16 +12,16 @@ from benchmarks.common.scenario_utils import (
     RAYSPACE_DIR,
     canonical_cube_pair_paths,
     compute_universe_for_selectivity,
+    create_benchmark_run_layout,
     ensure_cube_pair_dataset,
     get_shared_data_dirs,
-    timestamp_tag,
+    write_json,
 )
 from benchmarks.mesh_intersection.adapters.cgal_adapter import CGALIntersectionAdapter
 from benchmarks.mesh_intersection.adapters.raytracer_adapter import RaytracerIntersectionAdapter
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-RUNS_DIR = SCRIPT_DIR / "runs"
 CGAL_BASE_DIR = REPO_ROOT / "baselines" / "RaySpace3DBaselines" / "CGAL"
 
 
@@ -49,7 +49,7 @@ def main():
     args = parser.parse_args()
 
     dirs = get_shared_data_dirs("cube_scalability")
-    RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "intersection_cube_scalability")
 
     universe_extent = compute_universe_for_selectivity(args.selectivity, args.min_size, args.max_size)
 
@@ -118,7 +118,9 @@ def main():
         "metadata": {
             "scenario": "cube_scalability",
             "query_type": "intersection",
-            "timestamp": timestamp_tag(),
+            "timestamp": run_layout["timestamp"],
+            "run_name": run_layout["run_name"],
+            "run_dir": str(run_layout["run_dir"]),
             "counts": args.counts,
             "fixed_count": args.fixed_count,
             "selectivity": args.selectivity,
@@ -135,9 +137,8 @@ def main():
         "results": results,
     }
 
-    out = RUNS_DIR / f"intersection_cube_scalability_{timestamp_tag()}.json"
-    with open(out, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2)
+    out = run_layout["results_json"]
+    write_json(out, payload)
     print(f"Saved: {out}")
 
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 import argparse
 import json
-from datetime import datetime
 from pathlib import Path
 from typing import Dict, Set, Tuple
+from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
 
 # Add current directory to path to import adapters
 import sys
@@ -86,15 +86,13 @@ def compute_metrics(pred: Set[Tuple[int, int]], gt: Set[Tuple[int, int]]) -> Dic
     }
 
 
-def run_experiment(runs: int, grid_resolution: int, nu_counts):
-    RUNS_DIR.mkdir(parents=True, exist_ok=True)
+def run_experiment(runs: int, grid_resolution: int, nu_counts, run_layout):
     PREPROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     TIMINGS_DIR.mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_name = f"direct_estimation_directionality_{runs}runs_{timestamp}"
-    run_log_dir = RUNS_DIR / "logs" / run_name
-    run_log_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = run_layout["timestamp"]
+    run_name = run_layout["run_name"]
+    run_log_dir = Path(run_layout["logs_dir"])
 
     direct_adapter = RaytracerAdapter(
         str(RAYSPACE_DIR),
@@ -107,6 +105,8 @@ def run_experiment(runs: int, grid_resolution: int, nu_counts):
 
     summary = {
         "timestamp": timestamp,
+        "run_name": run_name,
+        "run_dir": str(run_layout["run_dir"]),
         "runs": runs,
         "grid_resolution": grid_resolution,
         "results": [],
@@ -277,13 +277,12 @@ def main():
 
     nu_counts = args.nu if args.nu else DEFAULT_NU_COUNTS
 
-    summary = run_experiment(args.runs, args.grid_resolution, nu_counts)
+    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_direct_estimation_directionality")
+    summary = run_experiment(args.runs, args.grid_resolution, nu_counts, run_layout)
     print_summary(summary)
 
-    RUNS_DIR.mkdir(parents=True, exist_ok=True)
-    out_json = RUNS_DIR / f"direct_estimation_directionality_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-    with open(out_json, "w") as f:
-        json.dump(summary, f, indent=2)
+    out_json = Path(run_layout["results_json"])
+    write_json(out_json, summary)
     print(f"\nSaved summary to: {out_json}")
 
 

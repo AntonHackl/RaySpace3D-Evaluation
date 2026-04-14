@@ -36,6 +36,7 @@ from adapters import (
     CUDAAdapter
 )
 from adapters.utils import run_subprocess_streaming, compute_obj_bbox
+from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
 
 
 # ============================================================================
@@ -549,8 +550,9 @@ fi
     print("RESULTS")
     print("="*70)
     
-    # Add timestamp to output filename
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    run_benchmark_name = "pip_grid_benchmark" if not args.name else f"pip_grid_benchmark_{args.name}"
+    run_layout = create_benchmark_run_layout(Path(__file__).resolve().parent, run_benchmark_name)
+    timestamp = run_layout["timestamp"]
     output_path = Path(args.output)
     output_stem = output_path.stem
     output_suffix = output_path.suffix
@@ -563,6 +565,8 @@ fi
     
     output_data = {
         'timestamp': timestamp,
+        'run_name': run_layout["run_name"],
+        'run_dir': str(run_layout["run_dir"]),
         'configuration': {
             'query_obj': args.query_obj,
             'points_file': args.points,
@@ -598,15 +602,19 @@ fi
             
             output_data[f'{name}_statistics'] = stats
     
-    # Save JSON
+    # Save canonical per-run JSON
+    results_json = Path(run_layout["results_json"])
+    write_json(results_json, output_data)
+
+    # Save legacy timestamped JSON
     os.makedirs(output_dir or '.', exist_ok=True)
-    with open(timestamped_output, 'w') as f:
-        json.dump(output_data, f, indent=2)
+    write_json(timestamped_output, output_data)
     
-    print(f"\nResults saved to: {timestamped_output}")
+    print(f"\nResults saved to: {results_json}")
+    print(f"Legacy results saved to: {timestamped_output}")
     
     # Generate visualizations
-    viz_dir = output_dir / 'visualizations' / timestamp
+    viz_dir = Path(run_layout["figures_dir"])
     plot_results(all_results, str(viz_dir), metric=args.eval_metric, 
                  benchmark_name=args.name, grid_size=tuple(args.grid_size),
                  centered=args.centered)
@@ -623,7 +631,7 @@ fi
         
         eval_script = Path(__file__).parent / 'evaluation' / 'evaluate_benchmarks.py'
         if eval_script.exists():
-            eval_output = output_dir / 'evaluation_figures' / timestamp
+            eval_output = Path(run_layout["figures_dir"]) / 'evaluation'
             cmd = [
                 sys.executable,
                 str(eval_script),

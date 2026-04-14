@@ -8,6 +8,7 @@ from datetime import datetime
 import subprocess 
 import json
 import re
+from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
 
 # Add current directory to path to import adapters
 sys.path.append(str(Path(__file__).parent))
@@ -58,7 +59,7 @@ def find_dataset_files(nu):
     
     return candidates_v[0], candidates_n[0]
 
-def run_experiment(runs, grid_resolution, nu_counts, approaches=None, track_hash_contention=False):
+def run_experiment(runs, grid_resolution, nu_counts, run_log_dir, approaches=None, track_hash_contention=False):
     if approaches is None:
         approaches = ["exact", "direct_estimation", "cgal", "touch", "tdbase"]
     
@@ -68,15 +69,9 @@ def run_experiment(runs, grid_resolution, nu_counts, approaches=None, track_hash
         print("Direct estimation hash contention tracking: enabled")
     
     # Ensure directories exist
-    RUNS_DIR.mkdir(parents=True, exist_ok=True)
     PREPROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     TIMINGS_DIR.mkdir(parents=True, exist_ok=True)
-    
-    # Setup Logging
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_name = f"nu_scalability_{runs}runs_{timestamp}"
-    run_log_dir = RUNS_DIR / "logs" / run_name
-    run_log_dir.mkdir(parents=True, exist_ok=True)
+
     print(f"Logging runs to: {run_log_dir}")
     print(f"RaySpace Dir: {RAYSPACE_DIR}")
 
@@ -274,9 +269,9 @@ def run_experiment(runs, grid_resolution, nu_counts, approaches=None, track_hash
 
     return results
 
-def plot_results(results):
+def plot_results(results, figures_dir):
     print("\nPlotting results...")
-    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+    figures_dir.mkdir(parents=True, exist_ok=True)
     
     counts = results["counts"]
     if not counts:
@@ -480,7 +475,7 @@ def plot_results(results):
         )
 
     plt.tight_layout()
-    output_path = FIGURES_DIR / "mesh_overlap_nu_scalability.png"
+    output_path = figures_dir / "mesh_overlap_nu_scalability.png"
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     print(f"Visualization saved to {output_path}")
     
@@ -500,10 +495,14 @@ def main():
     
     nu_counts = args.nu if args.nu else DEFAULT_NU_COUNTS
     
+    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_nu_scalability")
+    run_log_dir = Path(run_layout["logs_dir"])
+    figures_dir = Path(run_layout["figures_dir"])
     results = run_experiment(
         args.runs,
         args.grid_resolution,
         nu_counts,
+        run_log_dir,
         approaches=args.approaches,
         track_hash_contention=args.track_hash_contention,
     )
@@ -528,20 +527,32 @@ def main():
             
             print(f"{n:<10} {ex_str:<15} {direct_str:<15} {cg_str:<15} {to_str:<15} {td_str:<15}")
                 
-        plot_results(results)
+        plot_results(results, figures_dir)
         
-        # Save summary to json
-        out_json = RUNS_DIR / f"nu_scalability_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        with open(out_json, 'w') as f:
-            clean_results = {}
-            for k, v in results.items():
-                if isinstance(v, dict):
-                    clean_results[k] = {ki: (vi.tolist() if isinstance(vi, np.ndarray) else vi) for ki, vi in v.items()}
-                elif isinstance(v, list):
-                    clean_results[k] = v
-                else:
-                    clean_results[k] = v
-            json.dump(clean_results, f, indent=4)
+        # Save summary to canonical run results path
+        out_json = Path(run_layout["results_json"])
+        clean_results = {}
+        for k, v in results.items():
+            if isinstance(v, dict):
+                clean_results[k] = {ki: (vi.tolist() if isinstance(vi, np.ndarray) else vi) for ki, vi in v.items()}
+            elif isinstance(v, list):
+                clean_results[k] = v
+            else:
+                clean_results[k] = v
+        write_json(
+            out_json,
+            {
+                "metadata": {
+                    "timestamp": run_layout["timestamp"],
+                    "run_name": run_layout["run_name"],
+                    "run_dir": str(run_layout["run_dir"]),
+                    "runs": args.runs,
+                    "grid_resolution": args.grid_resolution,
+                    "nu_counts": nu_counts,
+                },
+                "results": clean_results,
+            },
+        )
         print(f"Raw results saved to {out_json}")
     else:
         print("No successful runs.")

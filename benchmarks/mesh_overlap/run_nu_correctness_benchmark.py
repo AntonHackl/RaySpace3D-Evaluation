@@ -4,12 +4,12 @@ import json
 import re
 import subprocess
 import sys
-from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Set, Tuple, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
+from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
 
 sys.path.append(str(Path(__file__).parent))
 from adapters.raytracer_adapter import RaytracerAdapter
@@ -303,16 +303,14 @@ def plot_runtime_lines(results: Dict[str, object], output_path: Path) -> None:
     plt.close()
 
 
-def run_experiment(runs: int, grid_resolution: int, nu_counts: List[int]) -> Dict[str, object]:
+def run_experiment(runs: int, grid_resolution: int, nu_counts: List[int], run_layout) -> Dict[str, object]:
     PROJECT_TMP_DIR.mkdir(parents=True, exist_ok=True)
-    RUNS_DIR.mkdir(parents=True, exist_ok=True)
     PREPROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     TIMINGS_DIR.mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_name = f"nu_correctness_{runs}runs_{timestamp}"
-    run_log_dir = RUNS_DIR / "logs" / run_name
-    run_log_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = run_layout["timestamp"]
+    run_name = run_layout["run_name"]
+    run_log_dir = Path(run_layout["logs_dir"])
 
     exact_adapter = RaytracerAdapter(
         str(RAYSPACE_DIR),
@@ -490,17 +488,30 @@ def main() -> None:
     parser.add_argument("--nu", type=int, nargs="+", default=DEFAULT_NU_COUNTS, help="Nu values to run")
     args = parser.parse_args()
 
-    results = run_experiment(args.runs, args.grid_resolution, args.nu)
+    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_nu_correctness")
+    results = run_experiment(args.runs, args.grid_resolution, args.nu, run_layout)
     if not results["counts"]:
         print("No successful datasets processed.")
         return
 
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_json = RUNS_DIR / f"nu_correctness_results_{ts}.json"
-    with open(out_json, "w", encoding="utf-8") as f:
-        json.dump(results, f, indent=2)
+    out_json = Path(run_layout["results_json"])
+    write_json(
+        out_json,
+        {
+            "metadata": {
+                "timestamp": run_layout["timestamp"],
+                "run_name": run_layout["run_name"],
+                "run_dir": str(run_layout["run_dir"]),
+                "runs": args.runs,
+                "grid_resolution": args.grid_resolution,
+                "nu_counts": args.nu,
+            },
+            "results": results,
+        },
+    )
 
-    fig_path = FIGURES_DIR / f"nu_correctness_runtime_{ts}.png"
+    figures_dir = Path(run_layout["figures_dir"])
+    fig_path = figures_dir / "nu_correctness_runtime.png"
     plot_runtime_lines(results, fig_path)
 
     print("\nSaved:")

@@ -8,6 +8,7 @@ from pathlib import Path
 from datetime import datetime
 import subprocess 
 import json
+from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
 
 # Add current directory to path to import adapters
 sys.path.append(str(Path(__file__).parent))
@@ -56,17 +57,11 @@ def generate_datasets(stage_idx, num_objects, selectivity, template_path, file_a
     ]
     subprocess.run(cmd, check=True)
 
-def run_experiment(runs, grid_resolution, num_objects, selectivity):
+def run_experiment(runs, grid_resolution, num_objects, selectivity, run_log_dir):
     print("--- Starting Mesh Complexity Experiment ---")
-    
-    RUNS_DIR.mkdir(parents=True, exist_ok=True)
+
     PREPROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     TIMINGS_DIR.mkdir(parents=True, exist_ok=True)
-    
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_name = f"mesh_complexity_{runs}runs_{timestamp}"
-    run_log_dir = RUNS_DIR / "logs" / run_name
-    run_log_dir.mkdir(parents=True, exist_ok=True)
     
     exact_adapter = RaytracerAdapter(
         str(RAYSPACE_DIR), mode="exact", preprocessed_dir=str(PREPROCESSED_DIR), 
@@ -160,9 +155,9 @@ def run_experiment(runs, grid_resolution, num_objects, selectivity):
 
     return results
 
-def plot_results(results, num_objects, selectivity):
+def plot_results(results, num_objects, selectivity, figures_dir):
     print("\nPlotting results...")
-    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+    figures_dir.mkdir(parents=True, exist_ok=True)
     
     complexities = results["complexities"]
     if not complexities:
@@ -192,7 +187,7 @@ def plot_results(results, num_objects, selectivity):
     plt.grid(True, which="both", ls="-", alpha=0.2)
 
     plt.tight_layout()
-    output_path = FIGURES_DIR / "mesh_complexity_scalability.png"
+    output_path = figures_dir / "mesh_complexity_scalability.png"
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     pdf_path = str(output_path).replace('.png', '.pdf')
     plt.savefig(pdf_path, bbox_inches='tight')
@@ -206,14 +201,28 @@ def main():
     parser.add_argument("--selectivity", type=float, default=0.0005, help="Fixed selectivity target")
     args = parser.parse_args()
     
-    results = run_experiment(args.runs, args.grid_resolution, args.num_objects, args.selectivity)
+    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_mesh_complexity")
+    run_log_dir = Path(run_layout["logs_dir"])
+    figures_dir = Path(run_layout["figures_dir"])
+    results = run_experiment(args.runs, args.grid_resolution, args.num_objects, args.selectivity, run_log_dir)
     
     if results and results["complexities"]:
-        plot_results(results, args.num_objects, args.selectivity)
-        
-        out_json = RUNS_DIR / f"complexity_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        with open(out_json, 'w') as f:
-            json.dump(results, f, indent=4)
+        plot_results(results, args.num_objects, args.selectivity, figures_dir)
+
+        out_json = Path(run_layout["results_json"])
+        payload = {
+            "metadata": {
+                "timestamp": run_layout["timestamp"],
+                "run_name": run_layout["run_name"],
+                "run_dir": str(run_layout["run_dir"]),
+                "runs": args.runs,
+                "grid_resolution": args.grid_resolution,
+                "num_objects": args.num_objects,
+                "selectivity": args.selectivity,
+            },
+            "results": results,
+        }
+        write_json(out_json, payload)
         print(f"Raw results saved to {out_json}")
     else:
         print("No successful runs.")

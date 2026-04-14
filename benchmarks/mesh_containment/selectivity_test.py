@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -12,15 +11,15 @@ from benchmarks.common.scenario_utils import (
     RAYSPACE_DIR,
     canonical_cube_pair_paths,
     compute_universe_for_selectivity,
+    create_benchmark_run_layout,
     ensure_cube_pair_dataset,
     get_shared_data_dirs,
-    timestamp_tag,
+    write_json,
 )
 from benchmarks.mesh_containment.adapters.cgal_adapter import CGALContainmentAdapter
 from benchmarks.mesh_containment.adapters.raytracer_adapter import RaytracerContainmentAdapter
 
 
-RUNS_DIR = SCRIPT_DIR / "runs"
 RESULTS_DIR = SCRIPT_DIR / "results"
 CGAL_BASE_DIR = REPO_ROOT / "baselines" / "RaySpace3DBaselines" / "CGAL"
 
@@ -44,7 +43,7 @@ def main():
     args = parser.parse_args()
 
     dirs = get_shared_data_dirs("selectivity")
-    RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "containment_selectivity")
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     raytracer = RaytracerContainmentAdapter(
@@ -107,7 +106,9 @@ def main():
         "metadata": {
             "scenario": "selectivity",
             "query_type": "containment",
-            "timestamp": timestamp_tag(),
+            "timestamp": run_layout["timestamp"],
+            "run_name": run_layout["run_name"],
+            "run_dir": str(run_layout["run_dir"]),
             "selectivities": args.selectivities,
             "num_cubes": args.num_cubes,
             "min_size": args.min_size,
@@ -124,14 +125,13 @@ def main():
         "results": summary,
     }
 
-    out_runs = RUNS_DIR / f"containment_selectivity_{timestamp_tag()}.json"
-    with open(out_runs, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2)
+    out_runs = run_layout["results_json"]
+    write_json(out_runs, payload)
     print(f"Saved run log: {out_runs}")
 
+    # Keep legacy summary path for compatibility.
     out_summary = RESULTS_DIR / "summary.json"
-    with open(out_summary, "w", encoding="utf-8") as f:
-        json.dump(summary, f, indent=2)
+    write_json(out_summary, summary)
     print(f"Saved summary: {out_summary}")
 
 

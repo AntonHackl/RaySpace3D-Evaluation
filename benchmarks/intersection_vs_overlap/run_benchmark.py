@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 from datetime import datetime
 from adapters.comparison_adapter import ComparisonAdapter
+from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
 
 # Configuration
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -65,13 +66,12 @@ def run_benchmark(
     print(f"Containment max iterations: {containment_max_iterations}")
     print(f"Hash load factor: {hash_load_factor}")
     print(f"Profiling stats: {'enabled' if enable_profiling_stats else 'disabled'}")
-    run_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    run_timings_dir = TIMINGS_DIR / run_id
-    run_results_dir = RESULTS_DIR / run_id
-    run_figures_dir = FIGURES_DIR / run_id
+    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "intersection_vs_overlap")
+    run_id = run_layout["run_name"]
+    run_timings_dir = Path(run_layout["logs_dir"]) / "timings"
+    run_results_dir = Path(run_layout["run_dir"])
+    run_figures_dir = Path(run_layout["figures_dir"])
     run_timings_dir.mkdir(parents=True, exist_ok=True)
-    run_results_dir.mkdir(parents=True, exist_ok=True)
-    run_figures_dir.mkdir(parents=True, exist_ok=True)
     
     inter_adapter = ComparisonAdapter(
         str(RAYSPACE_DIR), 
@@ -140,6 +140,7 @@ def run_benchmark(
 
     output = {
         "run_id": run_id,
+        "run_dir": str(run_layout["run_dir"]),
         "created_at": datetime.now().isoformat(),
         "runs_per_dataset": runs,
         "grid_resolution": grid_res,
@@ -152,14 +153,11 @@ def run_benchmark(
         "datasets": datasets,
     }
 
+    run_path = Path(run_layout["results_json"])
     latest_path = RESULTS_DIR / "comparison_results.json"
-    run_path = run_results_dir / "comparison_results.json"
-
-    with open(run_path, "w") as f:
-        json.dump(_serialize_result(output), f, indent=4)
-
-    with open(latest_path, "w") as f:
-        json.dump(_serialize_result(output), f, indent=4)
+    serialized = _serialize_result(output)
+    write_json(run_path, serialized)
+    write_json(latest_path, serialized)
         
     return output, run_figures_dir, run_results_dir
 

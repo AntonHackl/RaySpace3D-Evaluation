@@ -12,16 +12,16 @@ from benchmarks.common.scenario_utils import (
     RAYSPACE_DIR,
     canonical_sphere_pair_paths,
     count_vertices,
+    create_benchmark_run_layout,
     ensure_sphere_pair_dataset,
     get_shared_data_dirs,
-    timestamp_tag,
+    write_json,
 )
 from benchmarks.mesh_intersection.adapters.cgal_adapter import CGALIntersectionAdapter
 from benchmarks.mesh_intersection.adapters.raytracer_adapter import RaytracerIntersectionAdapter
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-RUNS_DIR = SCRIPT_DIR / "runs"
 CGAL_BASE_DIR = REPO_ROOT / "baselines" / "RaySpace3DBaselines" / "CGAL"
 SPHERE_TEMPLATE_DIR = REPO_ROOT / "benchmarks" / "mesh_overlap" / "data" / "single_obj_files"
 
@@ -44,7 +44,7 @@ def main():
     args = parser.parse_args()
 
     dirs = get_shared_data_dirs("mesh_complexity")
-    RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "intersection_mesh_complexity")
 
     estimated = RaytracerIntersectionAdapter(
         str(RAYSPACE_DIR), mode="estimated", preprocessed_dir=str(dirs["preprocessed"]),
@@ -111,7 +111,9 @@ def main():
         "metadata": {
             "scenario": "mesh_complexity",
             "query_type": "intersection",
-            "timestamp": timestamp_tag(),
+            "timestamp": run_layout["timestamp"],
+            "run_name": run_layout["run_name"],
+            "run_dir": str(run_layout["run_dir"]),
             "stages": args.stages,
             "num_objects": args.num_objects,
             "selectivity": args.selectivity,
@@ -129,9 +131,8 @@ def main():
         "results": results,
     }
 
-    out = RUNS_DIR / f"intersection_mesh_complexity_{timestamp_tag()}.json"
-    with open(out, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2)
+    out = run_layout["results_json"]
+    write_json(out, payload)
     print(f"Saved: {out}")
 
 

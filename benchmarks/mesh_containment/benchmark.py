@@ -2,9 +2,9 @@
 import argparse
 import json
 import sys
-from datetime import datetime
 from pathlib import Path
 
+from benchmarks.common.scenario_utils import create_benchmark_run_layout
 from benchmarks.mesh_containment.adapters import (
     CGALContainmentAdapter,
     RaytracerContainmentAdapter,
@@ -93,7 +93,7 @@ def main():
     parser.add_argument("--cgal-dir", type=str, default=str(CGAL_BASE_DIR), help="Path to CGAL baseline directory")
     parser.add_argument("--threads", type=int, default=None, help="Number of threads for CGAL")
     parser.add_argument("--timeout", type=float, default=120.0, help="Timeout per run in seconds")
-    parser.add_argument("--log-dir", type=str, default=str(RUNS_DIR / "logs"), help="Directory to write run logs")
+    parser.add_argument("--log-dir", type=str, default=None, help="Deprecated: logs are now written inside each run folder")
     parser.add_argument("--no-logs", action="store_true", help="Disable writing logs to files")
 
     args = parser.parse_args()
@@ -121,18 +121,17 @@ def main():
 
     preprocessed_dir.mkdir(parents=True, exist_ok=True)
     timings_dir.mkdir(parents=True, exist_ok=True)
-    RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "mesh_containment_benchmark")
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_name = f"{args.dataset}_{args.runs}runs_{timestamp}"
+    timestamp = run_layout["timestamp"]
+    run_name = run_layout["run_name"]
 
     run_log_dir = None
     benchmark_log_file = None
     tee_file_handle = None
 
     if not args.no_logs:
-        run_log_dir = Path(args.log_dir) / run_name
-        run_log_dir.mkdir(parents=True, exist_ok=True)
+        run_log_dir = Path(run_layout["logs_dir"])
         benchmark_log_file = run_log_dir / "benchmark.log"
         tee_file_handle = open(benchmark_log_file, "w", encoding="utf-8")
         sys.stdout = _Tee(sys.stdout, tee_file_handle)
@@ -218,7 +217,7 @@ def main():
             cross_product_size = 0
             selectivity = 0.0
 
-        output_file = RUNS_DIR / f"{run_name}.json"
+        output_file = Path(run_layout["results_json"])
         json_results = {
             "metadata": {
                 "timestamp": timestamp,
@@ -227,6 +226,7 @@ def main():
                 "file2": file2_path.name,
                 "num_runs": args.runs,
                 "run_name": run_name,
+                "run_dir": str(run_layout["run_dir"]),
                 "log_dir": str(run_log_dir) if run_log_dir else None,
                 "benchmark_log": str(benchmark_log_file) if benchmark_log_file else None,
                 "num_obj1": int(ssot_stats["num_obj1"]),

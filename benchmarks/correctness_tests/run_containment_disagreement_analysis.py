@@ -16,6 +16,7 @@ REPO_ROOT = SCRIPT_DIR.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from benchmarks.common.adapters.base import run_command_streaming
+from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json, write_latest_json_alias
 from benchmarks.mesh_containment.adapters.raytracer_adapter import RaytracerContainmentAdapter
 
 RAW_DIR = SCRIPT_DIR / "data" / "raw"
@@ -366,11 +367,9 @@ def main():
 
     PREPROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     TIMINGS_DIR.mkdir(parents=True, exist_ok=True)
-    RUNS_DIR.mkdir(parents=True, exist_ok=True)
-
-    run_name = f"containment_disagreement_{time.strftime('%Y%m%d_%H%M%S')}"
-    run_dir = RUNS_DIR / run_name
-    run_dir.mkdir(parents=True, exist_ok=True)
+    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "containment_disagreement")
+    run_name = run_layout["run_name"]
+    run_dir = Path(run_layout["run_dir"])
 
     rs_pairs_csv = run_dir / "rayspace_containment_pairs.csv"
     rs_timing_json = run_dir / "rayspace_containment_timing.json"
@@ -378,6 +377,7 @@ def main():
     cgal_log = run_dir / "cgal_containment.log"
     details_csv = run_dir / "sampled_pair_decisions.csv"
     report_json = run_dir / "summary.json"
+    results_json = Path(run_layout["results_json"])
     latest_json = RUNS_DIR / "containment_disagreement_latest.json"
 
     use_existing_pair_csvs = bool(args.rayspace_pairs_csv and args.cgal_pairs_csv)
@@ -505,7 +505,8 @@ def main():
     summary = {
         "metadata": {
             "run_name": run_name,
-            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "timestamp": run_layout["timestamp"],
+            "run_dir": str(run_dir),
             "mesh_a": mesh_a,
             "mesh_b": mesh_b,
             "max_eval_pairs": args.max_eval_pairs,
@@ -550,10 +551,9 @@ def main():
         ],
     }
 
-    with open(report_json, "w", encoding="utf-8") as handle:
-        json.dump(summary, handle, indent=2)
-    with open(latest_json, "w", encoding="utf-8") as handle:
-        json.dump(summary, handle, indent=2)
+    write_json(results_json, summary)
+    write_json(report_json, summary)
+    write_latest_json_alias(latest_json, summary)
 
     print("\n=== Containment Disagreement Analysis ===")
     print(f"RaySpace pairs:        {len(rs_pairs)}")
@@ -565,6 +565,7 @@ def main():
     print(f"RaySpace correct:      {rayspace_correct}")
     print(f"CGAL correct:          {cgal_correct}")
     print(f"Inconclusive:          {inconclusive}")
+    print(f"Results JSON:          {results_json}")
     print(f"Summary JSON:          {report_json}")
     print(f"Latest JSON:           {latest_json}")
     print(f"Details CSV:           {details_csv}")

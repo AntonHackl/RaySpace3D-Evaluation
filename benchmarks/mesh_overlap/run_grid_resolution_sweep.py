@@ -17,6 +17,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
 
 # ---------------------------------------------------------------------------
 # Repo-relative constants
@@ -218,9 +219,9 @@ def compute_hash_table_size_from_estimate(estimated_pairs, load_factor):
 def main():
     args = parse_args()
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    run_dir = Path(args.output_dir) / f"grid_resolution_sweep_{timestamp}"
-    run_dir.mkdir(parents=True, exist_ok=True)
+    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_grid_resolution_sweep")
+    timestamp = run_layout["timestamp"]
+    run_dir = Path(run_layout["run_dir"])
 
     pre_root = run_dir / "preprocessed"
     timings_root = run_dir / "timings"
@@ -612,13 +613,11 @@ def main():
         "runs": merged_runs,
     }
 
-    output_json = run_dir / "grid_resolution_sweep_results.json"
-    with open(output_json, "w", encoding="utf-8") as f:
-        json.dump(output, f, indent=2)
+    output_json = Path(run_layout["results_json"])
+    write_json(output_json, output)
 
     latest_json = Path(args.output_dir) / "grid_resolution_sweep_latest.json"
-    with open(latest_json, "w", encoding="utf-8") as f:
-        json.dump(output, f, indent=2)
+    write_json(latest_json, output)
 
     print(f"\nSaved results:\n  {output_json}\n  {latest_json}")
 

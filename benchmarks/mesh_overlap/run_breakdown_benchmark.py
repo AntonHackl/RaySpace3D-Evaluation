@@ -3,8 +3,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import argparse
 from pathlib import Path
-from datetime import datetime
 from adapters.raytracer_adapter import RaytracerAdapter
+from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
 
 # Configuration
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -21,14 +21,9 @@ RUNS_DIR = SCRIPT_DIR / "runs"
 FILE1 = "nu400_n_nv150_nu400_vs100_r30.dt"
 FILE2 = "nu400_v_nv150_nu400_vs100_r30.dt"
 
-def run_experiment(runs, grid_resolution):
+def run_experiment(runs, grid_resolution, run_log_dir):
     print("--- Starting Breakdown Experiment ---")
-    
-    # Setup Logging
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_name = f"breakdown_{runs}runs_{timestamp}"
-    run_log_dir = RUNS_DIR / "logs" / run_name
-    run_log_dir.mkdir(parents=True, exist_ok=True)
+
     print(f"Logging runs to: {run_log_dir}")
 
     # Initialize Adapters
@@ -102,9 +97,9 @@ def run_experiment(runs, grid_resolution):
     
     return results
 
-def plot_results(results):
+def plot_results(results, figures_dir):
     print("\nPlotting results...")
-    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+    figures_dir.mkdir(parents=True, exist_ok=True)
     
     modes = list(results.keys()) # ["Exact", "Estimated"]
     
@@ -183,7 +178,7 @@ def plot_results(results):
     ax.set_xticklabels(modes)
     ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     
-    output_path = FIGURES_DIR / "mesh_overlap_breakdown.png"
+    output_path = figures_dir / "mesh_overlap_breakdown.png"
     plt.tight_layout()
     plt.savefig(output_path)
     print(f"Figure saved to {output_path}")
@@ -194,7 +189,10 @@ def main():
     parser.add_argument("--grid-resolution", type=int, default=10, help="Grid resolution for RaySpace")
     args = parser.parse_args()
     
-    results = run_experiment(args.runs, args.grid_resolution)
+    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_breakdown")
+    run_log_dir = Path(run_layout["logs_dir"])
+    figures_dir = Path(run_layout["figures_dir"])
+    results = run_experiment(args.runs, args.grid_resolution, run_log_dir)
     
     if results:
         print("\nResults Summary:")
@@ -204,7 +202,22 @@ def main():
             for k, v in data['breakdown'].items():
                 print(f"    {k}: {v:.2f} ms")
                 
-        plot_results(results)
+        plot_results(results, figures_dir)
+        out_json = Path(run_layout["results_json"])
+        write_json(
+            out_json,
+            {
+                "metadata": {
+                    "timestamp": run_layout["timestamp"],
+                    "run_name": run_layout["run_name"],
+                    "run_dir": str(run_layout["run_dir"]),
+                    "runs": args.runs,
+                    "grid_resolution": args.grid_resolution,
+                },
+                "results": results,
+            },
+        )
+        print(f"Saved results to {out_json}")
 
 if __name__ == "__main__":
     main()

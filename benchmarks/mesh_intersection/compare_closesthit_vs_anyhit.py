@@ -13,14 +13,12 @@ sys.path.insert(0, str(REPO_ROOT))
 from benchmarks.common.scenario_utils import (
     RAYSPACE_DIR,
     canonical_cube_pair_paths,
+    create_benchmark_run_layout,
     ensure_cube_pair_dataset,
     get_shared_data_dirs,
-    timestamp_tag,
+    write_json,
 )
 from benchmarks.mesh_intersection.adapters.raytracer_adapter import RaytracerIntersectionAdapter
-
-RUNS_DIR = SCRIPT_DIR / "runs"
-
 
 def _safe_speedup(closest_ms: float, anyhit_ms: float):
     if anyhit_ms <= 0.0:
@@ -127,7 +125,7 @@ def main():
     args = parser.parse_args()
 
     dirs = get_shared_data_dirs("mesh_intersection_anyhit_compare")
-    RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "mesh_intersection_closest_vs_anyhit")
 
     mesh_a, mesh_b = canonical_cube_pair_paths(
         dirs["raw"],
@@ -182,7 +180,9 @@ def main():
     payload = {
         "metadata": {
             "scenario": "mesh_intersection_anyhit_compare",
-            "timestamp": timestamp_tag(),
+            "timestamp": run_layout["timestamp"],
+            "run_name": run_layout["run_name"],
+            "run_dir": str(run_layout["run_dir"]),
             "num_cubes_a": args.num_cubes_a,
             "num_cubes_b": args.num_cubes_b,
             "selectivity": args.selectivity,
@@ -208,9 +208,8 @@ def main():
         },
     }
 
-    out = RUNS_DIR / f"mesh_intersection_closest_vs_anyhit_{timestamp_tag()}.json"
-    with open(out, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2)
+    out = Path(run_layout["results_json"])
+    write_json(out, payload)
 
     print("=== Comparison Summary ===")
     print(f"Closest-hit mean (ms): {closest_mean:.3f}")

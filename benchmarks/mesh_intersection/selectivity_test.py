@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 import argparse
-import json
 import sys
-import time
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -11,9 +9,11 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from benchmarks.common.scenario_utils import (
     canonical_cube_pair_paths,
+    create_benchmark_run_layout,
     ensure_cube_pair_dataset,
     get_shared_data_dirs,
     compute_universe_for_selectivity,
+    write_json,
 )
 from benchmarks.mesh_intersection.adapters.cgal_adapter import CGALIntersectionAdapter
 from benchmarks.mesh_intersection.adapters.raytracer_adapter import RaytracerIntersectionAdapter
@@ -29,7 +29,6 @@ TIMEOUT_SECONDS = 120.0
 RAYSPACE_DIR = REPO_ROOT / "src/RaySpace3D"
 CGAL_BASE_DIR = REPO_ROOT / "baselines" / "RaySpace3DBaselines" / "CGAL"
 RESULTS_DIR = SCRIPT_DIR / "results" / "selectivity_test"
-RUNS_DIR = SCRIPT_DIR / "runs"
 
 
 def main():
@@ -45,8 +44,8 @@ def main():
     raw_dir = dirs["raw"]
     preprocessed_dir = dirs["preprocessed"]
     timings_dir = dirs["timings"]
+    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "intersection_selectivity")
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    RUNS_DIR.mkdir(parents=True, exist_ok=True)
     
     cgal_adapter = CGALIntersectionAdapter(str(CGAL_BASE_DIR), preprocessed_dir=str(preprocessed_dir))
 
@@ -159,20 +158,17 @@ def main():
 
         summary_results.append(res_per_sel)
 
-    # Save to conventional results path
+    # Keep legacy summary path for compatibility.
     summary_path = RESULTS_DIR / "summary.json"
-    with open(summary_path, 'w', encoding='utf-8') as f:
-        json.dump(summary_results, f, indent=4)
+    write_json(summary_path, summary_results)
     print(f"\nSummary saved to {summary_path}")
 
-    # Also save with timestamp to runs/ directory
-    timestamp = time.strftime("%Y%m%d_%H%M%S")
-    runs_path = RUNS_DIR / f"intersection_selectivity_{timestamp}.json"
-    
-    # Bundle metadata with results for the runs/ version
+    # Canonical per-run artifact.
     full_output = {
         "metadata": {
-            "timestamp": timestamp,
+            "timestamp": run_layout["timestamp"],
+            "run_name": run_layout["run_name"],
+            "run_dir": str(run_layout["run_dir"]),
             "selectivities": SELECTIVITIES,
             "num_cubes": NUM_CUBES,
             "runs": args.runs,
@@ -180,9 +176,9 @@ def main():
         },
         "results": summary_results
     }
-    
-    with open(runs_path, 'w', encoding='utf-8') as f:
-        json.dump(full_output, f, indent=4)
+
+    runs_path = run_layout["results_json"]
+    write_json(runs_path, full_output)
     print(f"Detailed run log saved to {runs_path}")
 
 

@@ -5,6 +5,7 @@ import json
 import argparse
 from pathlib import Path
 import subprocess
+from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
 
 # Add current directory to path to import adapters
 # Add current directory to path to import adapters
@@ -49,6 +50,8 @@ def main():
                         help="Approaches to run")
     parser.add_argument("--runs", type=int, default=5, help="Number of runs per selectivity")
     args = parser.parse_args()
+
+    run_layout = create_benchmark_run_layout(Path(__file__).parent, "overlap_selectivity")
 
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     PREPROCESSED_DIR.mkdir(parents=True, exist_ok=True)
@@ -214,11 +217,29 @@ def main():
 
         summary_results.append(res_per_sel)
 
-    # Save summary
+    # Keep legacy summary output for compatibility.
     summary_path = RESULTS_DIR / "summary.json"
-    with open(summary_path, 'w') as f:
-        json.dump(summary_results, f, indent=4)
+    write_json(summary_path, summary_results)
     print(f"\nSummary saved to {summary_path}")
+
+    # Canonical per-run artifact.
+    run_results_path = Path(run_layout["results_json"])
+    write_json(
+        run_results_path,
+        {
+            "metadata": {
+                "timestamp": run_layout["timestamp"],
+                "run_name": run_layout["run_name"],
+                "run_dir": str(run_layout["run_dir"]),
+                "runs": args.runs,
+                "approaches": args.approaches,
+                "selectivities": SELECTIVITIES,
+                "num_cubes": NUM_CUBES,
+            },
+            "results": summary_results,
+        },
+    )
+    print(f"Run results saved to {run_results_path}")
 
 if __name__ == "__main__":
     main()
