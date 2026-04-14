@@ -113,8 +113,19 @@ build_cmake_project() {
             echo -e "  Attempting build with current environment..."
         else
             echo -e "  Activating conda environment: ${conda_env}"
-            # Initialize conda for the current shell
-            eval "$(conda shell.bash hook)"
+            # Initialize conda for this non-interactive shell in a stable way.
+            local conda_base conda_sh
+            conda_base="$(conda info --base 2>/dev/null || true)"
+            conda_sh="${conda_base}/etc/profile.d/conda.sh"
+
+            if [[ -n "$conda_base" && -f "$conda_sh" ]]; then
+                # shellcheck disable=SC1090
+                source "$conda_sh"
+            else
+                echo -e "  ${RED}ERROR${NC}: Unable to locate conda.sh (conda base: ${conda_base:-<unknown>})"
+                return 1
+            fi
+
             conda activate "$conda_env" || {
                 echo -e "  ${RED}ERROR${NC}: Failed to activate conda env '${conda_env}'"
                 return 1

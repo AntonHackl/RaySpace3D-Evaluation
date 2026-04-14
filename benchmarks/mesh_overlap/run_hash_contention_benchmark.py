@@ -79,6 +79,8 @@ def parse_args():
                         help="Skip dataset generation if OBJ files already exist")
     parser.add_argument("--skip-preprocess",action="store_true",
                         help="Skip preprocessing if .pre files already exist")
+    parser.add_argument("--no-visualize",   action="store_true",
+                        help="Do not automatically launch visualization")
     return parser.parse_args()
 
 
@@ -96,6 +98,7 @@ def run_cmd(cmd, desc):
 
 def make_adapter(rayspace_dir, preprocessed_dir, timings_dir, grid_resolution,
                  warmup_runs, hash_table_size=None, track_hash_contention=False,
+                 hash_table_free_mem_fraction=0.9):
     return RaytracerAdapter(
         rayspace_dir=str(rayspace_dir),
         mode="direct_estimation",
