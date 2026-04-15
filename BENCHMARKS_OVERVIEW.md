@@ -34,7 +34,11 @@ This file gives a quick map of benchmark entrypoints in this repository and what
 
 ## Cross-Query Comparison Benchmark
 
-- benchmarks/intersection_vs_overlap/run_benchmark.py: Compares RaySpace intersection query and overlap direct-estimation query on matched datasets to explain performance differences.
+- benchmarks/mesh_query_comparison/run_nu_scalability.py: Standard NU scalability benchmark that compares overlap, intersection, and containment in one run (default all three, configurable subset via flags).
+- benchmarks/mesh_query_comparison/run_cube_scalability.py: Standard cube scalability benchmark for multi-query comparison.
+- benchmarks/mesh_query_comparison/selectivity_test.py: Standard selectivity benchmark for multi-query comparison.
+- benchmarks/mesh_query_comparison/run_mesh_complexity_benchmark.py: Standard mesh complexity benchmark for multi-query comparison.
+- benchmarks/intersection_vs_overlap/run_benchmark.py: Deprecated wrapper that forwards nu/cube runs to mesh_query_comparison.
 
 ## Correctness and Disagreement Benchmarks
 

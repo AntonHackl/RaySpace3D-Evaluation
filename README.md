@@ -18,7 +18,8 @@ RaySpace3D-Evaluation/
 ├── benchmarks/
 │   ├── pip/                     # Point-in-polygon benchmark (27-position grid test)
 │   ├── mesh_overlap/            # Mesh overlap join benchmark
-│   └── mesh_containment/        # Mesh containment validation
+│   ├── mesh_containment/        # Mesh containment validation
+│   └── mesh_query_comparison/   # Unified overlap/intersection/containment comparison
 ├── datasets/                    # Shared test datasets
 ├── build_all.sh                 # Build all components
 └── test_all.sh                  # Smoke-test all built executables
@@ -139,6 +140,29 @@ python benchmark.py \
 - `run_breakdown_benchmark.py` — per-phase timing breakdown
 - `selectivity_test.py` — selectivity estimation accuracy
 - `visualize_results.py` — generate plots from result JSON files
+
+### Mesh Query Comparison Benchmark
+
+Compares mesh overlap, mesh intersection, and mesh containment in a single run and writes isolated run artifacts under `benchmarks/mesh_query_comparison/runs/<benchmark_name>_<timestamp>/results.json`.
+
+```bash
+cd benchmarks/mesh_query_comparison
+
+# Standard defaults compare all three query types
+python run_nu_scalability.py
+python run_cube_scalability.py
+python selectivity_test.py
+python run_mesh_complexity_benchmark.py
+
+# Optional subset selection
+python run_nu_scalability.py --queries overlap intersection
+python run_nu_scalability.py --queries intersection containment
+```
+
+Key options shared by the runners:
+- `--queries` (or `--approaches` alias): choose which query types to compare
+- `--runs`, `--warmup-runs`, `--timeout`, `--grid-resolution`
+- `--overlap-mode`, `--intersection-mode` for RaySpace implementation selection
 
 ### Point-in-Polygon (PIP) Benchmark
 
