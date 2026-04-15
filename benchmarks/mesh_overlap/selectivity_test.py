@@ -6,6 +6,12 @@ import argparse
 from pathlib import Path
 import subprocess
 from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
+from benchmarks.common.scenario_utils import (
+    canonical_cube_pair_paths,
+    compute_universe_for_selectivity,
+    ensure_cube_pair_dataset,
+    get_shared_data_dirs,
+)
 
 # Add current directory to path to import adapters
 # Add current directory to path to import adapters
@@ -34,13 +40,7 @@ TIMINGS_DIR = DATA_DIR / "timings" / "selectivity_test"
 RESULTS_DIR = Path(__file__).parent / "results" / "selectivity_test"
 
 GENERATOR_SCRIPT = RAYSPACE_DIR / "scripts/generate_cubes_by_selectivity.py"
-
-def compute_universe_for_selectivity(target_selectivity, min_size, max_size):
-    avg_size = (min_size + max_size) / 2.0
-    if target_selectivity <= 0:
-        raise ValueError("Target selectivity must be positive")
-    universe_extent = (2.0 * avg_size) / (target_selectivity ** (1.0/3.0))
-    return universe_extent
+SHARED_SCENARIO = "selectivity"
 
 def main():
     parser = argparse.ArgumentParser(description="Selectivity Benchmark for Mesh Overlap")
@@ -53,7 +53,7 @@ def main():
 
     run_layout = create_benchmark_run_layout(Path(__file__).parent, "overlap_selectivity")
 
-    RAW_DIR.mkdir(parents=True, exist_ok=True)
+    shared_dirs = get_shared_data_dirs(SHARED_SCENARIO)
     PREPROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     TIMINGS_DIR.mkdir(parents=True, exist_ok=True)
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -74,37 +74,37 @@ def main():
         print(f"Grid Resolution: {grid_resolution} (Cell Size: {universe_extent/grid_resolution:.2f})")
 
         # 2. Generate Data
-        file_suffix = str(selectivity).replace('.', '_')
-        obj_a = RAW_DIR / f"cubes_a_sel_{file_suffix}.obj"
-        obj_b = RAW_DIR / f"cubes_b_sel_{file_suffix}.obj"
+        obj_a, obj_b = canonical_cube_pair_paths(
+            shared_dirs["raw"],
+            num_cubes_a=NUM_CUBES,
+            num_cubes_b=NUM_CUBES,
+            min_size=MIN_SIZE,
+            max_size=MAX_SIZE,
+            selectivity=selectivity,
+            seed=42,
+            grid_resolution=grid_resolution,
+        )
         
         # .dt paths for consistent naming in adapter
         dt_a = obj_a.with_suffix('.dt') 
         dt_b = obj_b.with_suffix('.dt')
-
-        if not obj_a.exists() or not obj_b.exists():
-            print("Generating cubes...")
-            cmd = [
-                "python3", str(GENERATOR_SCRIPT),
-                "--num-cubes-a", str(NUM_CUBES),
-                "--num-cubes-b", str(NUM_CUBES),
-                "--min-size", str(MIN_SIZE),
-                "--max-size", str(MAX_SIZE),
-                "--selectivity", str(selectivity),
-                "--output-a", str(obj_a),
-                "--output-b", str(obj_b),
-                "--seed", "42"
-            ]
-            subprocess.run(cmd, check=True)
-        else:
-            print("Files already exist, skipping generation.")
+        ensure_cube_pair_dataset(
+            obj_a,
+            obj_b,
+            num_cubes_a=NUM_CUBES,
+            num_cubes_b=NUM_CUBES,
+            min_size=MIN_SIZE,
+            max_size=MAX_SIZE,
+            selectivity=selectivity,
+            seed=42,
+        )
 
         # 3. Setup Adapter
         adapter = RaytracerAdapter(
             str(RAYSPACE_DIR), 
             mode="exact", 
-            preprocessed_dir=str(PREPROCESSED_DIR),
-            timings_dir=str(TIMINGS_DIR),
+            preprocessed_dir=str(shared_dirs["preprocessed"]),
+            timings_dir=str(shared_dirs["timings"]),
             grid_resolution=grid_resolution,
             warmup_runs=2
         )
@@ -120,7 +120,7 @@ def main():
         # Setup TDBase & Preprocess
         tdbase_adapter = TDBaseAdapter(
             str(TDBASE_DIR),
-            preprocessed_dir=str(PREPROCESSED_DIR)
+            preprocessed_dir=str(shared_dirs["preprocessed"])
         )
         print("Ensuring preprocessed files (TDBase)...")
         # For TDBase, we convert obj to dt using the tool
@@ -131,11 +131,11 @@ def main():
         # Setup CGAL & TOUCH
         cgal_adapter = CGALAdapter(
             str(CGAL_DIR),
-            preprocessed_dir=str(PREPROCESSED_DIR)
+            preprocessed_dir=str(shared_dirs["preprocessed"])
         )
         touch_adapter = TOUCHAdapter(
             str(CGAL_DIR),
-            preprocessed_dir=str(PREPROCESSED_DIR)
+            preprocessed_dir=str(shared_dirs["preprocessed"])
         )
         # CGAL and TOUCH use the same preprocessed files as Raytracer (.pre), which are already generated.
 

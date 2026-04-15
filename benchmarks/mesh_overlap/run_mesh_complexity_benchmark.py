@@ -9,6 +9,12 @@ from datetime import datetime
 import subprocess 
 import json
 from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
+from benchmarks.common.scenario_utils import (
+    canonical_sphere_pair_paths,
+    count_vertices,
+    ensure_sphere_pair_dataset,
+    get_shared_data_dirs,
+)
 
 # Add current directory to path to import adapters
 sys.path.append(str(Path(__file__).parent))
@@ -28,51 +34,28 @@ TIMINGS_DIR = DATA_DIR / "timings"
 FIGURES_DIR = SCRIPT_DIR / "figures"
 RUNS_DIR = SCRIPT_DIR / "runs"
 SINGLE_OBJ_DIR = DATA_DIR / "single_obj_files"
+SPHERE_TEMPLATE_DIR = REPO_ROOT / "benchmarks" / "mesh_overlap" / "data" / "single_obj_files"
+SHARED_SCENARIO = "mesh_complexity"
 
 TIMEOUT_SECONDS = 3600.0  # Allow longer timeout for dense meshes
-
-def count_vertices(obj_path):
-    count = 0
-    with open(obj_path, 'r') as f:
-        for line in f:
-            if line.startswith('v '):
-                count += 1
-    return count
-
-def generate_datasets(stage_idx, num_objects, selectivity, template_path, file_a, file_b):
-    print(f"Generating datasets for Stage {stage_idx} ({num_objects} objects, sel={selectivity})...")
-    gen_script = RAYSPACE_DIR / "scripts/cpp_generator/generate_spheres"
-    
-    cmd = [
-        str(gen_script),
-        "--template-obj", str(template_path),
-        "--num-objs-a", str(num_objects),
-        "--num-objs-b", str(num_objects),
-        "--min-size", "1.0",
-        "--max-size", "5.0",
-        "--selectivity", str(selectivity),
-        "-oa", str(file_a),
-        "-ob", str(file_b),
-        "--seed", "42"
-    ]
-    subprocess.run(cmd, check=True)
 
 def run_experiment(runs, grid_resolution, num_objects, selectivity, run_log_dir):
     print("--- Starting Mesh Complexity Experiment ---")
 
-    PREPROCESSED_DIR.mkdir(parents=True, exist_ok=True)
-    TIMINGS_DIR.mkdir(parents=True, exist_ok=True)
+    shared_dirs = get_shared_data_dirs(SHARED_SCENARIO)
     
     exact_adapter = RaytracerAdapter(
         str(RAYSPACE_DIR), mode="exact", preprocessed_dir=str(PREPROCESSED_DIR), 
-        timings_dir=str(TIMINGS_DIR), grid_resolution=grid_resolution, warmup_runs=1
+        timings_dir=str(shared_dirs["timings"]), grid_resolution=grid_resolution, warmup_runs=1
     )
     estimated_adapter = RaytracerAdapter(
         str(RAYSPACE_DIR), mode="estimated", preprocessed_dir=str(PREPROCESSED_DIR), 
-        timings_dir=str(TIMINGS_DIR), grid_resolution=grid_resolution, warmup_runs=1
+        timings_dir=str(shared_dirs["timings"]), grid_resolution=grid_resolution, warmup_runs=1
     )
-    cgal_adapter = CGALAdapter(str(CGAL_DIR), preprocessed_dir=str(PREPROCESSED_DIR))
-    touch_adapter = TOUCHAdapter(str(CGAL_DIR), preprocessed_dir=str(PREPROCESSED_DIR))
+    exact_adapter.preprocessed_dir = shared_dirs["preprocessed"]
+    estimated_adapter.preprocessed_dir = shared_dirs["preprocessed"]
+    cgal_adapter = CGALAdapter(str(CGAL_DIR), preprocessed_dir=str(shared_dirs["preprocessed"]))
+    touch_adapter = TOUCHAdapter(str(CGAL_DIR), preprocessed_dir=str(shared_dirs["preprocessed"]))
     
     results = {
         "complexities": [],
@@ -86,7 +69,7 @@ def run_experiment(runs, grid_resolution, num_objects, selectivity, run_log_dir)
     # Iterate over exactly 10 stages
     for stage in range(1, 11):
         template_name = f"Sphere_Stage_{stage}.obj"
-        template_path = SINGLE_OBJ_DIR / template_name
+        template_path = SPHERE_TEMPLATE_DIR / template_name
         
         if not template_path.exists():
             print(f"Warning: {template_path} not found. Skipping Stage {stage}.")
@@ -95,13 +78,26 @@ def run_experiment(runs, grid_resolution, num_objects, selectivity, run_log_dir)
         vertices_count = count_vertices(template_path)
         print(f"\n--- Processing Stage {stage} (Vertices per mesh: {vertices_count}) ---")
         
-        obj_str = f"{num_objects//1000}k" if num_objects >= 1000 else str(num_objects)
-        file_a = RAW_DIR / f"sphere_stage_{stage}_{obj_str}_a.obj"
-        file_b = RAW_DIR / f"sphere_stage_{stage}_{obj_str}_b.obj"
-        
-        # Generator
-        if not file_a.exists() or not file_b.exists():
-            generate_datasets(stage, num_objects, selectivity, template_path, file_a, file_b)
+        file_a, file_b = canonical_sphere_pair_paths(
+            shared_dirs["raw"],
+            template_name=template_name,
+            num_objects=num_objects,
+            min_size=1.0,
+            max_size=5.0,
+            selectivity=selectivity,
+            seed=42,
+            grid_resolution=grid_resolution,
+        )
+        ensure_sphere_pair_dataset(
+            file_a,
+            file_b,
+            template_obj=template_path,
+            num_objects=num_objects,
+            min_size=1.0,
+            max_size=5.0,
+            selectivity=selectivity,
+            seed=42,
+        )
             
         exact_adapter.preprocess_from_source(str(file_a), str(file_a), log_dir=str(run_log_dir))
         exact_adapter.preprocess_from_source(str(file_b), str(file_b), log_dir=str(run_log_dir))
@@ -146,12 +142,6 @@ def run_experiment(runs, grid_resolution, num_objects, selectivity, run_log_dir)
         results["touch"]["std"].append(res_touch.get("std"))
         
         print(f"Stage {stage} done. Vertices={vertices_count}, Exact={res_exact.get('mean')}, Est={res_est.get('mean')}")
-
-        # Delete datasets again as requested
-        if file_a.exists():
-            file_a.unlink()
-        if file_b.exists():
-            file_b.unlink()
 
     return results
 

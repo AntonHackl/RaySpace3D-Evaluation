@@ -8,6 +8,11 @@ from datetime import datetime
 import subprocess 
 import json
 from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
+from benchmarks.common.scenario_utils import (
+    canonical_cube_pair_paths,
+    ensure_cube_pair_dataset,
+    get_shared_data_dirs,
+)
 
 # Add current directory to path to import adapters
 sys.path.append(str(Path(__file__).parent))
@@ -32,13 +37,13 @@ TIMEOUT_SECONDS = 120.0
 # Cube Counts for Dataset B (Dataset A is fixed at 200k)
 CUBE_COUNTS = [200000, 400000, 600000, 1000000]
 FIXED_COUNT = "200k_a"
+SHARED_SCENARIO = "cube_scalability"
 
 def run_experiment(runs, grid_resolution, run_log_dir):
     print("--- Starting Cube Scalability Experiment ---")
     
-    # Ensure directories exist
-    PREPROCESSED_DIR.mkdir(parents=True, exist_ok=True)
-    TIMINGS_DIR.mkdir(parents=True, exist_ok=True)
+    shared_dirs = get_shared_data_dirs(SHARED_SCENARIO)
+    shared_raw_dir = shared_dirs["raw"]
 
     print(f"Logging runs to: {run_log_dir}")
 
@@ -47,8 +52,8 @@ def run_experiment(runs, grid_resolution, run_log_dir):
     exact_adapter = RaytracerAdapter(
         str(RAYSPACE_DIR), 
         mode="exact", 
-        preprocessed_dir=str(PREPROCESSED_DIR), 
-        timings_dir=str(TIMINGS_DIR),
+        preprocessed_dir=str(shared_dirs["preprocessed"]), 
+        timings_dir=str(shared_dirs["timings"]),
         grid_resolution=grid_resolution,
         warmup_runs=1
     )
@@ -56,20 +61,20 @@ def run_experiment(runs, grid_resolution, run_log_dir):
     estimated_adapter = RaytracerAdapter(
         str(RAYSPACE_DIR), 
         mode="estimated", 
-        preprocessed_dir=str(PREPROCESSED_DIR), 
-        timings_dir=str(TIMINGS_DIR),
+        preprocessed_dir=str(shared_dirs["preprocessed"]), 
+        timings_dir=str(shared_dirs["timings"]),
         grid_resolution=grid_resolution,
         warmup_runs=1
     )
 
     cgal_adapter = CGALAdapter(
         str(CGAL_DIR),
-        preprocessed_dir=str(PREPROCESSED_DIR)
+        preprocessed_dir=str(shared_dirs["preprocessed"])
     )
     
     touch_adapter = TOUCHAdapter(
         str(CGAL_DIR),
-        preprocessed_dir=str(PREPROCESSED_DIR)
+        preprocessed_dir=str(shared_dirs["preprocessed"])
     )
     
     results = {
@@ -80,22 +85,29 @@ def run_experiment(runs, grid_resolution, run_log_dir):
         "touch": {"mean": [], "std": []}
     }
 
-    filename_a = f"cubes_{FIXED_COUNT}.obj"
-    f1_path = RAW_DIR / filename_a
-    
-    if not f1_path.exists():
-        print(f"Error: Dataset A ({f1_path}) not found!")
-        return None
-
     for count in CUBE_COUNTS:
-        filename_b = f"cubes_{count // 1000}k_b.obj"
-        f2_path = RAW_DIR / filename_b
+        f1_path, f2_path = canonical_cube_pair_paths(
+            shared_raw_dir,
+            num_cubes_a=200000,
+            num_cubes_b=count,
+            min_size=1.0,
+            max_size=2.0,
+            selectivity=0.001,
+            seed=42,
+            grid_resolution=grid_resolution,
+        )
+        ensure_cube_pair_dataset(
+            f1_path,
+            f2_path,
+            num_cubes_a=200000,
+            num_cubes_b=count,
+            min_size=1.0,
+            max_size=2.0,
+            selectivity=0.001,
+            seed=42,
+        )
         
-        if not f2_path.exists():
-            print(f"Error: Dataset B ({f2_path}) not found! Skipping.")
-            continue
-        
-        print(f"\nProcessing: {filename_a} vs {filename_b}")
+        print(f"\nProcessing: {f1_path.name} vs {f2_path.name}")
 
         # Check/Run Preprocessing (Exact/Estimated share preprocessed files)
         print("Checking preprocessing...")

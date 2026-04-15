@@ -71,6 +71,20 @@ def canonical_sphere_pair_paths(
     return raw_dir / f"{stem}_a.obj", raw_dir / f"{stem}_b.obj"
 
 
+def canonical_nu_pair_paths(
+    raw_dir: Path,
+    *,
+    nu: int,
+    nv: int = 150,
+    vs: int = 100,
+    radius: int = 30,
+) -> Tuple[Path, Path]:
+    stem = f"tdbase_n_nv{nv}_nu{nu}"
+    n_file = raw_dir / f"{stem}_n_nv{nv}_nu{nu}_vs{vs}_r{radius}.dt"
+    v_file = raw_dir / f"{stem}_v_nv{nv}_nu{nu}_vs{vs}_r{radius}.dt"
+    return n_file, v_file
+
+
 def compute_universe_for_selectivity(target_selectivity: float, min_size: float, max_size: float) -> float:
     if target_selectivity <= 0:
         raise ValueError("Target selectivity must be positive")
@@ -158,6 +172,34 @@ def ensure_sphere_pair_dataset(
     ]
     run_cmd(cmd, f"Generating spheres from {template_obj.name} (n={num_objects}, sel={selectivity})")
     return output_a, output_b
+
+
+def ensure_nu_pair_dataset(
+    output_n: Path,
+    output_v: Path,
+    *,
+    legacy_raw_dirs: list[Path] | None = None,
+) -> Tuple[Path, Path]:
+    if output_n.exists() and output_v.exists():
+        return output_n, output_v
+
+    search_dirs = legacy_raw_dirs or []
+    for base_dir in search_dirs:
+        cand_n = base_dir / output_n.name
+        cand_v = base_dir / output_v.name
+        if cand_n.exists() and cand_v.exists():
+            output_n.parent.mkdir(parents=True, exist_ok=True)
+            output_v.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(cand_n, output_n)
+            shutil.copyfile(cand_v, output_v)
+            return output_n, output_v
+
+    raise FileNotFoundError(
+        "Could not resolve nu dataset pair. Missing files: "
+        f"{output_n} and/or {output_v}. "
+        "Provide the canonical files under benchmarks/data_shared/nu_scalability/raw "
+        "or pass legacy_raw_dirs containing exact filenames."
+    )
 
 
 def count_vertices(obj_path: Path) -> int:

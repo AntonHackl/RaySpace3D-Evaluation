@@ -9,6 +9,11 @@ import subprocess
 import json
 import re
 from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
+from benchmarks.common.scenario_utils import (
+    canonical_nu_pair_paths,
+    ensure_nu_pair_dataset,
+    get_shared_data_dirs,
+)
 
 # Add current directory to path to import adapters
 sys.path.append(str(Path(__file__).parent))
@@ -34,30 +39,17 @@ TIMEOUT_SECONDS = 120.0
 
 # Nu Counts for Dataset B (Dataset A is fixed at corresponding vessel count)
 DEFAULT_NU_COUNTS = [200, 400, 600, 800]
+LEGACY_RAW_DIR = RAW_DIR
+SHARED_SCENARIO = "nu_scalability"
 
-def find_dataset_files(nu):
-    """Find the nuclei (n) and vessel (v) files for a given nu count."""
-    # Pattern 1: Short name (e.g. nu200_n_...)
-    # Pattern 2: TDBase naming (e.g. tdbase_n_nv150_nu200_n_...)
-    
-    # Dataset A: Vessel (v)
-    candidates_v = list(RAW_DIR.glob(f"*_v_*nu{nu}*.dt"))
-    # Filter to avoid matching other things if any
-    candidates_v = [c for c in candidates_v if "nv150" in c.name]
-    
-    # Dataset B: Nuclei (n)
-    candidates_n = list(RAW_DIR.glob(f"*_n_*nu{nu}*.dt"))
-    candidates_n = [c for c in candidates_n if "nv150" in c.name and "_n2_" not in c.name]
-
-    if not candidates_v or not candidates_n:
-        return None, None
-    
-    # Prefer non-tdbase prefixed if both exist? Actually usually only one exists or they are same.
-    # Sort to be deterministic
-    candidates_v.sort(key=lambda x: len(x.name))
-    candidates_n.sort(key=lambda x: len(x.name))
-    
-    return candidates_v[0], candidates_n[0]
+def resolve_nu_dataset_pair(raw_shared_dir: Path, nu: int):
+    n_file, v_file = canonical_nu_pair_paths(raw_shared_dir, nu=nu)
+    ensure_nu_pair_dataset(
+        n_file,
+        v_file,
+        legacy_raw_dirs=[LEGACY_RAW_DIR],
+    )
+    return v_file, n_file
 
 def run_experiment(runs, grid_resolution, nu_counts, run_log_dir, approaches=None, track_hash_contention=False):
     if approaches is None:
@@ -69,6 +61,8 @@ def run_experiment(runs, grid_resolution, nu_counts, run_log_dir, approaches=Non
         print("Direct estimation hash contention tracking: enabled")
     
     # Ensure directories exist
+    shared_dirs = get_shared_data_dirs(SHARED_SCENARIO)
+    shared_raw_dir = shared_dirs["raw"]
     PREPROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     TIMINGS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -122,10 +116,10 @@ def run_experiment(runs, grid_resolution, nu_counts, run_log_dir, approaches=Non
     }
 
     for nu in nu_counts:
-        f_v_path, f_n_path = find_dataset_files(nu)
+        f_v_path, f_n_path = resolve_nu_dataset_pair(shared_raw_dir, nu)
         
         if not f_v_path or not f_n_path:
-            print(f"Error: Datasets for nu={nu} not found in {RAW_DIR}! Skipping.")
+            print(f"Error: Datasets for nu={nu} not found in {shared_raw_dir}! Skipping.")
             continue
         
         print(f"\nProcessing nu={nu}: {f_v_path.name} vs {f_n_path.name}")
