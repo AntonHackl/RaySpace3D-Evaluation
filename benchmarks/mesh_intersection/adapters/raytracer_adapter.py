@@ -110,9 +110,12 @@ class RaytracerIntersectionAdapter(IntersectionBenchmarkAdapter):
             expected_prefixes = [
                 "selectivity estimation",
                 "raytrace_hash_",
+                "raytrace_overlap_hash_",
+                "raytrace_containment_hash_",
                 "execute hash query",
                 "download results",
                 "query",
+                "compact_hash_table_pairs",
             ]
         else:
             expected_prefixes = ["selectivity estimation"]
@@ -205,7 +208,15 @@ class RaytracerIntersectionAdapter(IntersectionBenchmarkAdapter):
                     if execute_hash > 0.0:
                         query_time += execute_hash
                     else:
-                        query_time += sum(v for k, v in phase_values.items() if k.startswith("raytrace_hash_"))
+                        query_time += sum(
+                            v
+                            for k, v in phase_values.items()
+                            if (
+                                k.startswith("raytrace_hash_")
+                                or k.startswith("raytrace_overlap_hash_")
+                                or k.startswith("raytrace_containment_hash_")
+                            )
+                        )
                     query_time += phase_values.get("download results", 0.0)
                 else:
                     query_time = phase_values.get("selectivity estimation", 0.0)

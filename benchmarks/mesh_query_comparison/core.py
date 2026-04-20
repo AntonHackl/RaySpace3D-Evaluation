@@ -14,6 +14,47 @@ from benchmarks.mesh_overlap.adapters.raytracer_adapter import RaytracerAdapter 
 
 QUERY_CHOICES = ["overlap", "intersection", "containment"]
 
+GROUP_COLORS = {
+    "Selectivity estimation": "#4C78A8",
+    "Edge raytrace Mesh1->Mesh2": "#F58518",
+    "Edge raytrace Mesh2->Mesh1": "#E45756",
+    "Containment raytrace Mesh1->Mesh2": "#72B7B2",
+    "Containment raytrace Mesh2->Mesh1": "#54A24B",
+    "Download results": "#B279A2",
+    "Hash compaction": "#FF9DA6",
+}
+
+GROUPED_BREAKDOWN_COMPONENTS = [
+    (
+        "Selectivity estimation",
+        ["selectivity estimation"],
+    ),
+    (
+        "Edge raytrace Mesh1->Mesh2",
+        ["raytrace_hash_mesh1tomesh2", "raytrace_overlap_hash_mesh1tomesh2"],
+    ),
+    (
+        "Edge raytrace Mesh2->Mesh1",
+        ["raytrace_hash_mesh2tomesh1", "raytrace_overlap_hash_mesh2tomesh1"],
+    ),
+    (
+        "Containment raytrace Mesh1->Mesh2",
+        ["raytrace_containment_hash_mesh1tomesh2"],
+    ),
+    (
+        "Containment raytrace Mesh2->Mesh1",
+        ["raytrace_containment_hash_mesh2tomesh1"],
+    ),
+    (
+        "Download results",
+        ["download results"],
+    ),
+    (
+        "Hash compaction",
+        ["compact_hash_table_pairs", "deduplication", "gpu deduplication"],
+    ),
+]
+
 
 def add_query_selection_arguments(parser) -> None:
     parser.add_argument(
@@ -190,6 +231,27 @@ def _normalize_breakdown_entry(entry: Any) -> Dict[str, float]:
     return normalized
 
 
+def _build_grouped_component_matrix(
+    query_breakdowns: Sequence[Dict[str, float]],
+) -> tuple[list[str], list[np.ndarray]]:
+    group_names: list[str] = []
+    group_values: list[np.ndarray] = []
+
+    for group_name, aliases in GROUPED_BREAKDOWN_COMPONENTS:
+        vals = np.array(
+            [
+                sum(float(entry.get(alias, 0.0)) for alias in aliases)
+                for entry in query_breakdowns
+            ],
+            dtype=float,
+        )
+        if np.any(vals > 0):
+            group_names.append(group_name)
+            group_values.append(vals)
+
+    return group_names, group_values
+
+
 def generate_query_comparison_figures(
     *,
     results_rows: Sequence[Dict[str, Any]],
@@ -229,26 +291,73 @@ def generate_query_comparison_figures(
     fig.savefig(figures_dir / "query_time_comparison.pdf")
     plt.close(fig)
 
-    # Figure 2+: One stacked breakdown chart per query.
+    # Figure 1b: Query-labeled stacked breakdown comparison (averaged over dataset cases).
+    grouped_means_by_query: dict[str, dict[str, float]] = {}
+    group_order: list[str] = []
     for query in queries:
         query_breakdowns = []
-        component_names: set[str] = set()
         for row in results_rows:
             item = row.get(query, {})
             normalized = _normalize_breakdown_entry(item.get("breakdown") if isinstance(item, dict) else {})
             query_breakdowns.append(normalized)
-            component_names.update(normalized.keys())
 
-        if not component_names:
+        group_names, group_values = _build_grouped_component_matrix(query_breakdowns)
+        grouped_means_by_query[query] = {}
+        for g_name, g_vals in zip(group_names, group_values):
+            grouped_means_by_query[query][g_name] = float(np.mean(g_vals)) if len(g_vals) > 0 else 0.0
+            if g_name not in group_order:
+                group_order.append(g_name)
+
+    if grouped_means_by_query and group_order:
+        xq = np.arange(len(queries))
+        fig, ax = plt.subplots(figsize=(max(9, 2.4 * len(queries)), 6))
+        bottoms = np.zeros(len(queries), dtype=float)
+        for group_name in group_order:
+            vals = np.array([grouped_means_by_query[q].get(group_name, 0.0) for q in queries], dtype=float)
+            ax.bar(
+                xq,
+                vals,
+                bottom=bottoms,
+                label=group_name,
+                color=GROUP_COLORS.get(group_name, "#9D9D9D"),
+            )
+            bottoms += vals
+
+        ax.set_title(f"{title_prefix}: Query Time Breakdown by Query")
+        ax.set_xlabel("Query")
+        ax.set_ylabel("Average breakdown time (ms)")
+        ax.set_xticks(xq)
+        ax.set_xticklabels(list(queries))
+        ax.grid(True, axis="y", linestyle="--", alpha=0.3)
+        ax.legend(loc="upper right", fontsize=9)
+        fig.tight_layout()
+        fig.savefig(figures_dir / "query_time_breakdown_comparison.png", dpi=180)
+        fig.savefig(figures_dir / "query_time_breakdown_comparison.pdf")
+        plt.close(fig)
+
+    # Figure 2+: One stacked breakdown chart per query.
+    for query in queries:
+        query_breakdowns = []
+        for row in results_rows:
+            item = row.get(query, {})
+            normalized = _normalize_breakdown_entry(item.get("breakdown") if isinstance(item, dict) else {})
+            query_breakdowns.append(normalized)
+
+        group_names, group_values = _build_grouped_component_matrix(query_breakdowns)
+        if not group_names:
             continue
 
-        ordered_components = sorted(component_names)
         fig, ax = plt.subplots(figsize=(max(10, 2.5 * len(case_labels)), 6))
         bottoms = np.zeros(len(case_labels), dtype=float)
 
-        for component in ordered_components:
-            vals = np.array([bd.get(component, 0.0) for bd in query_breakdowns], dtype=float)
-            ax.bar(x, vals, bottom=bottoms, label=component)
+        for group_name, vals in zip(group_names, group_values):
+            ax.bar(
+                x,
+                vals,
+                bottom=bottoms,
+                label=group_name,
+                color=GROUP_COLORS.get(group_name, "#9D9D9D"),
+            )
             bottoms += vals
 
         ax.set_title(f"{title_prefix}: {query} breakdown")

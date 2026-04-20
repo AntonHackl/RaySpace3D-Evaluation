@@ -167,9 +167,8 @@ class RaytracerContainmentAdapter(ContainmentBenchmarkAdapter):
 
                 runtimes.append(query_time)
 
-                for phase in ["query", "download results"]:
-                    if phase in phase_values:
-                        breakdown_accum.setdefault(phase, []).append(phase_values[phase])
+                for phase, duration in phase_values.items():
+                    breakdown_accum.setdefault(phase, []).append(duration)
 
             except subprocess.TimeoutExpired:
                 return {"error": f"Timeout reached ({timeout}s)"}
