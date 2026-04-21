@@ -23,7 +23,7 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
         overlap_max_iterations: int = 100,
     ):
         """
-        mode: 'exact' or 'estimated'
+        mode: 'exact' or 'direct_estimation'
         grid_cell_size: resolution for grid generation (default: 10)
         hash_table_size: manually override hash table slot count for direct_estimation mode
         hash_table_free_mem_fraction: fraction of currently free GPU memory to use for hash table size in direct_estimation mode
@@ -49,8 +49,6 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
         query_bin_dir = self.rayspace_dir / "query" / "build" / "bin"
         if self.mode == "exact":
             self.executable = query_bin_dir / "raytracer_mesh_overlap"
-        elif self.mode in ("estimated", "estimate_only"):
-            self.executable = query_bin_dir / "raytracer_overlap_estimated"
         elif self.mode == "direct_estimation":
             self.executable = query_bin_dir / "raytracer_overlap_direct_estimation"
         else:
@@ -155,19 +153,15 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
                 "download results",
                 "query",
             ]
-        elif self.mode in ("estimated", "direct_estimation"):
-            # For estimated mode, include selectivity estimation in query time
+        elif self.mode == "direct_estimation":
+            # For direct_estimation mode, include selectivity estimation in query time
             expected_prefixes = [
                 "selectivity estimation",
                 "raytrace_hash_",
                 "download results",
                 "query",
                 "compact_hash_table_pairs",
-                "gpu deduplication",
             ]
-        else:
-            # estimate_only
-            expected_prefixes = ["selectivity estimation"]
 
         # Execute num_runs times, each with warmup
         for run_idx in range(num_runs):
@@ -202,8 +196,7 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
                 max_iter = overlap_max_iterations if overlap_max_iterations is not None else self.overlap_max_iterations
                 cmd.extend(["--overlap-max-iterations", str(max_iter)])
 
-            if self.mode == "estimate_only":
-                cmd.append("--estimate-only")
+
             
             try:
                 log_path = None
@@ -329,7 +322,6 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
                         "raytrace_overlap_hash_mesh1tomesh2",
                         "raytrace_overlap_hash_mesh2tomesh1",
                         "compact_hash_table_pairs",
-                        "gpu deduplication",
                         "download results",
                     ]
                     query_time = sum(phase_values.get(c, 0.0) for c in components)
@@ -337,7 +329,8 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
                          # Fallback to 'query' or 'execute hash query' if components not found
                          query_time = phase_values.get("execute hash query", 0.0) or phase_values.get("query", 0.0)
                 else:
-                    query_time = phase_values.get("selectivity estimation", 0.0)
+                    # In direct_estimation mode, if no components found, fallback
+                    query_time = phase_values.get("execute hash query", 0.0) or phase_values.get("query", 0.0)
 
                 found = query_time > 0.0
 

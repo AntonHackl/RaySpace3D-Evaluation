@@ -44,7 +44,7 @@ def main():
 
     add_query_selection_arguments(parser)
 
-    parser.add_argument("--overlap-mode", type=str, default="direct_estimation", choices=["exact", "estimated", "direct_estimation", "estimate_only"])
+    parser.add_argument("--overlap-mode", type=str, default="direct_estimation", choices=["direct_estimation"])
     parser.add_argument("--intersection-mode", type=str, default="estimated", choices=["estimated", "estimate_only"])
     parser.add_argument("--overlap-query-direction", type=str, default="both", choices=["both", "mesh1_to_mesh2", "mesh2_to_mesh1"])
     parser.add_argument("--intersection-query-direction", type=str, default="both", choices=["both", "mesh1_to_mesh2", "mesh2_to_mesh1"])
