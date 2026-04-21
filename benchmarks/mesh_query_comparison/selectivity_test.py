@@ -48,7 +48,7 @@ def main():
     parser.add_argument("--intersection-mode", type=str, default="estimated", choices=["estimated", "estimate_only"])
     parser.add_argument("--overlap-query-direction", type=str, default="both", choices=["both", "mesh1_to_mesh2", "mesh2_to_mesh1"])
     parser.add_argument("--intersection-query-direction", type=str, default="both", choices=["both", "mesh1_to_mesh2", "mesh2_to_mesh1"])
-    parser.add_argument("--overlap-max-iterations", type=float, default=1.00)
+    parser.add_argument("--overlap-max-iterations", type=float, default=100.0)
     parser.add_argument("--containment-max-iterations", type=int, default=512)
     parser.add_argument("--hash-load-factor", type=float, default=0.5)
     parser.add_argument("--enable-profiling-stats", action="store_true")
@@ -87,6 +87,7 @@ def main():
             intersection_mode=args.intersection_mode,
             include_overlap_pairs=args.include_overlap_pairs,
             use_anyhit_point_in_mesh=args.use_anyhit_point_in_mesh,
+            overlap_max_iterations=int(args.overlap_max_iterations),
         )
 
         mesh_a, mesh_b = canonical_cube_pair_paths(

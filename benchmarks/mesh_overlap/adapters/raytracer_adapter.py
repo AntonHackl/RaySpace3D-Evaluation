@@ -20,6 +20,7 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
         use_alpha_correction: bool = True,
         hash_table_size: Optional[int] = None,
         hash_table_free_mem_fraction: Optional[float] = None,
+        overlap_max_iterations: int = 100,
     ):
         """
         mode: 'exact' or 'estimated'
@@ -38,6 +39,7 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
         self.use_alpha_correction = use_alpha_correction
         self.hash_table_size = hash_table_size
         self.hash_table_free_mem_fraction = hash_table_free_mem_fraction
+        self.overlap_max_iterations = overlap_max_iterations
         # Ensure directories exist
         self.timings_dir.mkdir(parents=True, exist_ok=True)
         self.preprocessed_dir.mkdir(parents=True, exist_ok=True)
@@ -110,6 +112,7 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
         query_direction: str = "both",
         pairs_output: Optional[str] = None,
         estimate_only: bool = False,
+        overlap_max_iterations: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Execute the overlap join query."""
         if not self.executable.exists():
@@ -194,6 +197,10 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
                     cmd.extend(["--pairs-output", str(pairs_output)])
                 if estimate_only:
                     cmd.append("--estimate-only")
+                
+                # Pass max iterations
+                max_iter = overlap_max_iterations if overlap_max_iterations is not None else self.overlap_max_iterations
+                cmd.extend(["--overlap-max-iterations", str(max_iter)])
 
             if self.mode == "estimate_only":
                 cmd.append("--estimate-only")

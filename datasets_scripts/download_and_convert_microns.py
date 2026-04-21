@@ -73,10 +73,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Only convert existing .npz files in --input-dir to GLB.",
     )
+    script_dir = Path(__file__).parent
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default="./microns_meshes_npz",
+        default=script_dir / "microns_data" / "microns_meshes_npz",
         help="Directory to store downloaded .npz files.",
     )
     parser.add_argument(
@@ -88,7 +89,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default="microns_neurons.glb",
+        default=script_dir / "microns_data" / "microns_neurons.glb",
         help="Output GLB filename.",
     )
     parser.add_argument(

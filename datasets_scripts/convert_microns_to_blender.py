@@ -28,10 +28,11 @@ except ImportError:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    script_dir = Path(__file__).parent
     parser.add_argument(
         "--input-dir",
         type=Path,
-        default=None,
+        default=script_dir / "microns_data" / "microns_mesh_subset_lod0",
         help="Directory containing .npz mesh files. If not provided, uses --download-from-gcs.",
     )
     parser.add_argument(
@@ -42,7 +43,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default="microns_mesh_subset.glb",
+        default=script_dir / "microns_data" / "microns_mesh_subset.glb",
         help="Output GLB filename (when using --combine). Or output directory (when using --separate).",
     )
     parser.add_argument(

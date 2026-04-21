@@ -3,11 +3,11 @@ set -u
 
 REPO_ID="fengyi233/CarlaOcc"
 SUBSET="CarlaOccV1_mini"
-LOCAL_DIR="./carlaocc_dataset"
+LOCAL_DIR="$(dirname "$0")/carlaocc_dataset"
 MAX_WORKERS="2"
 INITIAL_BACKOFF_SECONDS="330"
 MAX_BACKOFF_SECONDS="900"
-LOG_DIR="./tmp"
+LOG_DIR="$(dirname "$0")/../tmp"
 LOG_FILE="${LOG_DIR}/carlaocc_download_last.log"
 
 usage() {

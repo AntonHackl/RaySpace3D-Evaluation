@@ -93,6 +93,7 @@ def build_raytracer_query_adapters(
     intersection_mode: str,
     include_overlap_pairs: bool,
     use_anyhit_point_in_mesh: bool,
+    overlap_max_iterations: int = 100,
 ) -> Dict[str, Any]:
     rayspace_dir = repo_root / "src" / "RaySpace3D"
 
@@ -103,6 +104,7 @@ def build_raytracer_query_adapters(
         timings_dir=str(shared_dirs["timings"]),
         grid_cell_size=grid_cell_size,
         warmup_runs=warmup_runs,
+        overlap_max_iterations=overlap_max_iterations,
     )
     intersection = RaytracerIntersectionAdapter(
         str(rayspace_dir),
@@ -186,6 +188,7 @@ def run_selected_queries(
             runs,
             timeout=timeout,
             log_dir=log_dir_str,
+            extra_args=intersection_extra_args,
         )
 
     return results
@@ -291,49 +294,63 @@ def generate_query_comparison_figures(
     fig.savefig(figures_dir / "query_time_comparison.pdf")
     plt.close(fig)
 
-    # Figure 1b: Query-labeled stacked breakdown comparison (averaged over dataset cases).
-    grouped_means_by_query: dict[str, dict[str, float]] = {}
-    group_order: list[str] = []
-    for query in queries:
-        query_breakdowns = []
-        for row in results_rows:
-            item = row.get(query, {})
-            normalized = _normalize_breakdown_entry(item.get("breakdown") if isinstance(item, dict) else {})
-            query_breakdowns.append(normalized)
+    # Figure 1b: Query-labeled grouped stacked breakdown comparison (one chart, all datasets).
+    # This chart shows one "set of bars" per dataset, where each set compares query types.
+    width = 0.8 / max(1, len(queries))
+    fig, ax = plt.subplots(figsize=(max(12, 3.0 * len(case_labels)), 7))
+    bottoms = np.zeros((len(case_labels), len(queries)))
 
-        group_names, group_values = _build_grouped_component_matrix(query_breakdowns)
-        grouped_means_by_query[query] = {}
-        for g_name, g_vals in zip(group_names, group_values):
-            grouped_means_by_query[query][g_name] = float(np.mean(g_vals)) if len(g_vals) > 0 else 0.0
-            if g_name not in group_order:
-                group_order.append(g_name)
+    active_components_added = set()
 
-    if grouped_means_by_query and group_order:
-        xq = np.arange(len(queries))
-        fig, ax = plt.subplots(figsize=(max(9, 2.4 * len(queries)), 6))
-        bottoms = np.zeros(len(queries), dtype=float)
-        for group_name in group_order:
-            vals = np.array([grouped_means_by_query[q].get(group_name, 0.0) for q in queries], dtype=float)
-            ax.bar(
-                xq,
-                vals,
-                bottom=bottoms,
-                label=group_name,
-                color=GROUP_COLORS.get(group_name, "#9D9D9D"),
-            )
-            bottoms += vals
+    for group_name, aliases in GROUPED_BREAKDOWN_COMPONENTS:
+        color = GROUP_COLORS.get(group_name, "#9D9D9D")
+        label_added_for_this_group = False
 
-        ax.set_title(f"{title_prefix}: Query Time Breakdown by Query")
-        ax.set_xlabel("Query")
-        ax.set_ylabel("Average breakdown time (ms)")
-        ax.set_xticks(xq)
-        ax.set_xticklabels(list(queries))
-        ax.grid(True, axis="y", linestyle="--", alpha=0.3)
-        ax.legend(loc="upper right", fontsize=9)
-        fig.tight_layout()
-        fig.savefig(figures_dir / "query_time_breakdown_comparison.png", dpi=180)
-        fig.savefig(figures_dir / "query_time_breakdown_comparison.pdf")
-        plt.close(fig)
+        for q_idx, query in enumerate(queries):
+            vals = []
+            for row in results_rows:
+                item = row.get(query, {})
+                breakdown = _normalize_breakdown_entry(item.get("breakdown") if isinstance(item, dict) else {})
+                vals.append(sum(breakdown.get(alias, 0.0) for alias in aliases))
+
+            vals = np.array(vals, dtype=float)
+            if np.any(vals > 0):
+                # Add to legend only if not already present
+                label = ""
+                if group_name not in active_components_added:
+                    label = group_name
+                    active_components_added.add(group_name)
+
+                offsets = x - (0.4 - width / 2.0) + q_idx * width
+                ax.bar(
+                    offsets,
+                    vals,
+                    width=width,
+                    bottom=bottoms[:, q_idx],
+                    label=label,
+                    color=color,
+                    edgecolor="black",
+                    linewidth=0.5,
+                )
+                bottoms[:, q_idx] += vals
+
+    ax.set_title(f"{title_prefix}: Query Time Breakdown Comparison")
+    ax.set_xlabel(x_axis_label)
+    ax.set_ylabel("Breakdown time (ms)")
+    ax.set_xticks(x)
+    ax.set_xticklabels(case_labels, rotation=20, ha="right")
+    ax.grid(True, axis="y", linestyle="--", alpha=0.3)
+    ax.legend(loc="upper right", fontsize=9, title="Phases")
+
+    # Add annotation for query order
+    query_order_str = " | ".join([f"{q[0].upper()}: {q}" for q in queries])
+    ax.text(0.5, -0.22, f"Queries in each group: {query_order_str}",
+            transform=ax.transAxes, ha='center', fontsize=10, fontweight='bold')
+
+    fig.tight_layout()
+    fig.savefig(figures_dir / "query_time_breakdown_comparison.png", dpi=180)
+    fig.savefig(figures_dir / "query_time_breakdown_comparison.pdf")
+    plt.close(fig)
 
     # Figure 2+: One stacked breakdown chart per query.
     for query in queries:

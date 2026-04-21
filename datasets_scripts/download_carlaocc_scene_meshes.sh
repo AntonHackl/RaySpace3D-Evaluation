@@ -5,7 +5,7 @@ TOWN="Town01_Opt"
 MAX_WORKERS="1"
 INITIAL_BACKOFF_SECONDS="330"
 MAX_BACKOFF_SECONDS="900"
-LOCAL_DIR="./carlaocc_dataset"
+LOCAL_DIR="$(dirname "$0")/carlaocc_dataset"
 
 usage() {
   cat <<'EOF'
@@ -71,13 +71,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ ! -f "./download_carlaocc_mini_resumable.sh" ]]; then
-  echo "Error: Missing required script ./download_carlaocc_mini_resumable.sh" >&2
+if [[ ! -f "$(dirname "$0")/download_carlaocc_mini_resumable.sh" ]]; then
+  echo "Error: Missing required script $(dirname "$0")/download_carlaocc_mini_resumable.sh" >&2
   exit 2
 fi
 
-if [[ ! -x "./download_carlaocc_mini_resumable.sh" ]]; then
-  chmod +x ./download_carlaocc_mini_resumable.sh
+if [[ ! -x "$(dirname "$0")/download_carlaocc_mini_resumable.sh" ]]; then
+  chmod +x "$(dirname "$0")/download_carlaocc_mini_resumable.sh"
 fi
 
 TOKEN="${HF_TOKEN:-${HF_READING_DATASETS_TOKEN:-}}"
@@ -86,8 +86,8 @@ if [[ -z "$TOKEN" ]]; then
   exit 2
 fi
 
-mkdir -p ./tmp
-TREE_FILE="./tmp/carlaocc_tree_preflight.json"
+mkdir -p "$(dirname "$0")/../tmp"
+TREE_FILE="$(dirname "$0")/../tmp/carlaocc_tree_preflight.json"
 curl -s -H "Authorization: Bearer ${TOKEN}" \
   "https://huggingface.co/api/datasets/fengyi233/CarlaOcc/tree/main?recursive=true" \
   > "$TREE_FILE"

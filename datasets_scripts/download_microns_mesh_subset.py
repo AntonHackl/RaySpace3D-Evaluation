@@ -39,9 +39,11 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional text file with one root_id per line.",
     )
+    
+    script_dir = Path(__file__).parent
     parser.add_argument(
         "--out-dir",
-        default="./tmp/microns_mesh_subset_lod0",
+        default=str(script_dir / "microns_data" / "microns_mesh_subset_lod0"),
         help="Output directory for downloaded meshes.",
     )
     parser.add_argument(

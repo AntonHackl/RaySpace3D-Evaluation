@@ -76,6 +76,7 @@ class RaytracerContainmentAdapter(ContainmentBenchmarkAdapter):
         num_runs: int,
         timeout: Optional[float] = None,
         log_dir: Optional[str] = None,
+        extra_args: Optional[list] = None,
     ) -> Dict[str, Any]:
         if not self.executable.exists():
             return {"error": f"Executable not found: {self.executable}"}
@@ -112,6 +113,8 @@ class RaytracerContainmentAdapter(ContainmentBenchmarkAdapter):
                 "--warmup-runs", str(self.warmup_runs),
                 "--no-export",
             ]
+            if extra_args:
+                cmd.extend(extra_args)
             if self.use_anyhit_point_in_mesh:
                 cmd.append("--use-anyhit-point-in-mesh")
             if self.include_overlap_pairs:

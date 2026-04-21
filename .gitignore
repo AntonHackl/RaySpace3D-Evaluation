@@ -78,5 +78,6 @@ cmake-build-*/
 .env
 
 carlaocc_dataset/
+microns_data/
 
 tmp/

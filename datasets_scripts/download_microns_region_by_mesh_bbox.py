@@ -48,8 +48,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--candidate-limit", type=int, default=20000)
     parser.add_argument("--shuffle", action="store_true")
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--download-dir", default="./tmp/microns_region_4gb_npz")
-    parser.add_argument("--export-dir", default="./tmp/microns_region_4gb_glb")
+    
+    script_dir = Path(__file__).parent
+    parser.add_argument("--download-dir", default=str(script_dir / "microns_data" / "microns_region_4gb_npz"))
+    parser.add_argument("--export-dir", default=str(script_dir / "microns_data" / "microns_region_4gb_glb"))
     parser.add_argument("--format", choices=["glb", "obj"], default="glb")
     parser.add_argument("--separate", action="store_true", default=True)
     parser.add_argument("--no-rescale", action="store_true")
