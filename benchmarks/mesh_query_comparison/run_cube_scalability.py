@@ -32,7 +32,7 @@ DEFAULT_CUBE_COUNTS = [200000, 400000, 600000, 1000000]
 def main():
     parser = argparse.ArgumentParser(description="Cube scalability benchmark for mesh query comparison")
     parser.add_argument("--num-cubes-b", type=int, nargs="+", default=DEFAULT_CUBE_COUNTS)
-    parser.add_argument("--num-cubes-a", type=float, default=1.00000)
+    parser.add_argument("--num-cubes-a", type=int, default=1000)
     parser.add_argument("--min-size", type=float, default=1.0)
     parser.add_argument("--max-size", type=float, default=2.0)
     parser.add_argument("--selectivity", type=float, default=0.001)

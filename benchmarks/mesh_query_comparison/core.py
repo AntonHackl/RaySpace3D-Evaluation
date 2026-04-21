@@ -51,7 +51,7 @@ GROUPED_BREAKDOWN_COMPONENTS = [
     ),
     (
         "Hash compaction",
-        ["compact_hash_table_pairs", "deduplication", "gpu deduplication"],
+        ["compact_hash_table_pairs", "compact_hash_table_pairs (containment)", "compact_hash_table_pairs (overlap)", "deduplication", "gpu deduplication"],
     ),
 ]
 

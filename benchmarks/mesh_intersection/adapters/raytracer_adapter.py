@@ -203,21 +203,20 @@ class RaytracerIntersectionAdapter(IntersectionBenchmarkAdapter):
                 has_detailed_raytrace = any(k.startswith("raytrace_") for k in phase_values.keys())
 
                 if self.mode == "estimated":
-                    query_time = phase_values.get("selectivity estimation", 0.0)
-                    execute_hash = phase_values.get("execute hash query", 0.0)
-                    if execute_hash > 0.0:
-                        query_time += execute_hash
-                    else:
-                        query_time += sum(
-                            v
-                            for k, v in phase_values.items()
-                            if (
-                                k.startswith("raytrace_hash_")
-                                or k.startswith("raytrace_overlap_hash_")
-                                or k.startswith("raytrace_containment_hash_")
-                            )
-                        )
-                    query_time += phase_values.get("download results", 0.0)
+                    # Sum all relevant phases to get the total query time.
+                    # This ensures that query_time and breakdown sum are always identical.
+                    components = [
+                        "selectivity estimation",
+                        "raytrace_hash_mesh1tomesh2",
+                        "raytrace_hash_mesh2tomesh1",
+                        "raytrace_overlap_hash_mesh1tomesh2",
+                        "raytrace_overlap_hash_mesh2tomesh1",
+                        "raytrace_containment_hash_mesh1tomesh2",
+                        "raytrace_containment_hash_mesh2tomesh1",
+                        "compact_hash_table_pairs",
+                        "download results",
+                    ]
+                    query_time = sum(phase_values.get(c, 0.0) for c in components)
                 else:
                     query_time = phase_values.get("selectivity estimation", 0.0)
 

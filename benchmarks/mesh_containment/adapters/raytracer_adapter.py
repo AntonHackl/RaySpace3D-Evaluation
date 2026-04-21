@@ -159,8 +159,21 @@ class RaytracerContainmentAdapter(ContainmentBenchmarkAdapter):
                     normalized_key = re.sub(r"_\d+$", "", key.lower())
                     phase_values[normalized_key] = phase_values.get(normalized_key, 0.0) + phase_data.get("duration_ms", 0.0)
 
-                query_time = phase_values.get("query", 0.0)
-                query_time += phase_values.get("download results", 0.0)
+                # Explicitly sum components to ensure consistency with breakdown
+                components = [
+                    "selectivity estimation",
+                    "raytrace_overlap_hash_mesh1tomesh2",
+                    "raytrace_overlap_hash_mesh2tomesh1",
+                    "raytrace_containment_hash_mesh1tomesh2",
+                    "raytrace_containment_hash_mesh2tomesh1",
+                    "compact_hash_table_pairs (containment)",
+                    "compact_hash_table_pairs (overlap)",
+                    "download results",
+                ]
+                query_time = sum(phase_values.get(c, 0.0) for c in components)
+                if query_time <= 0.0:
+                    # Fallback
+                    query_time = phase_values.get("query", 0.0) + phase_values.get("download results", 0.0)
 
                 if query_time <= 0.0:
                     return {"error": f"Expected query timing not found in {json_output}"}
