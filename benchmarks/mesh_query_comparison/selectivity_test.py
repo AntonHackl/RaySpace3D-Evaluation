@@ -48,7 +48,7 @@ def main():
     parser.add_argument("--intersection-mode", type=str, default="estimated", choices=["estimated", "estimate_only"])
     parser.add_argument("--overlap-query-direction", type=str, default="both", choices=["both", "mesh1_to_mesh2", "mesh2_to_mesh1"])
     parser.add_argument("--intersection-query-direction", type=str, default="both", choices=["both", "mesh1_to_mesh2", "mesh2_to_mesh1"])
-    parser.add_argument("--overlap-max-iterations", type=int, default=100)
+    parser.add_argument("--overlap-max-iterations", type=float, default=1.00)
     parser.add_argument("--containment-max-iterations", type=int, default=512)
     parser.add_argument("--hash-load-factor", type=float, default=0.5)
     parser.add_argument("--enable-profiling-stats", action="store_true")
@@ -76,12 +76,12 @@ def main():
     case_labels = []
     for selectivity in args.selectivities:
         universe_extent = compute_universe_for_selectivity(selectivity, args.min_size, args.max_size)
-        grid_resolution = max(1, int(round(universe_extent / args.grid_cell_size)))
+        grid_cell_size = max(1, int(round(universe_extent / args.grid_cell_size)))
 
         adapters = build_raytracer_query_adapters(
             repo_root=REPO_ROOT,
             shared_dirs=shared_dirs,
-            grid_resolution=grid_resolution,
+            grid_cell_size=grid_cell_size,
             warmup_runs=args.warmup_runs,
             overlap_mode=args.overlap_mode,
             intersection_mode=args.intersection_mode,
@@ -97,7 +97,7 @@ def main():
             max_size=args.max_size,
             selectivity=selectivity,
             seed=args.seed,
-            grid_resolution=grid_resolution,
+            grid_cell_size=grid_cell_size,
         )
         ensure_cube_pair_dataset(
             mesh_a,
@@ -117,7 +117,7 @@ def main():
 
         row = {
             "selectivity": selectivity,
-            "grid_resolution": grid_resolution,
+            "grid_cell_size": grid_cell_size,
             "universe_extent": universe_extent,
             "num_cubes": args.num_cubes,
             "mesh1": str(mesh_a),

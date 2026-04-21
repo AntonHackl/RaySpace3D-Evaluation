@@ -32,14 +32,14 @@ def main():
     parser = argparse.ArgumentParser(description="Cube scalability benchmark for mesh intersection")
     parser.add_argument("--counts", type=int, nargs="+", default=DEFAULT_COUNTS,
                         help="Cube counts for dataset B")
-    parser.add_argument("--fixed-count", type=int, default=200000,
+    parser.add_argument("--fixed-count", type=float, default=1.00000,
                         help="Cube count for fixed dataset A")
     parser.add_argument("--selectivity", type=float, default=0.001,
                         help="Target selectivity for generated datasets")
     parser.add_argument("--min-size", type=float, default=1.0)
     parser.add_argument("--max-size", type=float, default=2.0)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--grid-resolution", type=int, default=10)
+    parser.add_argument("--grid-cell-size", type=float, default=1.0)
     parser.add_argument("--runs", type=int, default=5)
     parser.add_argument("--warmup-runs", type=int, default=1)
     parser.add_argument("--timeout", type=float, default=120.0)
@@ -55,7 +55,7 @@ def main():
 
     estimated_adapter = RaytracerIntersectionAdapter(
         str(RAYSPACE_DIR), mode="estimated", preprocessed_dir=str(dirs["preprocessed"]),
-        timings_dir=str(dirs["timings"]), grid_resolution=args.grid_resolution, warmup_runs=args.warmup_runs,
+        timings_dir=str(dirs["timings"]), grid_cell_size=args.grid_cell_size, warmup_runs=args.warmup_runs,
     )
     cgal_adapter = CGALIntersectionAdapter(str(CGAL_BASE_DIR), preprocessed_dir=str(dirs["preprocessed"]))
 
@@ -69,7 +69,7 @@ def main():
             max_size=args.max_size,
             selectivity=args.selectivity,
             seed=args.seed,
-            grid_resolution=args.grid_resolution,
+            grid_cell_size=args.grid_cell_size,
         )
 
         ensure_cube_pair_dataset(
@@ -127,7 +127,7 @@ def main():
             "min_size": args.min_size,
             "max_size": args.max_size,
             "seed": args.seed,
-            "grid_resolution": args.grid_resolution,
+            "grid_cell_size": args.grid_cell_size,
             "runs": args.runs,
             "warmup_runs": args.warmup_runs,
             "timeout_seconds": args.timeout,

@@ -34,7 +34,7 @@ def main():
     parser.add_argument("--min-size", type=float, default=1.0)
     parser.add_argument("--max-size", type=float, default=5.0)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--grid-resolution", type=int, default=20)
+    parser.add_argument("--grid-cell-size", type=float, default=1.0)
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--warmup-runs", type=int, default=1)
     parser.add_argument("--timeout", type=float, default=3600.0)
@@ -48,7 +48,7 @@ def main():
 
     estimated = RaytracerIntersectionAdapter(
         str(RAYSPACE_DIR), mode="estimated", preprocessed_dir=str(dirs["preprocessed"]),
-        timings_dir=str(dirs["timings"]), grid_resolution=args.grid_resolution, warmup_runs=args.warmup_runs,
+        timings_dir=str(dirs["timings"]), grid_cell_size=args.grid_cell_size, warmup_runs=args.warmup_runs,
     )
     cgal = CGALIntersectionAdapter(str(CGAL_BASE_DIR), preprocessed_dir=str(dirs["preprocessed"]))
 
@@ -67,7 +67,7 @@ def main():
             max_size=args.max_size,
             selectivity=args.selectivity,
             seed=args.seed,
-            grid_resolution=args.grid_resolution,
+            grid_cell_size=args.grid_cell_size,
         )
 
         ensure_sphere_pair_dataset(
@@ -120,7 +120,7 @@ def main():
             "min_size": args.min_size,
             "max_size": args.max_size,
             "seed": args.seed,
-            "grid_resolution": args.grid_resolution,
+            "grid_cell_size": args.grid_cell_size,
             "runs": args.runs,
             "warmup_runs": args.warmup_runs,
             "timeout_seconds": args.timeout,

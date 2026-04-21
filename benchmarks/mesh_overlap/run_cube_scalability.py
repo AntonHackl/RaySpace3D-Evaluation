@@ -39,7 +39,7 @@ CUBE_COUNTS = [200000, 400000, 600000, 1000000]
 FIXED_COUNT = "200k_a"
 SHARED_SCENARIO = "cube_scalability"
 
-def run_experiment(runs, grid_resolution, run_log_dir):
+def run_experiment(runs, grid_cell_size, run_log_dir):
     print("--- Starting Cube Scalability Experiment ---")
     
     shared_dirs = get_shared_data_dirs(SHARED_SCENARIO)
@@ -54,7 +54,7 @@ def run_experiment(runs, grid_resolution, run_log_dir):
         mode="exact", 
         preprocessed_dir=str(shared_dirs["preprocessed"]), 
         timings_dir=str(shared_dirs["timings"]),
-        grid_resolution=grid_resolution,
+        grid_cell_size=grid_cell_size,
         warmup_runs=1
     )
     
@@ -63,7 +63,7 @@ def run_experiment(runs, grid_resolution, run_log_dir):
         mode="estimated", 
         preprocessed_dir=str(shared_dirs["preprocessed"]), 
         timings_dir=str(shared_dirs["timings"]),
-        grid_resolution=grid_resolution,
+        grid_cell_size=grid_cell_size,
         warmup_runs=1
     )
 
@@ -94,7 +94,7 @@ def run_experiment(runs, grid_resolution, run_log_dir):
             max_size=2.0,
             selectivity=0.001,
             seed=42,
-            grid_resolution=grid_resolution,
+            grid_cell_size=grid_cell_size,
         )
         ensure_cube_pair_dataset(
             f1_path,
@@ -345,13 +345,13 @@ def plot_results(results, figures_dir):
 def main():
     parser = argparse.ArgumentParser(description="Mesh Overlap Cube Scalability Experiment")
     parser.add_argument("--runs", type=int, default=5, help="Number of runs per method")
-    parser.add_argument("--grid-resolution", type=int, default=20, help="Grid resolution for RaySpace")
+    parser.add_argument("--grid-cell-size", type=float, default=5.0, help="Grid cell size for RaySpace")
     args = parser.parse_args()
     
     run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_cube_scalability")
     run_log_dir = Path(run_layout["logs_dir"])
     figures_dir = Path(run_layout["figures_dir"])
-    results = run_experiment(args.runs, args.grid_resolution, run_log_dir)
+    results = run_experiment(args.runs, args.grid_cell_size, run_log_dir)
     
     if results and results["counts"]:
         print("\nResults Summary:")
@@ -385,7 +385,7 @@ def main():
                     "run_name": run_layout["run_name"],
                     "run_dir": str(run_layout["run_dir"]),
                     "runs": args.runs,
-                    "grid_resolution": args.grid_resolution,
+                    "grid_cell_size": args.grid_cell_size,
                 },
                 "results": clean_results,
             },

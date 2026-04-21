@@ -83,7 +83,7 @@ def main():
         help="Directory for preprocessed files",
     )
     parser.add_argument("--timings-dir", type=str, default=str(TIMINGS_DIR), help="Directory for timing JSON files")
-    parser.add_argument("--grid-resolution", type=int, default=10, help="Grid resolution for preprocessing")
+    parser.add_argument("--grid-cell-size", type=float, default=1.0, help="Grid resolution for preprocessing")
     parser.add_argument("--raytracer-warmup-runs", type=int, default=1, help="Warmup iterations per run")
     parser.add_argument(
         "--include-overlap-pairs",
@@ -145,7 +145,7 @@ def main():
                     str(RAYSPACE_DIR),
                     preprocessed_dir=str(preprocessed_dir),
                     timings_dir=str(timings_dir),
-                    grid_resolution=args.grid_resolution,
+                    grid_cell_size=args.grid_cell_size,
                     warmup_runs=args.raytracer_warmup_runs,
                     include_overlap_pairs=args.include_overlap_pairs,
                 )
@@ -165,7 +165,7 @@ def main():
                 str(RAYSPACE_DIR),
                 preprocessed_dir=str(preprocessed_dir),
                 timings_dir=str(timings_dir),
-                grid_resolution=args.grid_resolution,
+                grid_cell_size=args.grid_cell_size,
                 warmup_runs=0,
                 include_overlap_pairs=args.include_overlap_pairs,
             )

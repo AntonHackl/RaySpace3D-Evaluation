@@ -15,7 +15,7 @@ class RaytracerIntersectionAdapter(IntersectionBenchmarkAdapter):
         mode: str = "estimated",
         preprocessed_dir: str = "preprocessed",
         timings_dir: str = "timings",
-        grid_resolution: int = 10,
+        grid_cell_size: int = 10,
         warmup_runs: int = 2,
     ):
         normalized_mode = "estimated" if mode == "two_pass" else mode
@@ -24,7 +24,7 @@ class RaytracerIntersectionAdapter(IntersectionBenchmarkAdapter):
         self.mode = normalized_mode
         self.preprocessed_dir = Path(preprocessed_dir)
         self.timings_dir = Path(timings_dir)
-        self.grid_resolution = grid_resolution
+        self.grid_cell_size = grid_cell_size
         self.warmup_runs = warmup_runs
 
         self.timings_dir.mkdir(parents=True, exist_ok=True)
@@ -59,10 +59,10 @@ class RaytracerIntersectionAdapter(IntersectionBenchmarkAdapter):
             "--output-geometry", str(output_geometry),
             "--output-timing", str(output_timing),
             "--generate-grid",
-            "--grid-resolution", str(self.grid_resolution)
+            "--grid-cell-size", str(self.grid_cell_size)
         ]
 
-        print(f"[{self.name}] Preprocessing {source_path.name} (output: {dt_path.name}) with grid (resolution={self.grid_resolution})...")
+        print(f"[{self.name}] Preprocessing {source_path.name} (output: {dt_path.name}) with grid (resolution={self.grid_cell_size})...")
         if log_dir:
             adapter_log_dir = Path(log_dir) / self.name
             adapter_log_dir.mkdir(parents=True, exist_ok=True)

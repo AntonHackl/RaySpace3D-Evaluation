@@ -26,13 +26,13 @@ def main():
     print("Preprocessing Mesh A...")
     subprocess.run([
         str(preprocess_bin), "--mode", "mesh", "--dataset", str(mesh_a),
-        "--output-geometry", str(pre_a), "--generate-grid", "--grid-resolution", "128"
+        "--output-geometry", str(pre_a), "--generate-grid", "--grid-cell-size", "128"
     ], check=True)
     
     print("Preprocessing Mesh B...")
     subprocess.run([
         str(preprocess_bin), "--mode", "mesh", "--dataset", str(mesh_b),
-        "--output-geometry", str(pre_b), "--generate-grid", "--grid-resolution", "128"
+        "--output-geometry", str(pre_b), "--generate-grid", "--grid-cell-size", "128"
     ], check=True)
     
     # 2. Run Containment

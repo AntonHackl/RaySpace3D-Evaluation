@@ -59,7 +59,7 @@ def generate_20k_cube_dataset():
         max_size=4,
         selectivity=0.001,
         seed=42,
-        grid_resolution=None,
+        grid_cell_size=None,
     )
     ensure_cube_pair_dataset(
         obj_a,

@@ -303,7 +303,7 @@ def plot_runtime_lines(results: Dict[str, object], output_path: Path) -> None:
     plt.close()
 
 
-def run_experiment(runs: int, grid_resolution: int, nu_counts: List[int], run_layout) -> Dict[str, object]:
+def run_experiment(runs: int, grid_cell_size: int, nu_counts: List[int], run_layout) -> Dict[str, object]:
     PROJECT_TMP_DIR.mkdir(parents=True, exist_ok=True)
     PREPROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     TIMINGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -317,7 +317,7 @@ def run_experiment(runs: int, grid_resolution: int, nu_counts: List[int], run_la
         mode="exact",
         preprocessed_dir=str(PREPROCESSED_DIR),
         timings_dir=str(TIMINGS_DIR),
-        grid_resolution=grid_resolution,
+        grid_cell_size=grid_cell_size,
         warmup_runs=1,
     )
     direct_adapter = RaytracerAdapter(
@@ -325,7 +325,7 @@ def run_experiment(runs: int, grid_resolution: int, nu_counts: List[int], run_la
         mode="direct_estimation",
         preprocessed_dir=str(PREPROCESSED_DIR),
         timings_dir=str(TIMINGS_DIR),
-        grid_resolution=grid_resolution,
+        grid_cell_size=grid_cell_size,
         warmup_runs=1,
     )
     tdbase_adapter = TDBaseAdapter(str(TDBASE_DIR), preprocessed_dir=str(PREPROCESSED_DIR))
@@ -484,12 +484,12 @@ def run_experiment(runs: int, grid_resolution: int, nu_counts: List[int], run_la
 def main() -> None:
     parser = argparse.ArgumentParser(description="Nu correctness benchmark for overlap approaches")
     parser.add_argument("--runs", type=int, default=5, help="Number of timing runs per approach")
-    parser.add_argument("--grid-resolution", type=int, default=20, help="Grid resolution for RaySpace preprocessing")
+    parser.add_argument("--grid-cell-size", type=float, default=1.0, help="Grid resolution for RaySpace preprocessing")
     parser.add_argument("--nu", type=int, nargs="+", default=DEFAULT_NU_COUNTS, help="Nu values to run")
     args = parser.parse_args()
 
     run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_nu_correctness")
-    results = run_experiment(args.runs, args.grid_resolution, args.nu, run_layout)
+    results = run_experiment(args.runs, args.grid_cell_size, args.nu, run_layout)
     if not results["counts"]:
         print("No successful datasets processed.")
         return
@@ -503,7 +503,7 @@ def main() -> None:
                 "run_name": run_layout["run_name"],
                 "run_dir": str(run_layout["run_dir"]),
                 "runs": args.runs,
-                "grid_resolution": args.grid_resolution,
+                "grid_cell_size": args.grid_cell_size,
                 "nu_counts": args.nu,
             },
             "results": results,

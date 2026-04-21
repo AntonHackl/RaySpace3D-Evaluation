@@ -87,7 +87,7 @@ def build_raytracer_query_adapters(
     *,
     repo_root: Path,
     shared_dirs: Dict[str, Path],
-    grid_resolution: int,
+    grid_cell_size: int,
     warmup_runs: int,
     overlap_mode: str,
     intersection_mode: str,
@@ -101,7 +101,7 @@ def build_raytracer_query_adapters(
         mode=overlap_mode,
         preprocessed_dir=str(shared_dirs["preprocessed"]),
         timings_dir=str(shared_dirs["timings"]),
-        grid_resolution=grid_resolution,
+        grid_cell_size=grid_cell_size,
         warmup_runs=warmup_runs,
     )
     intersection = RaytracerIntersectionAdapter(
@@ -109,14 +109,14 @@ def build_raytracer_query_adapters(
         mode=intersection_mode,
         preprocessed_dir=str(shared_dirs["preprocessed"]),
         timings_dir=str(shared_dirs["timings"]),
-        grid_resolution=grid_resolution,
+        grid_cell_size=grid_cell_size,
         warmup_runs=warmup_runs,
     )
     containment = RaytracerContainmentAdapter(
         str(rayspace_dir),
         preprocessed_dir=str(shared_dirs["preprocessed"]),
         timings_dir=str(shared_dirs["timings"]),
-        grid_resolution=grid_resolution,
+        grid_cell_size=grid_cell_size,
         warmup_runs=warmup_runs,
         use_anyhit_point_in_mesh=use_anyhit_point_in_mesh,
         include_overlap_pairs=include_overlap_pairs,

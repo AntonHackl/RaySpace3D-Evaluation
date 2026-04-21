@@ -74,12 +74,12 @@ def _read_pairs_csv(path: Path) -> Set[Tuple[int, int]]:
     return pairs
 
 
-def _prepare_preprocessed(mesh_a: str, mesh_b: str, grid_resolution: int):
+def _prepare_preprocessed(mesh_a: str, mesh_b: str, grid_cell_size: int):
     prep = RaytracerContainmentAdapter(
         str(RAYSPACE_DIR),
         preprocessed_dir=str(PREPROCESSED_DIR),
         timings_dir=str(TIMINGS_DIR),
-        grid_resolution=grid_resolution,
+        grid_cell_size=grid_cell_size,
         warmup_runs=0,
     )
     prep.preprocess_from_source(mesh_a, _as_dt_name(mesh_a))
@@ -331,10 +331,10 @@ def main():
             "then sample disagreements and adjudicate with strict cube AABB containment."
         )
     )
-    parser.add_argument("--max-eval-pairs", type=int, default=10000)
+    parser.add_argument("--max-eval-pairs", type=float, default=1.0000)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--threads", type=int, default=None, help="CGAL threads")
-    parser.add_argument("--grid-resolution", type=int, default=10)
+    parser.add_argument("--grid-cell-size", type=float, default=1.0)
     parser.add_argument("--warmup-runs", type=int, default=1)
     parser.add_argument("--mesh-a", type=str, default=None, help="Override mesh A path")
     parser.add_argument("--mesh-b", type=str, default=None, help="Override mesh B path")
@@ -401,7 +401,7 @@ def main():
         }
     else:
         print("Preparing preprocessed inputs...")
-        _prepare_preprocessed(mesh_a, mesh_b, args.grid_resolution)
+        _prepare_preprocessed(mesh_a, mesh_b, args.grid_cell_size)
 
         pre_a = PREPROCESSED_DIR / Path(mesh_a).with_suffix(".pre").name
         pre_b = PREPROCESSED_DIR / Path(mesh_b).with_suffix(".pre").name

@@ -39,18 +39,18 @@ SHARED_SCENARIO = "mesh_complexity"
 
 TIMEOUT_SECONDS = 3600.0  # Allow longer timeout for dense meshes
 
-def run_experiment(runs, grid_resolution, num_objects, selectivity, run_log_dir):
+def run_experiment(runs, grid_cell_size, num_objects, selectivity, run_log_dir):
     print("--- Starting Mesh Complexity Experiment ---")
 
     shared_dirs = get_shared_data_dirs(SHARED_SCENARIO)
     
     exact_adapter = RaytracerAdapter(
         str(RAYSPACE_DIR), mode="exact", preprocessed_dir=str(PREPROCESSED_DIR), 
-        timings_dir=str(shared_dirs["timings"]), grid_resolution=grid_resolution, warmup_runs=1
+        timings_dir=str(shared_dirs["timings"]), grid_cell_size=grid_cell_size, warmup_runs=1
     )
     estimated_adapter = RaytracerAdapter(
         str(RAYSPACE_DIR), mode="estimated", preprocessed_dir=str(PREPROCESSED_DIR), 
-        timings_dir=str(shared_dirs["timings"]), grid_resolution=grid_resolution, warmup_runs=1
+        timings_dir=str(shared_dirs["timings"]), grid_cell_size=grid_cell_size, warmup_runs=1
     )
     exact_adapter.preprocessed_dir = shared_dirs["preprocessed"]
     estimated_adapter.preprocessed_dir = shared_dirs["preprocessed"]
@@ -86,7 +86,7 @@ def run_experiment(runs, grid_resolution, num_objects, selectivity, run_log_dir)
             max_size=5.0,
             selectivity=selectivity,
             seed=42,
-            grid_resolution=grid_resolution,
+            grid_cell_size=grid_cell_size,
         )
         ensure_sphere_pair_dataset(
             file_a,
@@ -186,7 +186,7 @@ def plot_results(results, num_objects, selectivity, figures_dir):
 def main():
     parser = argparse.ArgumentParser(description="Mesh Complexity Benchmark")
     parser.add_argument("--runs", type=int, default=3, help="Number of runs per method")
-    parser.add_argument("--grid-resolution", type=int, default=20, help="Grid resolution for RaySpace")
+    parser.add_argument("--grid-cell-size", type=float, default=1.0, help="Grid resolution for RaySpace")
     parser.add_argument("--num-objects", type=int, default=50000, help="Number of objects per dataset")
     parser.add_argument("--selectivity", type=float, default=0.0005, help="Fixed selectivity target")
     args = parser.parse_args()
@@ -194,7 +194,7 @@ def main():
     run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_mesh_complexity")
     run_log_dir = Path(run_layout["logs_dir"])
     figures_dir = Path(run_layout["figures_dir"])
-    results = run_experiment(args.runs, args.grid_resolution, args.num_objects, args.selectivity, run_log_dir)
+    results = run_experiment(args.runs, args.grid_cell_size, args.num_objects, args.selectivity, run_log_dir)
     
     if results and results["complexities"]:
         plot_results(results, args.num_objects, args.selectivity, figures_dir)
@@ -206,7 +206,7 @@ def main():
                 "run_name": run_layout["run_name"],
                 "run_dir": str(run_layout["run_dir"]),
                 "runs": args.runs,
-                "grid_resolution": args.grid_resolution,
+                "grid_cell_size": args.grid_cell_size,
                 "num_objects": args.num_objects,
                 "selectivity": args.selectivity,
             },

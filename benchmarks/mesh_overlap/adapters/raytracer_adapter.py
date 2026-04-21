@@ -14,7 +14,7 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
         mode: str = "exact",
         preprocessed_dir: str = "preprocessed",
         timings_dir: str = "timings",
-        grid_resolution: int = 10,
+        grid_cell_size: float = 5.0,
         warmup_runs: int = 10,
         track_hash_contention: bool = False,
         use_alpha_correction: bool = True,
@@ -23,7 +23,7 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
     ):
         """
         mode: 'exact' or 'estimated'
-        grid_resolution: resolution for grid generation (default: 10)
+        grid_cell_size: resolution for grid generation (default: 10)
         hash_table_size: manually override hash table slot count for direct_estimation mode
         hash_table_free_mem_fraction: fraction of currently free GPU memory to use for hash table size in direct_estimation mode
         """
@@ -32,7 +32,7 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
         self.mode = mode
         self.preprocessed_dir = Path(preprocessed_dir)
         self.timings_dir = Path(timings_dir)
-        self.grid_resolution = grid_resolution
+        self.grid_cell_size = grid_cell_size
         self.warmup_runs = warmup_runs
         self.track_hash_contention = track_hash_contention
         self.use_alpha_correction = use_alpha_correction
@@ -87,10 +87,10 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
             "--output-geometry", str(output_geometry),
             "--output-timing", str(output_timing),
             "--generate-grid",
-            "--grid-resolution", str(self.grid_resolution)
+            "--grid-cell-size", str(self.grid_cell_size)
         ]
         
-        print(f"[{self.name}] Preprocessing {source_path.name} (output: {dt_path.name}) with grid (resolution={self.grid_resolution})...")
+        print(f"[{self.name}] Preprocessing {source_path.name} (output: {dt_path.name}) with grid (resolution={self.grid_cell_size})...")
         if log_dir:
             adapter_log_dir = Path(log_dir) / self.name
             adapter_log_dir.mkdir(parents=True, exist_ok=True)

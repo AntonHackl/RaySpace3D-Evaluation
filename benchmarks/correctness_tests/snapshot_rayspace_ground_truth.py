@@ -50,7 +50,7 @@ def main():
         mode="exact",
         preprocessed_dir=str(PREPROCESSED_DIR),
         timings_dir=str(TIMINGS_DIR),
-        grid_resolution=10,
+        grid_cell_size=10,
         warmup_runs=2,
     )
     intersection_adapter = RaytracerIntersectionAdapter(
@@ -58,14 +58,14 @@ def main():
         mode="estimated",
         preprocessed_dir=str(PREPROCESSED_DIR),
         timings_dir=str(TIMINGS_DIR),
-        grid_resolution=10,
+        grid_cell_size=10,
         warmup_runs=2,
     )
     containment_adapter = RaytracerContainmentAdapter(
         str(RAYSPACE_DIR),
         preprocessed_dir=str(PREPROCESSED_DIR),
         timings_dir=str(TIMINGS_DIR),
-        grid_resolution=10,
+        grid_cell_size=10,
         warmup_runs=1,
     )
 

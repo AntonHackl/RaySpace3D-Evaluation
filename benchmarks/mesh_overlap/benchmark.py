@@ -72,7 +72,7 @@ def print_results(adapter_name, results):
 
 def main():
     parser = argparse.ArgumentParser(description="Mesh Overlap Benchmark")
-    parser.add_argument("--runs", type=int, default=10, help="Number of runs per adapter")
+    parser.add_argument("--runs", type=float, default=1.0, help="Number of runs per adapter")
     parser.add_argument("--dataset", type=str, default=DEFAULT_DATASET, 
                         choices=list(DATASETS.keys()),
                         help=f"Dataset configuration to use: {', '.join(DATASETS.keys())}")
@@ -84,7 +84,7 @@ def main():
     parser.add_argument("--raw-dir", type=str, default=str(RAW_DIR), help="Directory containing raw data files (default: mesh_overlap_benchmark/data/raw)")
     parser.add_argument("--preprocessed-dir", type=str, default=str(PREPROCESSED_DIR), help="Directory for preprocessed files (default: mesh_overlap_benchmark/data/preprocessed)")
     parser.add_argument("--timings-dir", type=str, default=str(TIMINGS_DIR), help="Directory for timing JSON files (default: mesh_overlap_benchmark/data/timings)")
-    parser.add_argument("--grid-resolution", type=int, default=10, help="Grid resolution for RaySpace preprocessing (default: 10)")
+    parser.add_argument("--grid-cell-size", type=float, default=1.0, help="Grid resolution for RaySpace preprocessing (default: 10)")
     parser.add_argument("--raytracer-warmup-runs", type=int, default=1, help="Warmup iterations per raytracer invocation (default: 1; set 0 to disable)")
     parser.add_argument("--raytracer-disable-alpha-correction", action="store_true", help="Disable alpha correction in raytracer_overlap_direct_estimation")
     parser.add_argument("--timeout", type=float, default=120.0, help="Timeout for query execution in seconds (default: 120.0)")
@@ -152,13 +152,13 @@ def main():
         if "tdbase" in args.approaches:
             adapters.append(TDBaseAdapter(str(TDBASE_DIR)))
         if "raytracer_exact" in args.approaches:
-            adapters.append(RaytracerAdapter(str(RAYSPACE_DIR), mode="exact", preprocessed_dir=str(preprocessed_dir), timings_dir=str(timings_dir), grid_resolution=args.grid_resolution, warmup_runs=args.raytracer_warmup_runs))
+            adapters.append(RaytracerAdapter(str(RAYSPACE_DIR), mode="exact", preprocessed_dir=str(preprocessed_dir), timings_dir=str(timings_dir), grid_cell_size=args.grid_cell_size, warmup_runs=args.raytracer_warmup_runs))
         if "raytracer_estimated" in args.approaches:
-            adapters.append(RaytracerAdapter(str(RAYSPACE_DIR), mode="estimated", preprocessed_dir=str(preprocessed_dir), timings_dir=str(timings_dir), grid_resolution=args.grid_resolution, warmup_runs=args.raytracer_warmup_runs))
+            adapters.append(RaytracerAdapter(str(RAYSPACE_DIR), mode="estimated", preprocessed_dir=str(preprocessed_dir), timings_dir=str(timings_dir), grid_cell_size=args.grid_cell_size, warmup_runs=args.raytracer_warmup_runs))
         if "raytracer_estimate_only" in args.approaches:
-            adapters.append(RaytracerAdapter(str(RAYSPACE_DIR), mode="estimate_only", preprocessed_dir=str(preprocessed_dir), timings_dir=str(timings_dir), grid_resolution=args.grid_resolution, warmup_runs=args.raytracer_warmup_runs))
+            adapters.append(RaytracerAdapter(str(RAYSPACE_DIR), mode="estimate_only", preprocessed_dir=str(preprocessed_dir), timings_dir=str(timings_dir), grid_cell_size=args.grid_cell_size, warmup_runs=args.raytracer_warmup_runs))
         if "raytracer_overlap_direct_estimation" in args.approaches:
-            adapters.append(RaytracerAdapter(str(RAYSPACE_DIR), mode="direct_estimation", preprocessed_dir=str(preprocessed_dir), timings_dir=str(timings_dir), grid_resolution=args.grid_resolution, warmup_runs=args.raytracer_warmup_runs, use_alpha_correction=not args.raytracer_disable_alpha_correction))
+            adapters.append(RaytracerAdapter(str(RAYSPACE_DIR), mode="direct_estimation", preprocessed_dir=str(preprocessed_dir), timings_dir=str(timings_dir), grid_cell_size=args.grid_cell_size, warmup_runs=args.raytracer_warmup_runs, use_alpha_correction=not args.raytracer_disable_alpha_correction))
 
         all_results = {}
         ssot_stats = {"num_obj1": 0, "num_obj2": 0, "num_intersections": 0, "universe_extents1": [0.0, 0.0, 0.0], "universe_extents2": [0.0, 0.0, 0.0]}

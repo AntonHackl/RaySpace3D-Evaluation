@@ -57,12 +57,12 @@ def main():
         print(f"{'=' * 60}")
 
         universe_extent = compute_universe_for_selectivity(selectivity, MIN_SIZE, MAX_SIZE)
-        grid_resolution = int(round(universe_extent / GRID_CELL_SIZE))
-        if grid_resolution < 1:
-            grid_resolution = 1
+        grid_cell_size = int(round(universe_extent / GRID_CELL_SIZE))
+        if grid_cell_size < 1:
+            grid_cell_size = 1
 
         print(f"Universe Extent: {universe_extent:.2f}")
-        print(f"Grid Resolution: {grid_resolution} (Cell Size: {universe_extent / grid_resolution:.2f})")
+        print(f"Grid Resolution: {grid_cell_size} (Cell Size: {universe_extent / grid_cell_size:.2f})")
 
         obj_a, obj_b = canonical_cube_pair_paths(
             raw_dir,
@@ -72,7 +72,7 @@ def main():
             max_size=MAX_SIZE,
             selectivity=selectivity,
             seed=42,
-            grid_resolution=grid_resolution,
+            grid_cell_size=grid_cell_size,
         )
 
         dt_a = obj_a.with_suffix('.dt')
@@ -94,7 +94,7 @@ def main():
             mode="estimated",
             preprocessed_dir=str(preprocessed_dir),
             timings_dir=str(timings_dir),
-            grid_resolution=grid_resolution,
+            grid_cell_size=grid_cell_size,
             warmup_runs=2
         )
 
@@ -104,7 +104,7 @@ def main():
 
         res_per_sel = {
             "selectivity": selectivity,
-            "grid_resolution": grid_resolution,
+            "grid_cell_size": grid_cell_size,
             "universe": universe_extent,
             "num_cubes": NUM_CUBES
         }

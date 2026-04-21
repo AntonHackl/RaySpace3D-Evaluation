@@ -33,7 +33,7 @@ def canonical_cube_pair_paths(
     max_size: float,
     selectivity: float,
     seed: int,
-    grid_resolution: int | None = None,
+    grid_cell_size: int | None = None,
 ) -> Tuple[Path, Path]:
     min_tok = sanitize_float_token(min_size)
     max_tok = sanitize_float_token(max_size)
@@ -42,8 +42,8 @@ def canonical_cube_pair_paths(
         f"cubes_na{num_cubes_a}_nb{num_cubes_b}_"
         f"min{min_tok}_max{max_tok}_sel{sel_tok}_seed{seed}"
     )
-    if grid_resolution is not None:
-        stem += f"_g{grid_resolution}"
+    if grid_cell_size is not None:
+        stem += f"_g{grid_cell_size}"
     return raw_dir / f"{stem}_a.obj", raw_dir / f"{stem}_b.obj"
 
 
@@ -56,7 +56,7 @@ def canonical_sphere_pair_paths(
     max_size: float,
     selectivity: float,
     seed: int,
-    grid_resolution: int | None = None,
+    grid_cell_size: int | None = None,
 ) -> Tuple[Path, Path]:
     min_tok = sanitize_float_token(min_size)
     max_tok = sanitize_float_token(max_size)
@@ -66,8 +66,8 @@ def canonical_sphere_pair_paths(
         f"spheres_tpl{template_token}_n{num_objects}_"
         f"min{min_tok}_max{max_tok}_sel{sel_tok}_seed{seed}"
     )
-    if grid_resolution is not None:
-        stem += f"_g{grid_resolution}"
+    if grid_cell_size is not None:
+        stem += f"_g{grid_cell_size}"
     return raw_dir / f"{stem}_a.obj", raw_dir / f"{stem}_b.obj"
 
 

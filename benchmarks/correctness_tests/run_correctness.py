@@ -110,7 +110,7 @@ def _prepare_preprocessed(mesh_a: str, mesh_b: str):
         mode="exact",
         preprocessed_dir=str(PREPROCESSED_DIR),
         timings_dir=str(TIMINGS_DIR),
-        grid_resolution=10,
+        grid_cell_size=10,
         warmup_runs=1,
     )
     overlap_prep.preprocess_from_source(mesh_a, _as_dt_name(mesh_a))
@@ -164,7 +164,7 @@ def run_overlap_checks(manifest, approaches):
                 mode="exact",
                 preprocessed_dir=str(PREPROCESSED_DIR),
                 timings_dir=str(TIMINGS_DIR),
-                grid_resolution=10,
+                grid_cell_size=10,
                 warmup_runs=2,
             )
             exact_out = exact_adapter.run_overlap(mesh_a, mesh_b, num_runs=1, timeout=TIMEOUT_SECONDS)
@@ -174,7 +174,7 @@ def run_overlap_checks(manifest, approaches):
                 mode="direct_estimation",
                 preprocessed_dir=str(PREPROCESSED_DIR),
                 timings_dir=str(TIMINGS_DIR),
-                grid_resolution=10,
+                grid_cell_size=10,
                 warmup_runs=2,
             )
             direct_out = direct_adapter.run_overlap(mesh_a, mesh_b, num_runs=1, timeout=TIMEOUT_SECONDS)
@@ -261,7 +261,7 @@ def run_intersection_checks(manifest, approaches):
                 mode="estimated",
                 preprocessed_dir=str(PREPROCESSED_DIR),
                 timings_dir=str(TIMINGS_DIR),
-                grid_resolution=10,
+                grid_cell_size=10,
                 warmup_runs=2,
             )
             estimated_out = estimated_adapter.run_intersection(mesh_a, mesh_b, num_runs=1, timeout=TIMEOUT_SECONDS)
@@ -320,7 +320,7 @@ def run_containment_checks(manifest, approaches, use_anyhit_point_in_mesh: bool 
                 str(RAYSPACE_DIR),
                 preprocessed_dir=str(PREPROCESSED_DIR),
                 timings_dir=str(TIMINGS_DIR),
-                grid_resolution=10,
+                grid_cell_size=10,
                 warmup_runs=1,
                 use_anyhit_point_in_mesh=use_anyhit_point_in_mesh,
             )

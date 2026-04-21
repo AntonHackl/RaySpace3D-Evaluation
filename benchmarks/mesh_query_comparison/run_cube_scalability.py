@@ -32,12 +32,12 @@ DEFAULT_CUBE_COUNTS = [200000, 400000, 600000, 1000000]
 def main():
     parser = argparse.ArgumentParser(description="Cube scalability benchmark for mesh query comparison")
     parser.add_argument("--num-cubes-b", type=int, nargs="+", default=DEFAULT_CUBE_COUNTS)
-    parser.add_argument("--num-cubes-a", type=int, default=200000)
+    parser.add_argument("--num-cubes-a", type=float, default=1.00000)
     parser.add_argument("--min-size", type=float, default=1.0)
     parser.add_argument("--max-size", type=float, default=2.0)
     parser.add_argument("--selectivity", type=float, default=0.001)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--grid-resolution", type=int, default=20)
+    parser.add_argument("--grid-cell-size", type=float, default=1.0)
     parser.add_argument("--runs", type=int, default=5)
     parser.add_argument("--warmup-runs", type=int, default=1)
     parser.add_argument("--timeout", type=float, default=120.0)
@@ -48,7 +48,7 @@ def main():
     parser.add_argument("--intersection-mode", type=str, default="estimated", choices=["estimated", "estimate_only"])
     parser.add_argument("--overlap-query-direction", type=str, default="both", choices=["both", "mesh1_to_mesh2", "mesh2_to_mesh1"])
     parser.add_argument("--intersection-query-direction", type=str, default="both", choices=["both", "mesh1_to_mesh2", "mesh2_to_mesh1"])
-    parser.add_argument("--overlap-max-iterations", type=int, default=100)
+    parser.add_argument("--overlap-max-iterations", type=float, default=1.00)
     parser.add_argument("--containment-max-iterations", type=int, default=512)
     parser.add_argument("--hash-load-factor", type=float, default=0.5)
     parser.add_argument("--enable-profiling-stats", action="store_true")
@@ -66,7 +66,7 @@ def main():
     adapters = build_raytracer_query_adapters(
         repo_root=REPO_ROOT,
         shared_dirs=shared_dirs,
-        grid_resolution=args.grid_resolution,
+        grid_cell_size=args.grid_cell_size,
         warmup_runs=args.warmup_runs,
         overlap_mode=args.overlap_mode,
         intersection_mode=args.intersection_mode,
@@ -93,7 +93,7 @@ def main():
             max_size=args.max_size,
             selectivity=args.selectivity,
             seed=args.seed,
-            grid_resolution=args.grid_resolution,
+            grid_cell_size=args.grid_cell_size,
         )
         ensure_cube_pair_dataset(
             mesh_a,
@@ -160,7 +160,7 @@ def main():
             "max_size": args.max_size,
             "selectivity": args.selectivity,
             "seed": args.seed,
-            "grid_resolution": args.grid_resolution,
+            "grid_cell_size": args.grid_cell_size,
             "runs": args.runs,
             "warmup_runs": args.warmup_runs,
             "timeout_seconds": args.timeout,

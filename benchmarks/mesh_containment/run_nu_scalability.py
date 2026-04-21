@@ -26,7 +26,7 @@ DEFAULT_NU_COUNTS = [200, 400, 600, 800]
 def main():
     parser = argparse.ArgumentParser(description="Nu scalability benchmark for mesh containment")
     parser.add_argument("--nu", type=int, nargs="+", default=DEFAULT_NU_COUNTS)
-    parser.add_argument("--grid-resolution", type=int, default=20)
+    parser.add_argument("--grid-cell-size", type=float, default=1.0)
     parser.add_argument("--runs", type=int, default=5)
     parser.add_argument("--warmup-runs", type=int, default=1)
     parser.add_argument("--include-overlap-pairs", action="store_true")
@@ -48,7 +48,7 @@ def main():
         str(REPO_ROOT / "src" / "RaySpace3D"),
         preprocessed_dir=str(shared_dirs["preprocessed"]),
         timings_dir=str(shared_dirs["timings"]),
-        grid_resolution=args.grid_resolution,
+        grid_cell_size=args.grid_cell_size,
         warmup_runs=args.warmup_runs,
         include_overlap_pairs=args.include_overlap_pairs,
     )
@@ -92,7 +92,7 @@ def main():
             "run_name": run_layout["run_name"],
             "run_dir": str(run_layout["run_dir"]),
             "nu": args.nu,
-            "grid_resolution": args.grid_resolution,
+            "grid_cell_size": args.grid_cell_size,
             "runs": args.runs,
             "warmup_runs": args.warmup_runs,
             "include_overlap_pairs": args.include_overlap_pairs,

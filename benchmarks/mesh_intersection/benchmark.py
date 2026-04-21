@@ -65,7 +65,7 @@ def main():
     parser.add_argument("--raw-dir", type=str, default=str(RAW_DIR), help="Directory containing raw data files")
     parser.add_argument("--preprocessed-dir", type=str, default=str(PREPROCESSED_DIR), help="Directory for preprocessed files")
     parser.add_argument("--timings-dir", type=str, default=str(TIMINGS_DIR), help="Directory for timing JSON files")
-    parser.add_argument("--grid-resolution", type=int, default=10, help="Grid resolution for preprocessing")
+    parser.add_argument("--grid-cell-size", type=float, default=1.0, help="Grid resolution for preprocessing")
     parser.add_argument("--raytracer-warmup-runs", type=int, default=1, help="Warmup iterations per run")
     parser.add_argument("--cgal-dir", type=str, default=str(CGAL_BASE_DIR), help="Path to CGAL baseline directory")
     parser.add_argument("--threads", type=int, default=None, help="Number of threads for CGAL")
@@ -132,7 +132,7 @@ def main():
                         mode=approach,
                         preprocessed_dir=str(preprocessed_dir),
                         timings_dir=str(timings_dir),
-                        grid_resolution=args.grid_resolution,
+                        grid_cell_size=args.grid_cell_size,
                         warmup_runs=args.raytracer_warmup_runs,
                     )
                 )
@@ -144,7 +144,7 @@ def main():
                 mode="estimated",
                 preprocessed_dir=str(preprocessed_dir),
                 timings_dir=str(timings_dir),
-                grid_resolution=args.grid_resolution,
+                grid_cell_size=args.grid_cell_size,
                 warmup_runs=0,
             )
             print("\n--- Ensuring datasets are preprocessed ---")

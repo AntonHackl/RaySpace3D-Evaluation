@@ -1,7 +1,7 @@
 """
-Visualize grid-resolution sweep results for overlap direct estimation.
+Visualize grid-cell-size sweep results for overlap direct estimation.
 
-Expected input: JSON from run_grid_resolution_sweep.py
+Expected input: JSON from run_grid_cell_size_sweep.py
 
 Figure panels:
 1) Query time vs grid resolution
@@ -26,11 +26,11 @@ FIGURES_DIR = SCRIPT_DIR / "figures"
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Visualize grid-resolution sweep results",
+        description="Visualize grid-cell-size sweep results",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--input", type=str, required=True,
-                        help="Path to JSON produced by run_grid_resolution_sweep.py")
+                        help="Path to JSON produced by run_grid_cell_size_sweep.py")
     parser.add_argument("--output-dir", type=str, default=str(FIGURES_DIR),
                         help="Directory for saved figures")
     parser.add_argument("--run-type", type=str, default=None,
@@ -97,14 +97,14 @@ def main():
                 available = [r.get("run_type") for r in runs]
                 raise ValueError(f"Run type '{args.run_type}' not found. Available: {available}")
         meta = selected["metadata"]
-        results = sorted(selected["results"], key=lambda r: r["grid_resolution"])
+        results = sorted(selected["results"], key=lambda r: r["grid_cell_size"])
         run_label = selected.get("display_name") or selected.get("run_type")
     else:
         meta = data["metadata"]
-        results = sorted(data["results"], key=lambda r: r["grid_resolution"])
+        results = sorted(data["results"], key=lambda r: r["grid_cell_size"])
         run_label = meta.get("display_name") or meta.get("run_type")
 
-    grid_res = np.array([safe_int(r.get("grid_resolution")) for r in results], dtype=float)
+    grid_res = np.array([safe_int(r.get("grid_cell_size")) for r in results], dtype=float)
 
     mean_time = np.array([safe_float(r.get("timing", {}).get("mean_time_ms")) for r in results], dtype=float)
     std_time = np.array([safe_float(r.get("timing", {}).get("std_time_ms"), 0.0) for r in results], dtype=float)
@@ -202,9 +202,9 @@ def main():
     if args.output_stem:
         stem = f"{args.output_stem}_{ts}"
     elif args.run_type:
-        stem = f"grid_resolution_sweep_{args.run_type}_{ts}"
+        stem = f"grid_cell_size_sweep_{args.run_type}_{ts}"
     else:
-        stem = f"grid_resolution_sweep_{ts}"
+        stem = f"grid_cell_size_sweep_{ts}"
     png_path = output_dir / f"{stem}.png"
     pdf_path = output_dir / f"{stem}.pdf"
 

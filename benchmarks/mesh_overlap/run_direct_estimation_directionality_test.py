@@ -86,7 +86,7 @@ def compute_metrics(pred: Set[Tuple[int, int]], gt: Set[Tuple[int, int]]) -> Dic
     }
 
 
-def run_experiment(runs: int, grid_resolution: int, nu_counts, run_layout):
+def run_experiment(runs: int, grid_cell_size: int, nu_counts, run_layout):
     PREPROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     TIMINGS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -99,7 +99,7 @@ def run_experiment(runs: int, grid_resolution: int, nu_counts, run_layout):
         mode="direct_estimation",
         preprocessed_dir=str(PREPROCESSED_DIR),
         timings_dir=str(TIMINGS_DIR),
-        grid_resolution=grid_resolution,
+        grid_cell_size=grid_cell_size,
         warmup_runs=1,
     )
 
@@ -108,7 +108,7 @@ def run_experiment(runs: int, grid_resolution: int, nu_counts, run_layout):
         "run_name": run_name,
         "run_dir": str(run_layout["run_dir"]),
         "runs": runs,
-        "grid_resolution": grid_resolution,
+        "grid_cell_size": grid_cell_size,
         "results": [],
     }
 
@@ -271,14 +271,14 @@ def main():
         description="Direct Estimation one-way directionality test for mesh overlap"
     )
     parser.add_argument("--runs", type=int, default=2, help="Runs per configuration")
-    parser.add_argument("--grid-resolution", type=int, default=20, help="Preprocess grid resolution")
+    parser.add_argument("--grid-cell-size", type=float, default=1.0, help="Preprocess grid resolution")
     parser.add_argument("--nu", type=int, nargs='+', help="Nu counts (e.g., 200 400 600 800)")
     args = parser.parse_args()
 
     nu_counts = args.nu if args.nu else DEFAULT_NU_COUNTS
 
     run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_direct_estimation_directionality")
-    summary = run_experiment(args.runs, args.grid_resolution, nu_counts, run_layout)
+    summary = run_experiment(args.runs, args.grid_cell_size, nu_counts, run_layout)
     print_summary(summary)
 
     out_json = Path(run_layout["results_json"])

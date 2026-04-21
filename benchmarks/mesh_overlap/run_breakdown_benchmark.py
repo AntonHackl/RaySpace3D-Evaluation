@@ -21,7 +21,7 @@ RUNS_DIR = SCRIPT_DIR / "runs"
 FILE1 = "nu400_n_nv150_nu400_vs100_r30.dt"
 FILE2 = "nu400_v_nv150_nu400_vs100_r30.dt"
 
-def run_experiment(runs, grid_resolution, run_log_dir):
+def run_experiment(runs, grid_cell_size, run_log_dir):
     print("--- Starting Breakdown Experiment ---")
 
     print(f"Logging runs to: {run_log_dir}")
@@ -33,7 +33,7 @@ def run_experiment(runs, grid_resolution, run_log_dir):
         mode="exact", 
         preprocessed_dir=str(PREPROCESSED_DIR), 
         timings_dir=str(TIMINGS_DIR),
-        grid_resolution=grid_resolution,
+        grid_cell_size=grid_cell_size,
         warmup_runs=1
     )
     
@@ -42,7 +42,7 @@ def run_experiment(runs, grid_resolution, run_log_dir):
         mode="estimated", 
         preprocessed_dir=str(PREPROCESSED_DIR), 
         timings_dir=str(TIMINGS_DIR),
-        grid_resolution=grid_resolution,
+        grid_cell_size=grid_cell_size,
         warmup_runs=1
     )
     
@@ -186,13 +186,13 @@ def plot_results(results, figures_dir):
 def main():
     parser = argparse.ArgumentParser(description="Mesh Overlap Breakdown Experiment")
     parser.add_argument("--runs", type=int, default=5, help="Number of runs per method")
-    parser.add_argument("--grid-resolution", type=int, default=10, help="Grid resolution for RaySpace")
+    parser.add_argument("--grid-cell-size", type=float, default=1.0, help="Grid resolution for RaySpace")
     args = parser.parse_args()
     
     run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_breakdown")
     run_log_dir = Path(run_layout["logs_dir"])
     figures_dir = Path(run_layout["figures_dir"])
-    results = run_experiment(args.runs, args.grid_resolution, run_log_dir)
+    results = run_experiment(args.runs, args.grid_cell_size, run_log_dir)
     
     if results:
         print("\nResults Summary:")
@@ -212,7 +212,7 @@ def main():
                     "run_name": run_layout["run_name"],
                     "run_dir": str(run_layout["run_dir"]),
                     "runs": args.runs,
-                    "grid_resolution": args.grid_resolution,
+                    "grid_cell_size": args.grid_cell_size,
                 },
                 "results": results,
             },

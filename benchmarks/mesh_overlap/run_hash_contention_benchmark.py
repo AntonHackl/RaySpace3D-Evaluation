@@ -65,7 +65,7 @@ def parse_args():
                         help="Per-query timeout in seconds for direct estimation runs")
     parser.add_argument("--warmup-runs",    type=int,   default=2,
                         help="Number of warmup runs inside the binary")
-    parser.add_argument("--grid-resolution",type=int,   default=10,
+    parser.add_argument("--grid-cell-size",type=int,   default=10,
                         help="Grid resolution for preprocessing")
     parser.add_argument("--multipliers",    type=float, nargs="+",
                         default=[100.0, 50.0, 20.0, 10.0, 5.0, 2.0, 1.5, 1.0, 0.8],
@@ -97,7 +97,7 @@ def run_cmd(cmd, desc):
     return result
 
 
-def make_adapter(rayspace_dir, preprocessed_dir, timings_dir, grid_resolution,
+def make_adapter(rayspace_dir, preprocessed_dir, timings_dir, grid_cell_size,
                  warmup_runs, hash_table_size=None, track_hash_contention=False,
                  hash_table_free_mem_fraction=0.9):
     return RaytracerAdapter(
@@ -105,7 +105,7 @@ def make_adapter(rayspace_dir, preprocessed_dir, timings_dir, grid_resolution,
         mode="direct_estimation",
         preprocessed_dir=str(preprocessed_dir),
         timings_dir=str(timings_dir),
-        grid_resolution=grid_resolution,
+        grid_cell_size=grid_cell_size,
         warmup_runs=warmup_runs,
         track_hash_contention=track_hash_contention,
         hash_table_size=hash_table_size,
@@ -167,7 +167,7 @@ def main():
         print(f"[skip] Preprocessed files already exist:\n  {pre_a}\n  {pre_b}")
     else:
         adapter_pre = make_adapter(
-            RAYSPACE_DIR, PREPROCESSED_DIR, TIMINGS_DIR, args.grid_resolution, warmup_runs=0
+            RAYSPACE_DIR, PREPROCESSED_DIR, TIMINGS_DIR, args.grid_cell_size, warmup_runs=0
         )
         print("\n>>> Preprocessing dataset A ...")
         adapter_pre.preprocess_from_source(str(dataset_a), str(dataset_a))
@@ -180,7 +180,7 @@ def main():
     print("=" * 60)
     adapter_discovery = make_adapter(
         RAYSPACE_DIR, PREPROCESSED_DIR, TIMINGS_DIR,
-        args.grid_resolution, warmup_runs=args.warmup_runs,
+        args.grid_cell_size, warmup_runs=args.warmup_runs,
     )
     discovery_result = adapter_discovery.run_overlap(
         str(dataset_a), str(dataset_b), num_runs=1, timeout=args.timeout
@@ -227,7 +227,7 @@ def main():
         print(f"  [timing] {args.timing_runs} runs, no contention tracking ...")
         adapter_timing = make_adapter(
             RAYSPACE_DIR, PREPROCESSED_DIR, TIMINGS_DIR,
-            args.grid_resolution, warmup_runs=args.warmup_runs,
+            args.grid_cell_size, warmup_runs=args.warmup_runs,
             hash_table_size=hash_size,
             track_hash_contention=False,
             hash_table_free_mem_fraction=cfg["hash_table_free_mem_fraction"],
@@ -246,7 +246,7 @@ def main():
         print(f"  [contention] 1 run, contention tracking ...")
         adapter_contention = make_adapter(
             RAYSPACE_DIR, PREPROCESSED_DIR, TIMINGS_DIR,
-            args.grid_resolution, warmup_runs=args.warmup_runs,
+            args.grid_cell_size, warmup_runs=args.warmup_runs,
             hash_table_size=hash_size,
             track_hash_contention=True,
             hash_table_free_mem_fraction=cfg["hash_table_free_mem_fraction"],
@@ -308,7 +308,7 @@ def main():
             "timing_runs":     args.timing_runs,
             "timeout_seconds": args.timeout,
             "warmup_runs":     args.warmup_runs,
-            "grid_resolution": args.grid_resolution,
+            "grid_cell_size": args.grid_cell_size,
             "multipliers":     args.multipliers,
             "gpu_auto_free_mem_fraction": args.gpu_auto_free_mem_fraction,
             "includes_gpu_auto_step": True,

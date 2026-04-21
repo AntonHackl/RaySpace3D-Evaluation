@@ -290,13 +290,13 @@ def _read_pair_hits_csv(path: Path) -> PairHitMap:
     return per_direction
 
 
-def _prepare_preprocessed(mesh_a: str, mesh_b: str, grid_resolution: int):
+def _prepare_preprocessed(mesh_a: str, mesh_b: str, grid_cell_size: int):
     prep = RaytracerIntersectionAdapter(
         str(RAYSPACE_DIR),
         mode="estimated",
         preprocessed_dir=str(PREPROCESSED_DIR),
         timings_dir=str(TIMINGS_DIR),
-        grid_resolution=grid_resolution,
+        grid_cell_size=grid_cell_size,
         warmup_runs=1,
     )
     prep.preprocess_from_source(mesh_a, _as_dt_name(mesh_a))
@@ -523,14 +523,14 @@ def main():
             "sample pair disagreements and adjudicate with a cube AABB intersection predicate."
         )
     )
-    parser.add_argument("--max-eval-pairs", type=int, default=10000)
+    parser.add_argument("--max-eval-pairs", type=float, default=1.0000)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--threads", type=int, default=None, help="CGAL threads")
-    parser.add_argument("--grid-resolution", type=int, default=10)
+    parser.add_argument("--grid-cell-size", type=float, default=1.0)
     parser.add_argument("--warmup-runs", type=int, default=1)
     parser.add_argument("--mesh-a", type=str, default=None, help="Override mesh A path")
     parser.add_argument("--mesh-b", type=str, default=None, help="Override mesh B path")
-    parser.add_argument("--inspect-only-rayspace", type=int, default=10,
+    parser.add_argument("--inspect-only-rayspace", type=float, default=1.0,
                         help="Number of random RaySpace-only disagreement pairs to inspect with bbox report and images")
     parser.add_argument("--rayspace-pairs-csv", type=str, default=None,
                         help="Optional existing RaySpace pairs CSV to analyze (skips running RaySpace query)")
@@ -592,7 +592,7 @@ def main():
         }
     else:
         print("Preparing preprocessed inputs...")
-        _prepare_preprocessed(mesh_a, mesh_b, args.grid_resolution)
+        _prepare_preprocessed(mesh_a, mesh_b, args.grid_cell_size)
 
         pre_a = PREPROCESSED_DIR / Path(mesh_a).with_suffix(".pre").name
         pre_b = PREPROCESSED_DIR / Path(mesh_b).with_suffix(".pre").name

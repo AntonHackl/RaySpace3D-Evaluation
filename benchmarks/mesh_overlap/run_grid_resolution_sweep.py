@@ -48,7 +48,7 @@ def parse_args():
         description="Grid-resolution sweep benchmark for overlap direct estimation",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--num-cubes", type=int, default=100_000,
+    parser.add_argument("--num-cubes", type=float, default=1.00_000,
                         help="Number of cubes in each dataset")
     parser.add_argument("--cube-size", type=float, default=5.0,
                         help="Fixed cube edge length for both datasets")
@@ -62,10 +62,10 @@ def parse_args():
                         help="Per-query timeout in seconds")
     parser.add_argument("--warmup-runs", type=int, default=2,
                         help="Warmup runs inside query binaries")
-    parser.add_argument("--grid-resolutions", type=int, nargs="+",
+    parser.add_argument("--grid-cell-sizes", type=int, nargs="+",
                         default=[1, 5, 10, 20, 50, 100],
                         help="Grid resolutions to sweep")
-    parser.add_argument("--groundtruth-grid-resolution", type=int, default=10,
+    parser.add_argument("--groundtruth-grid-cell-size", type=float, default=1.0,
                         help="Preprocessing grid resolution used for exact-overlap ground truth run")
     parser.add_argument("--output-dir", type=str, default=str(RUNS_DIR),
                         help="Directory for run outputs")
@@ -167,7 +167,7 @@ def make_adapter(
     mode,
     preprocessed_dir,
     timings_dir,
-    grid_resolution,
+    grid_cell_size,
     warmup_runs,
     use_alpha_correction=True,
     track_hash_contention=False,
@@ -177,7 +177,7 @@ def make_adapter(
         mode=mode,
         preprocessed_dir=str(preprocessed_dir),
         timings_dir=str(timings_dir),
-        grid_resolution=grid_resolution,
+        grid_cell_size=grid_cell_size,
         warmup_runs=warmup_runs,
         use_alpha_correction=use_alpha_correction,
         track_hash_contention=track_hash_contention,
@@ -219,7 +219,7 @@ def compute_hash_table_size_from_estimate(estimated_pairs, load_factor):
 def main():
     args = parse_args()
 
-    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_grid_resolution_sweep")
+    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_grid_cell_size_sweep")
     timestamp = run_layout["timestamp"]
     run_dir = Path(run_layout["run_dir"])
 
@@ -398,7 +398,7 @@ def main():
             mode="exact",
             preprocessed_dir=gt_pre_dir,
             timings_dir=gt_timings_dir,
-            grid_resolution=args.groundtruth_grid_resolution,
+            grid_cell_size=args.groundtruth_grid_cell_size,
             warmup_runs=args.warmup_runs,
             use_alpha_correction=True,
             track_hash_contention=False,
@@ -428,7 +428,7 @@ def main():
         print(f"Exact ground truth pairs ({run_type}): {ground_truth_pairs:,}")
 
         results = []
-        for grid_res in args.grid_resolutions:
+        for grid_res in args.grid_cell_sizes:
             print("\n" + "=" * 80)
             print(f"{run_type} | Grid resolution: {grid_res}")
             print("=" * 80)
@@ -441,7 +441,7 @@ def main():
                 mode="direct_estimation",
                 preprocessed_dir=pre_dir,
                 timings_dir=timing_dir,
-                grid_resolution=grid_res,
+                grid_cell_size=grid_res,
                 warmup_runs=0,
                 use_alpha_correction=not args.no_alpha_correction,
                 track_hash_contention=False,
@@ -464,7 +464,7 @@ def main():
                 mode="direct_estimation",
                 preprocessed_dir=pre_dir,
                 timings_dir=timing_dir,
-                grid_resolution=grid_res,
+                grid_cell_size=grid_res,
                 warmup_runs=args.warmup_runs,
                 use_alpha_correction=not args.no_alpha_correction,
                 track_hash_contention=False,
@@ -481,7 +481,7 @@ def main():
             metrics_result = timing_result
 
             entry = {
-                "grid_resolution": grid_res,
+                "grid_cell_size": grid_res,
                 "timing": {
                     "mean_time_ms": None if "error" in timing_result else timing_result.get("mean"),
                     "std_time_ms": None if "error" in timing_result else timing_result.get("std"),
@@ -546,8 +546,8 @@ def main():
                 "timing_runs": args.timing_runs,
                 "timeout_seconds": args.timeout,
                 "warmup_runs": args.warmup_runs,
-                "grid_resolutions": args.grid_resolutions,
-                "groundtruth_grid_resolution": args.groundtruth_grid_resolution,
+                "grid_cell_sizes": args.grid_cell_sizes,
+                "groundtruth_grid_cell_size": args.groundtruth_grid_cell_size,
                 "estimate_only": args.estimate_only,
                 "alpha_correction_enabled": not args.no_alpha_correction,
                 "hash_load_factor": args.hash_load_factor,
@@ -604,8 +604,8 @@ def main():
             "timing_runs": args.timing_runs,
             "timeout_seconds": args.timeout,
             "warmup_runs": args.warmup_runs,
-            "grid_resolutions": args.grid_resolutions,
-            "groundtruth_grid_resolution": args.groundtruth_grid_resolution,
+            "grid_cell_sizes": args.grid_cell_sizes,
+            "groundtruth_grid_cell_size": args.groundtruth_grid_cell_size,
             "estimate_only": args.estimate_only,
             "alpha_correction_enabled": not args.no_alpha_correction,
             "hash_load_factor": args.hash_load_factor,
@@ -616,12 +616,12 @@ def main():
     output_json = Path(run_layout["results_json"])
     write_json(output_json, output)
 
-    latest_json = Path(args.output_dir) / "grid_resolution_sweep_latest.json"
+    latest_json = Path(args.output_dir) / "grid_cell_size_sweep_latest.json"
     write_json(latest_json, output)
 
     print(f"\nSaved results:\n  {output_json}\n  {latest_json}")
 
-    vis_script = SCRIPT_DIR / "visualize_grid_resolution_sweep.py"
+    vis_script = SCRIPT_DIR / "visualize_grid_cell_size_sweep.py"
     if vis_script.exists():
         try:
             for run_data in merged_runs:
@@ -633,7 +633,7 @@ def main():
                         "--input", str(output_json),
                         "--output-dir", str(figures_root),
                         "--run-type", run_type,
-                        "--output-stem", f"grid_resolution_sweep_{run_type}",
+                        "--output-stem", f"grid_cell_size_sweep_{run_type}",
                     ],
                     f"Running visualization ({run_type})",
                 )

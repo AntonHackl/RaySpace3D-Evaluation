@@ -48,7 +48,7 @@ def main():
 
     raytracer = RaytracerContainmentAdapter(
         str(RAYSPACE_DIR), preprocessed_dir=str(dirs["preprocessed"]),
-        timings_dir=str(dirs["timings"]), grid_resolution=10, warmup_runs=args.warmup_runs,
+        timings_dir=str(dirs["timings"]), grid_cell_size=10, warmup_runs=args.warmup_runs,
         include_overlap_pairs=args.include_overlap_pairs,
     )
     cgal = CGALContainmentAdapter(str(CGAL_BASE_DIR), preprocessed_dir=str(dirs["preprocessed"]))
@@ -56,8 +56,8 @@ def main():
     summary = []
     for selectivity in args.selectivities:
         universe_extent = compute_universe_for_selectivity(selectivity, args.min_size, args.max_size)
-        grid_resolution = max(1, int(round(universe_extent / args.grid_cell_size)))
-        raytracer.grid_resolution = grid_resolution
+        grid_cell_size = max(1, int(round(universe_extent / args.grid_cell_size)))
+        raytracer.grid_cell_size = grid_cell_size
 
         obj_a, obj_b = canonical_cube_pair_paths(
             dirs["raw"],
@@ -67,7 +67,7 @@ def main():
             max_size=args.max_size,
             selectivity=selectivity,
             seed=args.seed,
-            grid_resolution=grid_resolution,
+            grid_cell_size=grid_cell_size,
         )
 
         ensure_cube_pair_dataset(
@@ -87,7 +87,7 @@ def main():
 
         row = {
             "selectivity": selectivity,
-            "grid_resolution": grid_resolution,
+            "grid_cell_size": grid_cell_size,
             "universe_extent": universe_extent,
             "num_cubes": args.num_cubes,
             "size_bytes_a": obj_a.stat().st_size if obj_a.exists() else 0,

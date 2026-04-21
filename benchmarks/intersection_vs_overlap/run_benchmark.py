@@ -18,10 +18,10 @@ def main():
         )
     )
     parser.add_argument("--runs", type=int, default=5)
-    parser.add_argument("--grid-res", type=int, default=10)
+    parser.add_argument("--grid-res", type=float, default=1.0)
     parser.add_argument("--dataset-set", choices=["nu", "cube"], default="nu")
     parser.add_argument("--intersection-query-direction", choices=["both", "mesh1_to_mesh2", "mesh2_to_mesh1"], default="both")
-    parser.add_argument("--overlap-max-iterations", type=int, default=100)
+    parser.add_argument("--overlap-max-iterations", type=float, default=1.00)
     parser.add_argument("--containment-max-iterations", type=int, default=512)
     parser.add_argument("--hash-load-factor", type=float, default=0.5)
     parser.add_argument("--enable-profiling-stats", action="store_true")
@@ -35,7 +35,7 @@ def main():
         str(target_script),
         "--runs",
         str(args.runs),
-        "--grid-resolution",
+        "--grid-cell-size",
         str(args.grid_res),
         "--intersection-query-direction",
         args.intersection_query_direction,

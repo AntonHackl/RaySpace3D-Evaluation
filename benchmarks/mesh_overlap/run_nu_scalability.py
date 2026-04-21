@@ -51,7 +51,7 @@ def resolve_nu_dataset_pair(raw_shared_dir: Path, nu: int):
     )
     return v_file, n_file
 
-def run_experiment(runs, grid_resolution, nu_counts, run_log_dir, approaches=None, track_hash_contention=False):
+def run_experiment(runs, grid_cell_size, nu_counts, run_log_dir, approaches=None, track_hash_contention=False):
     if approaches is None:
         approaches = ["exact", "direct_estimation", "cgal", "touch", "tdbase"]
     
@@ -76,7 +76,7 @@ def run_experiment(runs, grid_resolution, nu_counts, run_log_dir, approaches=Non
         mode="exact", 
         preprocessed_dir=str(PREPROCESSED_DIR), 
         timings_dir=str(TIMINGS_DIR),
-        grid_resolution=grid_resolution,
+        grid_cell_size=grid_cell_size,
         warmup_runs=1
     )
     
@@ -85,7 +85,7 @@ def run_experiment(runs, grid_resolution, nu_counts, run_log_dir, approaches=Non
         mode="direct_estimation", 
         preprocessed_dir=str(PREPROCESSED_DIR), 
         timings_dir=str(TIMINGS_DIR),
-        grid_resolution=grid_resolution,
+        grid_cell_size=grid_cell_size,
         warmup_runs=1,
         track_hash_contention=track_hash_contention,
     )
@@ -481,7 +481,7 @@ def plot_results(results, figures_dir):
 def main():
     parser = argparse.ArgumentParser(description="Mesh Overlap Nu Scalability Experiment")
     parser.add_argument("--runs", type=int, default=5, help="Number of runs per method")
-    parser.add_argument("--grid-resolution", type=int, default=20, help="Grid resolution for RaySpace")
+    parser.add_argument("--grid-cell-size", type=float, default=1.0, help="Grid resolution for RaySpace")
     parser.add_argument("--nu", type=int, nargs='+', help="Nu counts to test (e.g. 200 400 600 800)")
     parser.add_argument("--approaches", type=str, nargs='+', choices=["exact", "direct_estimation", "cgal", "touch", "tdbase"], help="Approaches to run")
     parser.add_argument("--track-hash-contention", action="store_true", help="Enable direct-estimation hash contention tracking")
@@ -494,7 +494,7 @@ def main():
     figures_dir = Path(run_layout["figures_dir"])
     results = run_experiment(
         args.runs,
-        args.grid_resolution,
+        args.grid_cell_size,
         nu_counts,
         run_log_dir,
         approaches=args.approaches,
@@ -541,7 +541,7 @@ def main():
                     "run_name": run_layout["run_name"],
                     "run_dir": str(run_layout["run_dir"]),
                     "runs": args.runs,
-                    "grid_resolution": args.grid_resolution,
+                    "grid_cell_size": args.grid_cell_size,
                     "nu_counts": nu_counts,
                 },
                 "results": clean_results,

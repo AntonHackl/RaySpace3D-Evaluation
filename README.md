@@ -124,7 +124,7 @@ python benchmark.py \
     --approaches raytracer cgal \
     --runs 5 \
     --timeout 300 \
-    --grid-resolution 128
+    --grid-cell-size 128
 ```
 
 **Available datasets:** `small`, `medium`, `nu200`, `nu400`, `nuclei_join`, `cubes_100k`, `cubes_1m`, etc. See `DATASETS.md` for full descriptions.
@@ -161,7 +161,7 @@ python run_nu_scalability.py --queries intersection containment
 
 Key options shared by the runners:
 - `--queries` (or `--approaches` alias): choose which query types to compare
-- `--runs`, `--warmup-runs`, `--timeout`, `--grid-resolution`
+- `--runs`, `--warmup-runs`, `--timeout`, `--grid-cell-size`
 - `--overlap-mode`, `--intersection-mode` for RaySpace implementation selection
 
 ### Point-in-Polygon (PIP) Benchmark
