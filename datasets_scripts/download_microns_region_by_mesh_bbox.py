@@ -50,8 +50,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=0)
     
     script_dir = Path(__file__).parent
-    parser.add_argument("--download-dir", default=str(script_dir / "microns_data" / "microns_region_4gb_npz"))
-    parser.add_argument("--export-dir", default=str(script_dir / "microns_data" / "microns_region_4gb_glb"))
+    parser.add_argument("--download-dir", help="Directory to store downloaded .npz files.")
+    parser.add_argument("--export-dir", help="Directory to store converted meshes.")
     parser.add_argument("--format", choices=["glb", "obj"], default="glb")
     parser.add_argument("--separate", action="store_true", default=True)
     parser.add_argument("--no-rescale", action="store_true")
@@ -90,7 +90,16 @@ def parse_args() -> argparse.Namespace:
         default=1.0,
         help="Minimum nucleus proxy radius in micrometers.",
     )
-    return parser.parse_args()
+    
+    args = parser.parse_args()
+    
+    # Set dynamic defaults if not provided
+    if args.download_dir is None:
+        args.download_dir = str(script_dir / "microns_data" / f"microns_region_{int(args.target_gb)}gb_npz")
+    if args.export_dir is None:
+        args.export_dir = str(script_dir / "microns_data" / f"microns_region_{int(args.target_gb)}gb_glb")
+        
+    return args
 
 
 def dir_size_bytes(path: Path) -> int:

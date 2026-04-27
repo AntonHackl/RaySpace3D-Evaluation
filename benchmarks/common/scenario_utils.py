@@ -252,3 +252,109 @@ def write_latest_json_alias(latest_path: Path, payload) -> None:
 def copy_to_latest_file(source_path: Path, latest_path: Path) -> None:
     latest_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(source_path, latest_path)
+
+
+def canonical_microns_aggregated_paths(raw_dir: Path, size_gb: int) -> Tuple[Path, Path]:
+    return raw_dir / f"microns_{size_gb}gb_split_a_aggregated.obj", raw_dir / f"microns_{size_gb}gb_split_b_aggregated.obj"
+
+
+def ensure_microns_splits(
+    size_gb: int,
+    source_root: Path,
+    splits_dir: Path,
+) -> Tuple[Path, Path]:
+    split_a = splits_dir / f"microns_{size_gb}gb_split_a.txt"
+    split_b = splits_dir / f"microns_{size_gb}gb_split_b.txt"
+    meta_path = splits_dir / f"microns_{size_gb}gb_meta.json"
+
+    source_dir = source_root / f"microns_region_{size_gb}gb_glb"
+    
+    if split_a.exists() and split_b.exists() and meta_path.exists():
+        return split_a, split_b
+
+    if not source_dir.exists():
+        raise FileNotFoundError(f"Source directory not found: {source_dir}")
+
+    files = sorted([f for f in source_dir.glob("*.glb")])
+    if not files:
+        raise ValueError(f"No GLB files found in {source_dir}")
+
+    a_files = [f for i, f in enumerate(files) if i % 2 == 0]
+    b_files = [f for i, f in enumerate(files) if i % 2 == 1]
+
+    splits_dir.mkdir(parents=True, exist_ok=True)
+    with open(split_a, 'w') as f:
+        f.write('\n'.join(str(p.resolve()) for p in a_files))
+    with open(split_b, 'w') as f:
+        f.write('\n'.join(str(p.resolve()) for p in b_files))
+
+    meta = {
+        "source_dir": str(source_dir.resolve()),
+        "total_files": len(files),
+        "split_counts": {"A": len(a_files), "B": len(b_files)},
+        "rule": "alternating_50_50",
+        "timestamp": time.strftime("%Y%m%d_%H%M%S"),
+    }
+    with open(meta_path, 'w') as f:
+        json.dump(meta, f, indent=2)
+
+    return split_a, split_b
+
+
+def _hash_file_content(path: Path) -> str:
+    import hashlib
+    with open(path, 'rb') as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
+def ensure_microns_aggregated_meshes(
+    manifest_a: Path,
+    manifest_b: Path,
+    output_a: Path,
+    output_b: Path,
+) -> Tuple[Path, Path]:
+    def process_split(manifest: Path, output: Path):
+        meta_path = output.with_suffix('.meta.json')
+        current_hash = _hash_file_content(manifest)
+        if output.exists() and meta_path.exists():
+            with open(meta_path, 'r') as f:
+                meta = json.load(f)
+            if meta.get("manifest_hash") == current_hash:
+                return
+
+        print(f"Materializing aggregate: {output.name}")
+        import trimesh
+        with open(manifest, 'r') as f:
+            paths = [Path(line.strip()) for line in f if line.strip()]
+
+        meshes = []
+        for p in paths:
+            try:
+                m = trimesh.load(p, force='mesh')
+                if isinstance(m, trimesh.Scene):
+                    for geom in m.geometry.values():
+                        meshes.append(geom)
+                elif isinstance(m, trimesh.Trimesh):
+                    meshes.append(m)
+            except Exception as e:
+                print(f"Warning: Failed to load {p}: {e}")
+        
+        if not meshes:
+            raise ValueError(f"No valid meshes found for manifest {manifest}")
+
+        combined = trimesh.Scene(meshes)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        # Export as OBJ
+        combined.export(str(output))
+
+        meta = {
+            "manifest_hash": current_hash,
+            "input_file_count": len(paths),
+            "output_file_size_bytes": output.stat().st_size,
+        }
+        with open(meta_path, 'w') as f:
+            json.dump(meta, f, indent=2)
+
+    process_split(manifest_a, output_a)
+    process_split(manifest_b, output_b)
+    return output_a, output_b

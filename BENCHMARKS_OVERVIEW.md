@@ -23,6 +23,8 @@ This file gives a quick map of benchmark entrypoints in this repository and what
 - benchmarks/mesh_intersection/selectivity_test.py: Standard selectivity benchmark for intersection.
 - benchmarks/mesh_intersection/run_mesh_complexity_benchmark.py: Standard mesh complexity benchmark for intersection.
 - benchmarks/mesh_intersection/compare_closesthit_vs_anyhit.py: RaySpace internal algorithm comparison for intersection. Compares closest-hit containment path vs any-hit containment path.
+- benchmarks/mesh_intersection/run_microns_intersection_estimated.py: MICrONS dataset intersection benchmark (estimated approach only). Uses an alternating 50/50 split of 4/8/16 GB datasets. Run locally with `python benchmarks/mesh_intersection/run_microns_intersection_estimated.py --sizes 4`.
+- benchmarks/mesh_intersection/run_microns_intersection_estimated_slurm.sh: Slurm batch script for running the MICrONS estimated benchmark on gpu-batch with an RTX PRO 6000. Submit with `sbatch benchmarks/mesh_intersection/run_microns_intersection_estimated_slurm.sh`.
 
 ## Mesh Containment Benchmarks
 

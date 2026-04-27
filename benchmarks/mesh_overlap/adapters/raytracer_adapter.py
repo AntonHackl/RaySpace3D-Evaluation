@@ -57,11 +57,14 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
         # Preprocess binary is in preprocess/build/bin
         self.preprocess_exec = self.rayspace_dir / "preprocess" / "build" / "bin" / "preprocess_dataset"
         
+    def _get_preprocessed_path(self, file_path: str) -> Path:
+        input_path = Path(file_path)
+        grid_token = str(self.grid_cell_size).replace(".", "_")
+        return self.preprocessed_dir / f"{input_path.stem}_g{grid_token}.pre"
+
     def check_preprocessed(self, file_path: str) -> bool:
         """Check if .pre file exists for the given .dt or .obj file in preprocessed dir."""
-        input_path = Path(file_path)
-        pre_file = self.preprocessed_dir / input_path.with_suffix('.pre').name
-        return pre_file.exists()
+        return self._get_preprocessed_path(file_path).exists()
 
     def preprocess(self, file_path: str):
         """Run the RaySpace3D preprocessing tool including grid generation."""
@@ -73,8 +76,8 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
         dt_path = Path(dt_file)
         
         # Output files are named based on dt_file for consistency, stored in PREPROCESSED_DIR
-        output_geometry = self.preprocessed_dir / dt_path.with_suffix('.pre').name
-        output_timing = self.timings_dir / (dt_path.stem + '_timing.json')
+        output_geometry = self._get_preprocessed_path(dt_file)
+        output_timing = self.timings_dir / (dt_path.stem + f'_g{str(self.grid_cell_size).replace(".", "_")}_timing.json')
         
         # Determine mode based on source file extension
         mode = "dt" if source_path.suffix == ".dt" else "mesh"
@@ -117,10 +120,8 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
             return {"error": f"Executable not found: {self.executable}"}
 
         # Use preprocessed files if they exist in the preprocessed directory
-        input_path1 = Path(file1)
-        input_path2 = Path(file2)
-        p1 = self.preprocessed_dir / input_path1.with_suffix('.pre').name
-        p2 = self.preprocessed_dir / input_path2.with_suffix('.pre').name
+        p1 = self._get_preprocessed_path(file1)
+        p2 = self._get_preprocessed_path(file2)
         
         f1 = str(p1) if p1.exists() else file1
         f2 = str(p2) if p2.exists() else file2
