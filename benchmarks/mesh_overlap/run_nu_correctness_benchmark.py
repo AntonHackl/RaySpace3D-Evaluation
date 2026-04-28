@@ -9,14 +9,17 @@ from typing import Dict, List, Set, Tuple, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
-from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
-
-sys.path.append(str(Path(__file__).parent))
-from adapters.raytracer_adapter import RaytracerAdapter
-from adapters.tdbase_adapter import TDBaseAdapter
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
+
+sys.path.append(str(SCRIPT_DIR))
+from adapters.raytracer_adapter import RaytracerAdapter
+from adapters.tdbase_adapter import TDBaseAdapter
+
 RAYSPACE_DIR = REPO_ROOT / "src/RaySpace3D"
 TDBASE_DIR = REPO_ROOT / "baselines/RaySpace3DBaselines/tdbase"
 DATA_DIR = SCRIPT_DIR / "data"
@@ -285,6 +288,7 @@ def plot_runtime_lines(results: Dict[str, object], output_path: Path) -> None:
 
     plot_series("exact", "RaySpace Exact (two-pass)", "-o", "#1f77b4")
     plot_series("direct_estimation", "RaySpace Direct Estimation", "--s", "#2ca02c")
+    plot_series("estimated", "RaySpace Intersection Estimated", "-.^", "#ff7f0e")
     plot_series("tdbase_intersect", "TDBase Intersect", "-.x", "#d62728")
     plot_series("tdbase_within0", "TDBase Within(w=0)", ":d", "#9467bd")
 
@@ -328,6 +332,14 @@ def run_experiment(runs: int, grid_cell_size: int, nu_counts: List[int], run_lay
         grid_cell_size=grid_cell_size,
         warmup_runs=1,
     )
+    estimated_adapter = RaytracerAdapter(
+        str(RAYSPACE_DIR),
+        mode="estimated",
+        preprocessed_dir=str(PREPROCESSED_DIR),
+        timings_dir=str(TIMINGS_DIR),
+        grid_cell_size=grid_cell_size,
+        warmup_runs=1,
+    )
     tdbase_adapter = TDBaseAdapter(str(TDBASE_DIR), preprocessed_dir=str(PREPROCESSED_DIR))
 
     exact_exec = RAYSPACE_DIR / "query" / "build" / "bin" / "raytracer_mesh_overlap"
@@ -336,6 +348,7 @@ def run_experiment(runs: int, grid_cell_size: int, nu_counts: List[int], run_lay
         "counts": [],
         "exact": {"mean": [], "std": []},
         "direct_estimation": {"mean": [], "std": []},
+        "estimated": {"mean": [], "std": []},
         "tdbase_intersect": {"mean": [], "std": []},
         "tdbase_within0": {"mean": [], "std": []},
         "correctness": {},
@@ -383,6 +396,14 @@ def run_experiment(runs: int, grid_cell_size: int, nu_counts: List[int], run_lay
             query_direction="both",
             pairs_output=str(PROJECT_TMP_DIR / f"pairs_direct_nu{nu}.csv"),
         )
+        res_estimated = estimated_adapter.run_overlap(
+            str(f_v),
+            str(f_n),
+            runs,
+            timeout=TIMEOUT_SECONDS,
+            log_dir=str(run_log_dir),
+            pairs_output=str(PROJECT_TMP_DIR / f"pairs_estimated_nu{nu}.csv"),
+        )
         res_tdb_inter = tdbase_adapter.run_overlap(
             str(tdb_tile1),
             str(tdb_tile2),
@@ -411,6 +432,7 @@ def run_experiment(runs: int, grid_cell_size: int, nu_counts: List[int], run_lay
             work_dir=PROJECT_TMP_DIR,
         )
         direct_pairs = read_pairs_csv(PROJECT_TMP_DIR / f"pairs_direct_nu{nu}.csv")
+        estimated_pairs = read_pairs_csv(PROJECT_TMP_DIR / f"pairs_estimated_nu{nu}.csv")
         tdb_inter_pairs = run_tdbase_collect_pairs(
             tdbase_adapter.executable,
             tdb_tile1,
@@ -437,6 +459,8 @@ def run_experiment(runs: int, grid_cell_size: int, nu_counts: List[int], run_lay
         results["exact"]["std"].append(None if "error" in res_exact else float(res_exact["std"]))
         results["direct_estimation"]["mean"].append(None if "error" in res_direct else float(res_direct["mean"]))
         results["direct_estimation"]["std"].append(None if "error" in res_direct else float(res_direct["std"]))
+        results["estimated"]["mean"].append(None if "error" in res_estimated else float(res_estimated["mean"]))
+        results["estimated"]["std"].append(None if "error" in res_estimated else float(res_estimated["std"]))
         results["tdbase_intersect"]["mean"].append(None if "error" in res_tdb_inter else float(res_tdb_inter["mean"]))
         results["tdbase_intersect"]["std"].append(None if "error" in res_tdb_inter else float(res_tdb_inter["std"]))
         results["tdbase_within0"]["mean"].append(None if "error" in res_tdb_within else float(res_tdb_within["mean"]))
@@ -445,6 +469,7 @@ def run_experiment(runs: int, grid_cell_size: int, nu_counts: List[int], run_lay
         approach_sets = {
             "exact": exact_pairs,
             "direct_estimation": direct_pairs,
+            "estimated": estimated_pairs,
             "tdbase_intersect": tdb_inter_pairs,
             "tdbase_within0": tdb_within_pairs,
         }
@@ -469,6 +494,7 @@ def run_experiment(runs: int, grid_cell_size: int, nu_counts: List[int], run_lay
 
         print(
             f"[nu={nu}] counts exact={len(exact_pairs)} direct={len(direct_pairs)} "
+            f"estimated={len(estimated_pairs)} "
             f"td_inter={len(tdb_inter_pairs)} td_within0={len(tdb_within_pairs)}"
         )
         for key, stats in pairwise.items():
@@ -484,7 +510,7 @@ def run_experiment(runs: int, grid_cell_size: int, nu_counts: List[int], run_lay
 def main() -> None:
     parser = argparse.ArgumentParser(description="Nu correctness benchmark for overlap approaches")
     parser.add_argument("--runs", type=int, default=5, help="Number of timing runs per approach")
-    parser.add_argument("--grid-cell-size", type=float, default=1.0, help="Grid resolution for RaySpace preprocessing")
+    parser.add_argument("--grid-cell-size", type=float, default=1500.0, help="Grid resolution for RaySpace preprocessing")
     parser.add_argument("--nu", type=int, nargs="+", default=DEFAULT_NU_COUNTS, help="Nu values to run")
     args = parser.parse_args()
 
@@ -523,11 +549,13 @@ def main() -> None:
     for i, nu in enumerate(results["counts"]):
         ex = results["exact"]["mean"][i]
         de = results["direct_estimation"]["mean"][i]
+        es = results["estimated"]["mean"][i]
         ti = results["tdbase_intersect"]["mean"][i]
         tw = results["tdbase_within0"]["mean"][i]
         print(
             f"nu={nu}: exact={ex if ex is not None else 'N/A'} "
             f"direct={de if de is not None else 'N/A'} "
+            f"inter_estimated={es if es is not None else 'N/A'} "
             f"td_intersect={ti if ti is not None else 'N/A'} "
             f"td_within0={tw if tw is not None else 'N/A'}"
         )

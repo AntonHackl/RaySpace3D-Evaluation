@@ -2,7 +2,15 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import argparse
+import sys
 from pathlib import Path
+
+# Add project root to sys.path to allow imports from 'benchmarks'
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from adapters.raytracer_adapter import RaytracerAdapter
 from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
 
@@ -21,7 +29,7 @@ RUNS_DIR = SCRIPT_DIR / "runs"
 FILE1 = "nu400_n_nv150_nu400_vs100_r30.dt"
 FILE2 = "nu400_v_nv150_nu400_vs100_r30.dt"
 
-def run_experiment(runs, grid_cell_size, run_log_dir):
+def run_experiment(runs, grid_cell_size, run_log_dir, approaches):
     print("--- Starting Breakdown Experiment ---")
 
     print(f"Logging runs to: {run_log_dir}")
@@ -71,29 +79,52 @@ def run_experiment(runs, grid_cell_size, run_log_dir):
     # Run Benchmark
     results = {}
     
-    print(f"\nRunning Exact Mode ({runs} runs)...")
-    res_exact = exact_adapter.run_overlap(
-        str(f1_path), 
-        str(f2_path), 
-        runs,
-        log_dir=str(run_log_dir)
-    )
-    if "error" in res_exact:
-        print(f"Error in exact run: {res_exact['error']}")
-        return
-    results["Exact"] = res_exact
+    if "exact" in approaches:
+        print(f"\nRunning Exact Mode ({runs} runs)...")
+        res_exact = exact_adapter.run_overlap(
+            str(f1_path), 
+            str(f2_path), 
+            runs,
+            log_dir=str(run_log_dir)
+        )
+        if "error" in res_exact:
+            print(f"Error in exact run: {res_exact['error']}")
+        else:
+            results["Exact"] = res_exact
     
-    print(f"\nRunning Estimated Mode ({runs} runs)...")
-    res_est = estimated_adapter.run_overlap(
-        str(f1_path), 
-        str(f2_path), 
-        runs,
-        log_dir=str(run_log_dir)
-    )
-    if "error" in res_est:
-        print(f"Error in estimated run: {res_est['error']}")
-        return
-    results["Estimated"] = res_est
+    if "estimated" in approaches:
+        print(f"\nRunning Estimated Mode ({runs} runs)...")
+        res_est = estimated_adapter.run_overlap(
+            str(f1_path), 
+            str(f2_path), 
+            runs,
+            log_dir=str(run_log_dir)
+        )
+        if "error" in res_est:
+            print(f"Error in estimated run: {res_est['error']}")
+        else:
+            results["Estimated"] = res_est
+            
+    if "direct_estimation" in approaches:
+        print(f"\nRunning Direct Estimation Mode ({runs} runs)...")
+        direct_adapter = RaytracerAdapter(
+            str(RAYSPACE_DIR), 
+            mode="direct_estimation", 
+            preprocessed_dir=str(PREPROCESSED_DIR), 
+            timings_dir=str(TIMINGS_DIR),
+            grid_cell_size=grid_cell_size,
+            warmup_runs=1
+        )
+        res_direct = direct_adapter.run_overlap(
+            str(f1_path), 
+            str(f2_path), 
+            runs,
+            log_dir=str(run_log_dir)
+        )
+        if "error" in res_direct:
+            print(f"Error in direct estimation run: {res_direct['error']}")
+        else:
+            results["Direct Estimation"] = res_direct
     
     return results
 
@@ -187,12 +218,13 @@ def main():
     parser = argparse.ArgumentParser(description="Mesh Overlap Breakdown Experiment")
     parser.add_argument("--runs", type=int, default=5, help="Number of runs per method")
     parser.add_argument("--grid-cell-size", type=float, default=1.0, help="Grid resolution for RaySpace")
+    parser.add_argument("--approaches", type=str, nargs="+", default=["exact", "estimated", "direct_estimation"])
     args = parser.parse_args()
     
     run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_breakdown")
     run_log_dir = Path(run_layout["logs_dir"])
     figures_dir = Path(run_layout["figures_dir"])
-    results = run_experiment(args.runs, args.grid_cell_size, run_log_dir)
+    results = run_experiment(args.runs, args.grid_cell_size, run_log_dir, approaches=args.approaches)
     
     if results:
         print("\nResults Summary:")

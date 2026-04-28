@@ -29,6 +29,7 @@ srun --container-image=anthac/rayspace:latest \
     # Robust conda activation
     source /sc/home/anton.hackl/conda3/etc/profile.d/conda.sh
     conda activate spatial_benchmark
+    export PYTHONPATH=$PYTHONPATH:.
     
     echo \"Building RaySpace3D components (preprocess and query)...\"
     ./build_all.sh --only preprocess

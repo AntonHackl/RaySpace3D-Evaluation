@@ -5,6 +5,12 @@ import json
 import argparse
 from pathlib import Path
 import subprocess
+# Add project root to sys.path to allow imports from 'benchmarks'
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
 from benchmarks.common.scenario_utils import (
     canonical_cube_pair_paths,
@@ -45,8 +51,8 @@ SHARED_SCENARIO = "selectivity"
 def main():
     parser = argparse.ArgumentParser(description="Selectivity Benchmark for Mesh Overlap")
     parser.add_argument("--approaches", type=str, nargs="+", 
-                        default=["exact", "estimated", "direct_estimation", "tdbase", "cgal", "touch"],
-                        choices=["exact", "estimated", "direct_estimation", "tdbase", "cgal", "touch"],
+                        default=["exact", "estimated", "direct_estimation", "estimated_mem10", "tdbase", "cgal", "touch"],
+                        choices=["exact", "estimated", "direct_estimation", "estimated_mem10", "tdbase", "cgal", "touch"],
                         help="Approaches to run")
     parser.add_argument("--runs", type=int, default=5, help="Number of runs per selectivity")
     args = parser.parse_args()
@@ -179,6 +185,11 @@ def main():
                 elif mode == "direct_estimation":
                     adapter.executable = adapter.rayspace_dir / "query/build/bin/raytracer_overlap_direct_estimation"
                     adapter.name = "direct_estimation"
+                elif mode == "estimated_mem10":
+                    adapter.mode = "direct_estimation"
+                    adapter.executable = adapter.rayspace_dir / "query/build/bin/raytracer_overlap_direct_estimation"
+                    adapter.name = "estimated_mem10"
+                    adapter.hash_table_free_mem_fraction = 0.1
                 current_adapter = adapter
                 
             results = current_adapter.run_overlap(

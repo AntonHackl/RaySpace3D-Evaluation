@@ -8,6 +8,12 @@ from datetime import datetime
 import subprocess 
 import json
 import re
+# Add project root to sys.path to allow imports from 'benchmarks'
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
 from benchmarks.common.scenario_utils import (
     canonical_nu_pair_paths,

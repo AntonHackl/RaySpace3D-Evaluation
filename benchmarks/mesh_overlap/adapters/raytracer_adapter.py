@@ -51,6 +51,8 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
             self.executable = query_bin_dir / "raytracer_mesh_overlap"
         elif self.mode == "direct_estimation":
             self.executable = query_bin_dir / "raytracer_overlap_direct_estimation"
+        elif self.mode == "estimated":
+            self.executable = query_bin_dir / "raytracer_intersection_estimated"
         else:
             raise ValueError(f"Unknown mode: {self.mode}")
 
@@ -154,8 +156,8 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
                 "download results",
                 "query",
             ]
-        elif self.mode == "direct_estimation":
-            # For direct_estimation mode, include selectivity estimation in query time
+        elif self.mode in ("direct_estimation", "estimated"):
+            # For direct_estimation/estimated mode, include selectivity estimation in query time
             expected_prefixes = [
                 "selectivity estimation",
                 "raytrace_hash_",
@@ -188,6 +190,8 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
                     cmd.extend(["--hash-table-size", str(self.hash_table_size)])
                 elif self.hash_table_free_mem_fraction is not None:
                     cmd.extend(["--hash-table-free-mem-fraction", str(self.hash_table_free_mem_fraction)])
+            
+            if self.mode in ("direct_estimation", "estimated"):
                 if pairs_output and run_idx == (num_runs - 1):
                     cmd.extend(["--pairs-output", str(pairs_output)])
                 if estimate_only:
@@ -196,6 +200,10 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
                 # Pass max iterations
                 max_iter = overlap_max_iterations if overlap_max_iterations is not None else self.overlap_max_iterations
                 cmd.extend(["--overlap-max-iterations", str(max_iter)])
+                
+                if self.mode == "estimated":
+                     # intersection_estimated has containment-max-iterations
+                     cmd.extend(["--containment-max-iterations", "1024"])
 
 
             
@@ -328,6 +336,22 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
                     query_time = sum(phase_values.get(c, 0.0) for c in components)
                     if query_time <= 0.0:
                          # Fallback to 'query' or 'execute hash query' if components not found
+                         query_time = phase_values.get("execute hash query", 0.0) or phase_values.get("query", 0.0)
+                elif self.mode == "estimated":
+                    # Sum all relevant phases for intersection_estimated
+                    components = [
+                        "selectivity estimation",
+                        "raytrace_hash_mesh1tomesh2",
+                        "raytrace_hash_mesh2tomesh1",
+                        "raytrace_overlap_hash_mesh1tomesh2",
+                        "raytrace_overlap_hash_mesh2tomesh1",
+                        "raytrace_containment_hash_mesh1tomesh2",
+                        "raytrace_containment_hash_mesh2tomesh1",
+                        "compact_hash_table_pairs",
+                        "download results",
+                    ]
+                    query_time = sum(phase_values.get(c, 0.0) for c in components)
+                    if query_time <= 0.0:
                          query_time = phase_values.get("execute hash query", 0.0) or phase_values.get("query", 0.0)
                 else:
                     # In direct_estimation mode, if no components found, fallback

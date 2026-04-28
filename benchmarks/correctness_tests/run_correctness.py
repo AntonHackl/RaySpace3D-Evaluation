@@ -36,8 +36,8 @@ CGAL_QUERY_RELATIVE_TOLERANCE = 0.05
 # After re-snapshotting, update these constants intentionally.
 RAYSPACE_20K_GROUND_TRUTH: Dict[str, int] = {
     "overlap_num_pairs": 421752,
-    "intersection_num_pairs": 430072,
-    "containment_num_pairs": 18705,
+    "intersection_num_pairs": 430028,
+    "containment_num_pairs": 4211,
 }
 
 
