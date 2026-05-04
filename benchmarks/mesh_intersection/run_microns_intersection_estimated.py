@@ -21,7 +21,7 @@ from benchmarks.mesh_intersection.adapters.raytracer_adapter import RaytracerInt
 
 def main():
     parser = argparse.ArgumentParser(description="MICrONS subset estimated benchmark for mesh intersection")
-    parser.add_argument("--sizes", type=int, nargs="+", default=[4, 8, 16],
+    parser.add_argument("--sizes", type=int, nargs="+", default=[4, 8],
                         help="MICrONS subset sizes in GB to benchmark")
     parser.add_argument("--source-root", type=str, 
                         default=str(REPO_ROOT / "datasets_scripts" / "microns_data"),

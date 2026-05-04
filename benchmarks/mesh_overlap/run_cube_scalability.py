@@ -45,7 +45,9 @@ CUBE_COUNTS = [200000, 400000, 600000, 1000000]
 FIXED_COUNT = "200k_a"
 SHARED_SCENARIO = "cube_scalability"
 
-def run_experiment(runs, grid_cell_size, run_log_dir):
+def run_experiment(runs, grid_cell_size, run_log_dir, approaches=None, timeout=120.0):
+    if approaches is None:
+        approaches = ["exact", "estimated", "cgal", "touch"]
     print("--- Starting Cube Scalability Experiment ---")
     
     shared_dirs = get_shared_data_dirs(SHARED_SCENARIO)
@@ -116,65 +118,74 @@ def run_experiment(runs, grid_cell_size, run_log_dir):
         print(f"\nProcessing: {f1_path.name} vs {f2_path.name}")
 
         # Check/Run Preprocessing (Exact/Estimated share preprocessed files)
-        print("Checking preprocessing...")
-        # Force preprocessing if not exists or ensure it's up to date
-        # Note: RaytracerAdapter.preprocess_from_source checks existence inside
-        exact_adapter.preprocess_from_source(str(f1_path), str(f1_path), log_dir=str(run_log_dir))
-        exact_adapter.preprocess_from_source(str(f2_path), str(f2_path), log_dir=str(run_log_dir))
+        if any(a in approaches for a in ["exact", "estimated"]):
+            print("Checking preprocessing (Raytracer)...")
+            # Force preprocessing if not exists or ensure it's up to date
+            # Note: RaytracerAdapter.preprocess_from_source checks existence inside
+            exact_adapter.preprocess_from_source(str(f1_path), str(f1_path), log_dir=str(run_log_dir))
+            exact_adapter.preprocess_from_source(str(f2_path), str(f2_path), log_dir=str(run_log_dir))
 
-        # Run Exact Benchmark
-        print(f"Running Exact Mode ({runs} runs)...")
-        res_exact = exact_adapter.run_overlap(
-            str(f1_path), 
-            str(f2_path), 
-            runs,
-            log_dir=str(run_log_dir),
-            timeout=TIMEOUT_SECONDS
-        )
-        if "error" in res_exact:
-            print(f"Error in exact run: {res_exact['error']}")
-            continue # Assuming if exact fails, we skip this point
+        res_exact = {"mean": 0, "std": 0, "breakdown": {}}
+        if "exact" in approaches:
+            print(f"Running Exact Mode ({runs} runs)...")
+            res_exact = exact_adapter.run_overlap(
+                str(f1_path), 
+                str(f2_path), 
+                runs,
+                log_dir=str(run_log_dir),
+                timeout=timeout
+            )
+            if "error" in res_exact:
+                print(f"Error in exact run: {res_exact['error']}")
+                # continue # Assuming if exact fails, we skip this point
+                res_exact = {"mean": 0, "std": 0, "breakdown": {}}
             
         # Run Estimated Benchmark
-        print(f"Running Estimated Mode ({runs} runs)...")
-        res_est = estimated_adapter.run_overlap(
-            str(f1_path), 
-            str(f2_path), 
-            runs,
-            log_dir=str(run_log_dir),
-            timeout=TIMEOUT_SECONDS
-        )
-        if "error" in res_est:
-            print(f"Error in estimated run: {res_est['error']}")
-            # We continue even if estimated fails? Let's say yes for robustness
-            res_est = {"mean": 0, "std": 0, "breakdown": {}}
+        res_est = {"mean": 0, "std": 0, "breakdown": {}}
+        if "estimated" in approaches:
+            print(f"Running Estimated Mode ({runs} runs)...")
+            res_est = estimated_adapter.run_overlap(
+                str(f1_path), 
+                str(f2_path), 
+                runs,
+                log_dir=str(run_log_dir),
+                timeout=timeout
+            )
+            if "error" in res_est:
+                print(f"Error in estimated run: {res_est['error']}")
+                # We continue even if estimated fails? Let's say yes for robustness
+                res_est = {"mean": 0, "std": 0, "breakdown": {}}
 
         # Run CGAL Benchmark
-        print(f"Running CGAL Mode ({runs} runs)...")
-        res_cgal = cgal_adapter.run_overlap(
-            str(f1_path), 
-            str(f2_path), 
-            runs,
-            log_dir=str(run_log_dir),
-            timeout=TIMEOUT_SECONDS
-        )
-        if "error" in res_cgal:
-            print(f"Error in CGAL run: {res_cgal['error']}")
-            # Allow CGAL to fail (e.g. timeout)
-            res_cgal = {"mean": None, "std": None}
+        res_cgal = {"mean": None, "std": None}
+        if "cgal" in approaches:
+            print(f"Running CGAL Mode ({runs} runs)...")
+            res_cgal = cgal_adapter.run_overlap(
+                str(f1_path), 
+                str(f2_path), 
+                runs,
+                log_dir=str(run_log_dir),
+                timeout=timeout
+            )
+            if "error" in res_cgal:
+                print(f"Error in CGAL run: {res_cgal['error']}")
+                # Allow CGAL to fail (e.g. timeout)
+                res_cgal = {"mean": None, "std": None}
 
         # Run TOUCH Benchmark
-        print(f"Running TOUCH Mode ({runs} runs)...")
-        res_touch = touch_adapter.run_overlap(
-            str(f1_path), 
-            str(f2_path), 
-            runs,
-            log_dir=str(run_log_dir),
-            timeout=TIMEOUT_SECONDS
-        )
-        if "error" in res_touch:
-            print(f"Error in TOUCH run: {res_touch['error']}")
-            res_touch = {"mean": None, "std": None}
+        res_touch = {"mean": None, "std": None}
+        if "touch" in approaches:
+            print(f"Running TOUCH Mode ({runs} runs)...")
+            res_touch = touch_adapter.run_overlap(
+                str(f1_path), 
+                str(f2_path), 
+                runs,
+                log_dir=str(run_log_dir),
+                timeout=timeout
+            )
+            if "error" in res_touch:
+                print(f"Error in TOUCH run: {res_touch['error']}")
+                res_touch = {"mean": None, "std": None}
 
         results["counts"].append(count)
         
@@ -352,12 +363,15 @@ def main():
     parser = argparse.ArgumentParser(description="Mesh Overlap Cube Scalability Experiment")
     parser.add_argument("--runs", type=int, default=5, help="Number of runs per method")
     parser.add_argument("--grid-cell-size", type=float, default=5.0, help="Grid cell size for RaySpace")
+    parser.add_argument("--timeout", type=float, default=1200.0, help="Timeout in seconds per run")
+    parser.add_argument("--approaches", type=str, nargs="+", default=["exact", "estimated", "cgal", "touch"], 
+                        choices=["exact", "estimated", "cgal", "touch"], help="Approaches to run")
     args = parser.parse_args()
     
     run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_cube_scalability")
     run_log_dir = Path(run_layout["logs_dir"])
     figures_dir = Path(run_layout["figures_dir"])
-    results = run_experiment(args.runs, args.grid_cell_size, run_log_dir)
+    results = run_experiment(args.runs, args.grid_cell_size, run_log_dir, approaches=args.approaches, timeout=args.timeout)
     
     if results and results["counts"]:
         print("\nResults Summary:")
@@ -392,6 +406,7 @@ def main():
                     "run_dir": str(run_layout["run_dir"]),
                     "runs": args.runs,
                     "grid_cell_size": args.grid_cell_size,
+                    "timeout": args.timeout,
                 },
                 "results": clean_results,
             },

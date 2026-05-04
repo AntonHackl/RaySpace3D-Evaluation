@@ -60,8 +60,9 @@ class TDBaseAdapter(OverlapBenchmarkAdapter):
 
         cmd = [
             str(self.obj_to_dt_exec),
-            str(source_path),
-            str(output_dt)
+            "--obj", str(source_path),
+            "--output", str(output_dt.parent),
+            "--output-name", str(output_dt.stem)
         ]
 
         print(f"[{self.name}] Converting {source_path.name} to {output_dt.name}...")

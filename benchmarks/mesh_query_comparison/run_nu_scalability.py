@@ -33,7 +33,7 @@ DEFAULT_NU_COUNTS = [200, 400, 600, 800]
 def main():
     parser = argparse.ArgumentParser(description="Nu scalability benchmark for mesh query comparison")
     parser.add_argument("--nu", type=int, nargs="+", default=DEFAULT_NU_COUNTS)
-    parser.add_argument("--grid-cell-size", type=float, default=1.0)
+    parser.add_argument("--grid-cell-size", type=float, default=200.0)
     parser.add_argument("--runs", type=int, default=5)
     parser.add_argument("--warmup-runs", type=int, default=1)
     parser.add_argument("--timeout", type=float, default=120.0)

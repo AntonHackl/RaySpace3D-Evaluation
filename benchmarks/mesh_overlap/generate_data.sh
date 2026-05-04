@@ -20,7 +20,7 @@ export USE_GPU=TRUE
 THREADS=${SLURM_CPUS_PER_TASK:-20}
 
 BASE_DIR="/sc/home/anton.hackl/Spatial_Data_Management/RaySpace3D-Evaluation"
-TDBASE_BUILD_DIR="$BASE_DIR/baselines/RaySpace3DBaselines/tdbase_patch/build"
+TDBASE_BUILD_DIR="$BASE_DIR/baselines/RaySpace3DBaselines/tdbase_patch/build_agent"
 OUTPUT_DIR="$BASE_DIR/benchmarks/mesh_overlap/data/raw"
 
 mkdir -p $OUTPUT_DIR
@@ -34,6 +34,18 @@ for nu in 200 400 600 800 1000; do
         -n ../../data/nuclei.pt \
         -v ../../data/vessel.pt \
         -o "$OUTPUT_DIR/tdbase_n_nv150_nu${nu}" \
+        --hausdorff \
+        --nv 150 \
+        --nu $nu \
+        -r 30 \
+        -i \
+        -t $THREADS
+
+    echo "Generating SECOND nuclei dataset for nn benchmark with nv=150, nu=$nu using $THREADS threads..."
+    ./tdbase simulator \
+        -n ../../data/nuclei.pt \
+        -v ../../data/vessel.pt \
+        -o "$OUTPUT_DIR/tdbase_nn_nv150_nu${nu}" \
         --hausdorff \
         --nv 150 \
         --nu $nu \

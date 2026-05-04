@@ -39,7 +39,7 @@ def main():
     parser.add_argument("--max-size", type=float, default=5.0)
     parser.add_argument("--selectivity", type=float, default=0.0005)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--grid-cell-size", type=float, default=1.0)
+    parser.add_argument("--grid-cell-size", type=float, default=5.0)
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--warmup-runs", type=int, default=1)
     parser.add_argument("--timeout", type=float, default=3600.0)

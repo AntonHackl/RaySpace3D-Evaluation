@@ -29,7 +29,7 @@ RUNS_DIR = SCRIPT_DIR / "runs"
 FILE1 = "nu400_n_nv150_nu400_vs100_r30.dt"
 FILE2 = "nu400_v_nv150_nu400_vs100_r30.dt"
 
-def run_experiment(runs, grid_cell_size, run_log_dir, approaches):
+def run_experiment(runs, grid_cell_size, run_log_dir, approaches, timeout=None):
     print("--- Starting Breakdown Experiment ---")
 
     print(f"Logging runs to: {run_log_dir}")
@@ -66,15 +66,14 @@ def run_experiment(runs, grid_cell_size, run_log_dir, approaches):
         return
 
     # Check/Run Preprocessing
-    print("Checking preprocessing...")
-    # Log preprocessing to same dir, or a shared one? 
-    # Usually preprocessing is one-off, but we can log it to the run dir for completeness if it happens.
-    for f in [f1_path, f2_path]:
-        if not exact_adapter.check_preprocessed(str(f)):
-            print(f"Preprocessing {f.name}...")
-            exact_adapter.preprocess_from_source(str(f), str(f), log_dir=str(run_log_dir))
-        else:
-            print(f"Already preprocessed: {f.name}")
+    if any(a in approaches for a in ["exact", "estimated", "direct_estimation"]):
+        print("Checking preprocessing...")
+        for f in [f1_path, f2_path]:
+            if not exact_adapter.check_preprocessed(str(f)):
+                print(f"Preprocessing {f.name}...")
+                exact_adapter.preprocess_from_source(str(f), str(f), log_dir=str(run_log_dir))
+            else:
+                print(f"Already preprocessed: {f.name}")
 
     # Run Benchmark
     results = {}
@@ -85,7 +84,8 @@ def run_experiment(runs, grid_cell_size, run_log_dir, approaches):
             str(f1_path), 
             str(f2_path), 
             runs,
-            log_dir=str(run_log_dir)
+            log_dir=str(run_log_dir),
+            timeout=timeout
         )
         if "error" in res_exact:
             print(f"Error in exact run: {res_exact['error']}")
@@ -98,7 +98,8 @@ def run_experiment(runs, grid_cell_size, run_log_dir, approaches):
             str(f1_path), 
             str(f2_path), 
             runs,
-            log_dir=str(run_log_dir)
+            log_dir=str(run_log_dir),
+            timeout=timeout
         )
         if "error" in res_est:
             print(f"Error in estimated run: {res_est['error']}")
@@ -119,7 +120,8 @@ def run_experiment(runs, grid_cell_size, run_log_dir, approaches):
             str(f1_path), 
             str(f2_path), 
             runs,
-            log_dir=str(run_log_dir)
+            log_dir=str(run_log_dir),
+            timeout=timeout
         )
         if "error" in res_direct:
             print(f"Error in direct estimation run: {res_direct['error']}")
@@ -217,14 +219,15 @@ def plot_results(results, figures_dir):
 def main():
     parser = argparse.ArgumentParser(description="Mesh Overlap Breakdown Experiment")
     parser.add_argument("--runs", type=int, default=5, help="Number of runs per method")
-    parser.add_argument("--grid-cell-size", type=float, default=1.0, help="Grid resolution for RaySpace")
+    parser.add_argument("--grid-cell-size", type=float, default=200.0, help="Grid resolution for RaySpace")
     parser.add_argument("--approaches", type=str, nargs="+", default=["exact", "estimated", "direct_estimation"])
+    parser.add_argument("--timeout", type=float, default=1200.0, help="Timeout in seconds per run")
     args = parser.parse_args()
     
     run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_breakdown")
     run_log_dir = Path(run_layout["logs_dir"])
     figures_dir = Path(run_layout["figures_dir"])
-    results = run_experiment(args.runs, args.grid_cell_size, run_log_dir, approaches=args.approaches)
+    results = run_experiment(args.runs, args.grid_cell_size, run_log_dir, approaches=args.approaches, timeout=args.timeout)
     
     if results:
         print("\nResults Summary:")

@@ -16,8 +16,8 @@ if str(REPO_ROOT) not in sys.path:
 
 from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
 from benchmarks.common.scenario_utils import (
-    canonical_nu_pair_paths,
-    ensure_nu_pair_dataset,
+    canonical_nn_pair_paths,
+    ensure_nn_pair_dataset,
     get_shared_data_dirs,
 )
 
@@ -46,22 +46,22 @@ TIMEOUT_SECONDS = 120.0
 # Nu Counts for Dataset B (Dataset A is fixed at corresponding vessel count)
 DEFAULT_NU_COUNTS = [200, 400, 600, 800]
 LEGACY_RAW_DIR = RAW_DIR
-SHARED_SCENARIO = "nu_scalability"
+SHARED_SCENARIO = "nn_scalability"
 
-def resolve_nu_dataset_pair(raw_shared_dir: Path, nu: int):
-    n_file, v_file = canonical_nu_pair_paths(raw_shared_dir, nu=nu)
-    ensure_nu_pair_dataset(
-        n_file,
-        v_file,
+def resolve_nn_dataset_pair(raw_shared_dir: Path, nu: int):
+    n_file1, n_file2 = canonical_nn_pair_paths(raw_shared_dir, nu=nu)
+    ensure_nn_pair_dataset(
+        n_file1,
+        n_file2,
         legacy_raw_dirs=[LEGACY_RAW_DIR],
     )
-    return v_file, n_file
+    return n_file1, n_file2
 
 def run_experiment(runs, grid_cell_size, nu_counts, run_log_dir, approaches=None, track_hash_contention=False, timeout=120.0):
     if approaches is None:
         approaches = ["exact", "direct_estimation", "cgal", "touch", "tdbase"]
     
-    print(f"--- Starting Nu Scalability Experiment ({nu_counts}) ---")
+    print(f"--- Starting NN Scalability Experiment ({nu_counts}) ---")
     print(f"Approaches: {approaches}")
     if track_hash_contention:
         print("Direct estimation hash contention tracking: enabled")
@@ -122,7 +122,7 @@ def run_experiment(runs, grid_cell_size, nu_counts, run_log_dir, approaches=None
     }
 
     for nu in nu_counts:
-        f_v_path, f_n_path = resolve_nu_dataset_pair(shared_raw_dir, nu)
+        f_v_path, f_n_path = resolve_nn_dataset_pair(shared_raw_dir, nu)
         
         if not f_v_path or not f_n_path:
             print(f"Error: Datasets for nu={nu} not found in {shared_raw_dir}! Skipping.")
@@ -479,7 +479,7 @@ def plot_results(results, figures_dir):
     generate_scaling_plot(ax_main, results, counts)
     generate_breakdown_plot(ax_breakdown, results, counts)
     plt.tight_layout()
-    combined_path = figures_dir / "mesh_overlap_nu_scalability.png"
+    combined_path = figures_dir / "mesh_overlap_nn_scalability.png"
     plt.savefig(combined_path, dpi=300, bbox_inches='tight')
     plt.savefig(str(combined_path).replace('.png', '.pdf'), bbox_inches='tight')
     print(f"Combined visualization saved to {combined_path}")
@@ -489,7 +489,7 @@ def plot_results(results, figures_dir):
     fig_scaling, ax_scaling = plt.subplots(figsize=(10, 8))
     generate_scaling_plot(ax_scaling, results, counts)
     plt.tight_layout()
-    scaling_path = figures_dir / "mesh_overlap_nu_scalability_scaling.png"
+    scaling_path = figures_dir / "mesh_overlap_nn_scalability_scaling.png"
     plt.savefig(scaling_path, dpi=300, bbox_inches='tight')
     plt.savefig(str(scaling_path).replace('.png', '.pdf'), bbox_inches='tight')
     print(f"Scaling visualization saved to {scaling_path}")
@@ -499,14 +499,14 @@ def plot_results(results, figures_dir):
     fig_breakdown, ax_breakdown_sep = plt.subplots(figsize=(12, 8))
     generate_breakdown_plot(ax_breakdown_sep, results, counts)
     plt.tight_layout()
-    breakdown_path = figures_dir / "mesh_overlap_nu_scalability_breakdown.png"
+    breakdown_path = figures_dir / "mesh_overlap_nn_scalability_breakdown.png"
     plt.savefig(breakdown_path, dpi=300, bbox_inches='tight')
     plt.savefig(str(breakdown_path).replace('.png', '.pdf'), bbox_inches='tight')
     print(f"Breakdown visualization saved to {breakdown_path}")
     plt.close(fig_breakdown)
 
 def main():
-    parser = argparse.ArgumentParser(description="Mesh Overlap Nu Scalability Experiment")
+    parser = argparse.ArgumentParser(description="Mesh Overlap NN Scalability Experiment")
     parser.add_argument("--runs", type=int, default=5, help="Number of runs per method")
     parser.add_argument("--grid-cell-size", type=float, default=200.0, help="Grid resolution for RaySpace")
     parser.add_argument("--nu", type=int, nargs='+', help="Nu counts to test (e.g. 200 400 600 800)")
@@ -527,7 +527,7 @@ def main():
 
     nu_counts = args.nu if args.nu else DEFAULT_NU_COUNTS
     
-    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_nu_scalability")
+    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_nn_scalability")
     run_log_dir = Path(run_layout["logs_dir"])
     figures_dir = Path(run_layout["figures_dir"])
     results = run_experiment(

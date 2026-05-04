@@ -85,6 +85,21 @@ def canonical_nu_pair_paths(
     return n_file, v_file
 
 
+def canonical_nn_pair_paths(
+    raw_dir: Path,
+    *,
+    nu: int,
+    nv: int = 150,
+    vs: int = 100,
+    radius: int = 30,
+) -> Tuple[Path, Path]:
+    stem1 = f"tdbase_n_nv{nv}_nu{nu}"
+    stem2 = f"tdbase_nn_nv{nv}_nu{nu}"
+    n_file1 = raw_dir / f"{stem1}_n_nv{nv}_nu{nu}_vs{vs}_r{radius}.dt"
+    n_file2 = raw_dir / f"{stem2}_n_nv{nv}_nu{nu}_vs{vs}_r{radius}.dt"
+    return n_file1, n_file2
+
+
 def compute_universe_for_selectivity(target_selectivity: float, min_size: float, max_size: float) -> float:
     if target_selectivity <= 0:
         raise ValueError("Target selectivity must be positive")
@@ -199,6 +214,33 @@ def ensure_nu_pair_dataset(
         f"{output_n} and/or {output_v}. "
         "Provide the canonical files under benchmarks/data_shared/nu_scalability/raw "
         "or pass legacy_raw_dirs containing exact filenames."
+    )
+
+
+def ensure_nn_pair_dataset(
+    output_n1: Path,
+    output_n2: Path,
+    *,
+    legacy_raw_dirs: list[Path] | None = None,
+) -> Tuple[Path, Path]:
+    if output_n1.exists() and output_n2.exists():
+        return output_n1, output_n2
+
+    search_dirs = legacy_raw_dirs or []
+    for base_dir in search_dirs:
+        cand_n1 = base_dir / output_n1.name
+        cand_n2 = base_dir / output_n2.name
+        if cand_n1.exists() and cand_n2.exists():
+            output_n1.parent.mkdir(parents=True, exist_ok=True)
+            output_n2.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(cand_n1, output_n1)
+            shutil.copyfile(cand_n2, output_n2)
+            return output_n1, output_n2
+
+    raise FileNotFoundError(
+        "Could not resolve nn dataset pair. Missing files: "
+        f"{output_n1} and/or {output_n2}. "
+        "Ensure you have generated the second nuclei dataset using generate_data.sh."
     )
 
 

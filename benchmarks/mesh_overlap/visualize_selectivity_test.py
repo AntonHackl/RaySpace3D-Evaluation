@@ -42,6 +42,9 @@ def visualize_selectivity(summary_file, output_path=None):
     with open(summary_file, 'r') as f:
         data = json.load(f)
 
+    if isinstance(data, dict) and "results" in data:
+        data = data["results"]
+
     # Sort checks if json is not sorted
     data.sort(key=lambda x: x["selectivity"])
 
@@ -58,6 +61,8 @@ def visualize_selectivity(summary_file, output_path=None):
     touch_stds = []
     direct_est_means = []
     direct_est_stds = []
+    mem10_means = []
+    mem10_stds = []
 
     # Filter data
     valid_selectivities = []
@@ -69,8 +74,13 @@ def visualize_selectivity(summary_file, output_path=None):
         valid_selectivities.append(d["selectivity"])
         exact_means.append(d["exact"]["mean_ms"])
         exact_stds.append(d["exact"]["std_ms"])
-        est_means.append(d["estimated"]["mean_ms"])
-        est_stds.append(d["estimated"]["std_ms"])
+        
+        if "estimated" in d and "error" not in d["estimated"]:
+            est_means.append(d["estimated"]["mean_ms"])
+            est_stds.append(d["estimated"]["std_ms"])
+        else:
+            est_means.append(None)
+            est_stds.append(None)
         
         if "tdbase" in d and "error" not in d["tdbase"]:
             tdbase_means.append(d["tdbase"]["mean_ms"])
@@ -100,13 +110,25 @@ def visualize_selectivity(summary_file, output_path=None):
             direct_est_means.append(None)
             direct_est_stds.append(None)
 
+        if "estimated_mem10" in d and "error" not in d["estimated_mem10"]:
+            mem10_means.append(d["estimated_mem10"]["mean_ms"])
+            mem10_stds.append(d["estimated_mem10"]["std_ms"])
+        else:
+            mem10_means.append(None)
+            mem10_stds.append(None)
+
     if not valid_selectivities:
         print("No valid data points found.")
         return
 
-    # Plot
-    fig, (ax_main, ax_breakdown) = plt.subplots(1, 2, figsize=(18, 8))
-    
+    # Setup output directory
+    summary_path = Path(summary_file)
+    if "runs" in summary_path.parts:
+        output_dir = summary_path.parent / "figures"
+    else:
+        output_dir = summary_path.parent.parent.parent / "figures"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     # Get num_cubes if available
     num_cubes_str = ""
     if data and "num_cubes" in data[0]:
@@ -114,14 +136,21 @@ def visualize_selectivity(summary_file, output_path=None):
         num_cubes_str = f" ({num_cubes} cubes)"
 
     # --- Plot 1: Scaling Line Plot ---
-    ax_main.errorbar(valid_selectivities, exact_means, yerr=exact_stds, label='Exact Raytracer', 
+    fig_main, ax_main = plt.subplots(figsize=(10, 8))
+    ax_main.errorbar(valid_selectivities, exact_means, yerr=exact_stds, label='Two Pass', 
                 marker='o', capsize=5, linestyle='-', color='#1f77b4')
-    ax_main.errorbar(valid_selectivities, est_means, yerr=est_stds, label='Estimated Raytracer', 
-                marker='s', capsize=5, linestyle='--', color='#2ca02c')
+    
+    if any(x is not None for x in est_means):
+        ax_main.errorbar(valid_selectivities, est_means, yerr=est_stds, label='Estimated Raytracer', 
+                    marker='s', capsize=5, linestyle='--', color='#2ca02c')
     
     if any(x is not None for x in direct_est_means):
-        ax_main.errorbar(valid_selectivities, direct_est_means, yerr=direct_est_stds, label='Direct Est. Raytracer', 
+        ax_main.errorbar(valid_selectivities, direct_est_means, yerr=direct_est_stds, label='Selectivity Estimation', 
                     marker='X', capsize=5, linestyle=':', color='#ff7f0e')
+
+    if any(x is not None for x in mem10_means):
+        ax_main.errorbar(valid_selectivities, mem10_means, yerr=mem10_stds, label='10% remaining', 
+                    marker='v', capsize=5, linestyle='--', color='#e377c2')
 
     if any(x is not None for x in tdbase_means):
         td_sel = [s for s, m in zip(valid_selectivities, tdbase_means) if m is not None]
@@ -157,15 +186,24 @@ def visualize_selectivity(summary_file, output_path=None):
 
     # Annotate improvement factor
     for sl, ex, est in zip(valid_selectivities, exact_means, est_means):
-        speedup = ex / est
-        ax_main.annotate(f"{speedup:.1f}x", 
-                    xy=(sl, est), 
-                    xytext=(0, -15), textcoords="offset points",
-                    ha='center', fontsize=9, color='#2ca02c')
+        if est is not None and ex is not None:
+            speedup = ex / est
+            ax_main.annotate(f"{speedup:.1f}x", 
+                        xy=(sl, est), 
+                        xytext=(0, -15), textcoords="offset points",
+                        ha='center', fontsize=9, color='#2ca02c')
+
+    scaling_output = output_dir / "selectivity_scaling.png"
+    plt.tight_layout()
+    plt.savefig(scaling_output, dpi=300, bbox_inches='tight')
+    plt.savefig(str(scaling_output).replace('.png', '.pdf'), bbox_inches='tight')
+    print(f"Scaling plot saved to {scaling_output}")
+    plt.close(fig_main)
 
     # --- Plot 2: Breakdown Chart ---
+    fig_breakdown, ax_breakdown = plt.subplots(figsize=(12, 8))
     # Prepare data for breakdown
-    modes_in_data = ["exact", "estimated", "direct_estimation", "tdbase", "cgal", "touch"]
+    modes_in_data = ["exact", "estimated", "direct_estimation", "estimated_mem10", "tdbase", "cgal", "touch"]
     ordered_phases_raw = [
         "selectivity estimation",
         "query",
@@ -189,9 +227,10 @@ def visualize_selectivity(summary_file, output_path=None):
     ]
     
     mode_short_names = {
-        "exact": "Ex",
+        "exact": "2P",
         "estimated": "Est",
-        "direct_estimation": "Dir",
+        "direct_estimation": "SE",
+        "estimated_mem10": "10%",
         "tdbase": "TD",
         "cgal": "CG",
         "touch": "TO"
@@ -259,7 +298,7 @@ def visualize_selectivity(summary_file, output_path=None):
 
     ax_breakdown.set_xticks(range(num_selectivities))
     ax_breakdown.set_xticklabels([f"{s}" for s in valid_selectivities])
-    ax_breakdown.set_xlabel('Selectivity (Grouped by Approach: Ex, Est, Dir, ...)', fontsize=12)
+    ax_breakdown.set_xlabel('Selectivity (Grouped by Approach: 2P, SE, 10%, ...)', fontsize=12)
     ax_breakdown.set_ylabel('Query Time (ms)', fontsize=12)
     ax_breakdown.set_title('Query Time Breakdown', fontsize=14, fontweight='bold')
     ax_breakdown.grid(True, axis='y', which='both', ls='-', alpha=0.1)
@@ -268,29 +307,18 @@ def visualize_selectivity(summary_file, output_path=None):
     ax_breakdown.legend(legend_handles, legend_labels, 
                        bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
 
-    # Ensure output directory exists
-    if output_path is None:
-        summary_path = Path(summary_file)
-        # Default: figures directory in mesh_overlap_benchmark
-        output_dir = summary_path.parent.parent.parent / "figures"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        img_name = f"selectivity_scaling_{int(valid_selectivities[0]*10000)}to{int(valid_selectivities[-1]*100)}_with_breakdown.png"
-        output_path = output_dir / img_name
-
+    breakdown_output = output_dir / "selectivity_breakdown.png"
     plt.tight_layout()
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    print(f"Visualization saved to {output_path}")
-    
-    # Also save PDF
-    pdf_path = str(output_path).replace('.png', '.pdf')
-    plt.savefig(pdf_path, bbox_inches='tight')
-    print(f"PDF saved to {pdf_path}")
+    plt.savefig(breakdown_output, dpi=300, bbox_inches='tight')
+    plt.savefig(str(breakdown_output).replace('.png', '.pdf'), bbox_inches='tight')
+    print(f"Breakdown plot saved to {breakdown_output}")
+    plt.close(fig_breakdown)
 
 def main():
     parser = argparse.ArgumentParser(description="Visualize Selectivity Test Results")
     parser.add_argument("summary_file", nargs='?', default="results/selectivity_test/summary.json",
                         help="Path to summary.json")
-    parser.add_argument("--output", help="Path to output image")
+    parser.add_argument("--output", help="Ignored (now saves to two separate files in the run directory)")
     
     args = parser.parse_args()
     
@@ -304,7 +332,7 @@ def main():
         print(f"Error: Summary file {input_file} not found.")
         return
 
-    visualize_selectivity(input_file, args.output)
+    visualize_selectivity(input_file)
 
 if __name__ == "__main__":
     main()

@@ -20,12 +20,12 @@ from benchmarks.common.scenario_utils import (
 )
 
 # Add current directory to path to import adapters
-# Add current directory to path to import adapters
 sys.path.append(str(Path(__file__).parent))
 from adapters.raytracer_adapter import RaytracerAdapter
 from adapters.tdbase_adapter import TDBaseAdapter
 from adapters.cgal_adapter import CGALAdapter
 from adapters.touch_adapter import TOUCHAdapter
+from visualize_selectivity_test import visualize_selectivity
 
 # Configuration
 SELECTIVITIES = [0.0001, 0.0005, 0.001, 0.005, 0.01]
@@ -55,6 +55,7 @@ def main():
                         choices=["exact", "estimated", "direct_estimation", "estimated_mem10", "tdbase", "cgal", "touch"],
                         help="Approaches to run")
     parser.add_argument("--runs", type=int, default=5, help="Number of runs per selectivity")
+    parser.add_argument("--timeout", type=float, default=1200.0, help="Timeout in seconds per run")
     args = parser.parse_args()
 
     run_layout = create_benchmark_run_layout(Path(__file__).parent, "overlap_selectivity")
@@ -116,33 +117,35 @@ def main():
         )
 
         # 4. Preprocess
-        # RaytracerAdapter.check_preprocessed() checks if .pre exists based on input filename
-        # We assume if the file exists it was generated with the correct parameters (grid size).
-        # To be safe, we could delete it, but for now we trust the flow or use distinct filenames if parameters changed repeatedly (they don't here).
-        print("Ensuring preprocessed files (Raytracer)...")
-        adapter.preprocess_from_source(str(obj_a), str(dt_a))
-        adapter.preprocess_from_source(str(obj_b), str(dt_b))
+        if any(m in args.approaches for m in ["exact", "estimated", "direct_estimation", "estimated_mem10", "cgal", "touch"]):
+            # RaytracerAdapter.check_preprocessed() checks if .pre exists based on input filename
+            # We assume if the file exists it was generated with the correct parameters (grid size).
+            # To be safe, we could delete it, but for now we trust the flow or use distinct filenames if parameters changed repeatedly (they don't here).
+            print("Ensuring preprocessed files (Raytracer)...")
+            adapter.preprocess_from_source(str(obj_a), str(dt_a), log_dir=str(run_layout["logs_dir"]))
+            adapter.preprocess_from_source(str(obj_b), str(dt_b), log_dir=str(run_layout["logs_dir"]))
 
         # Setup TDBase & Preprocess
-        tdbase_adapter = TDBaseAdapter(
-            str(TDBASE_DIR),
-            preprocessed_dir=str(shared_dirs["preprocessed"])
-        )
-        print("Ensuring preprocessed files (TDBase)...")
-        # For TDBase, we convert obj to dt using the tool
-        # TDBaseAdapter uses preprocess_from_source(obj, dt)
-        tdbase_adapter.preprocess_from_source(str(obj_a), str(dt_a))
-        tdbase_adapter.preprocess_from_source(str(obj_b), str(dt_b))
+        if "tdbase" in args.approaches:
+            tdbase_adapter = TDBaseAdapter(
+                str(TDBASE_DIR),
+                preprocessed_dir=str(shared_dirs["preprocessed"])
+            )
+            print("Ensuring preprocessed files (TDBase)...")
+            tdbase_adapter.preprocess_from_source(str(obj_a), str(dt_a), log_dir=str(run_layout["logs_dir"]))
+            tdbase_adapter.preprocess_from_source(str(obj_b), str(dt_b), log_dir=str(run_layout["logs_dir"]))
 
         # Setup CGAL & TOUCH
-        cgal_adapter = CGALAdapter(
-            str(CGAL_DIR),
-            preprocessed_dir=str(shared_dirs["preprocessed"])
-        )
-        touch_adapter = TOUCHAdapter(
-            str(CGAL_DIR),
-            preprocessed_dir=str(shared_dirs["preprocessed"])
-        )
+        if "cgal" in args.approaches:
+            cgal_adapter = CGALAdapter(
+                str(CGAL_DIR),
+                preprocessed_dir=str(shared_dirs["preprocessed"])
+            )
+        if "touch" in args.approaches:
+            touch_adapter = TOUCHAdapter(
+                str(CGAL_DIR),
+                preprocessed_dir=str(shared_dirs["preprocessed"])
+            )
         # CGAL and TOUCH use the same preprocessed files as Raytracer (.pre), which are already generated.
 
         # 5. Run Benchmark
@@ -196,7 +199,8 @@ def main():
                 str(obj_a),
                 str(obj_b),
                 num_runs=args.runs,
-                timeout=TIMEOUT_SECONDS
+                timeout=args.timeout,
+                log_dir=str(run_layout["logs_dir"])
             )
             
             # Use mode name as key in results
@@ -251,6 +255,13 @@ def main():
         },
     )
     print(f"Run results saved to {run_results_path}")
+
+    # 6. Generate Visualization
+    print("\nGenerating visualization...")
+    try:
+        visualize_selectivity(str(run_results_path))
+    except Exception as e:
+        print(f"Failed to generate visualization: {e}")
 
 if __name__ == "__main__":
     main()

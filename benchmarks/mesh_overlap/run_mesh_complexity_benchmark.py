@@ -39,7 +39,10 @@ SHARED_SCENARIO = "mesh_complexity"
 
 TIMEOUT_SECONDS = 3600.0  # Allow longer timeout for dense meshes
 
-def run_experiment(runs, grid_cell_size, num_objects, selectivity, run_log_dir):
+def run_experiment(runs, grid_cell_size, num_objects, selectivity, run_log_dir, approaches=None, timeout=3600.0):
+    if approaches is None:
+        approaches = ["exact", "direct_estimation", "cgal", "touch"]
+
     print("--- Starting Mesh Complexity Experiment ---")
 
     shared_dirs = get_shared_data_dirs(SHARED_SCENARIO)
@@ -48,12 +51,12 @@ def run_experiment(runs, grid_cell_size, num_objects, selectivity, run_log_dir):
         str(RAYSPACE_DIR), mode="exact", preprocessed_dir=str(PREPROCESSED_DIR), 
         timings_dir=str(shared_dirs["timings"]), grid_cell_size=grid_cell_size, warmup_runs=1
     )
-    estimated_adapter = RaytracerAdapter(
-        str(RAYSPACE_DIR), mode="estimated", preprocessed_dir=str(PREPROCESSED_DIR), 
+    direct_estimation_adapter = RaytracerAdapter(
+        str(RAYSPACE_DIR), mode="direct_estimation", preprocessed_dir=str(PREPROCESSED_DIR), 
         timings_dir=str(shared_dirs["timings"]), grid_cell_size=grid_cell_size, warmup_runs=1
     )
     exact_adapter.preprocessed_dir = shared_dirs["preprocessed"]
-    estimated_adapter.preprocessed_dir = shared_dirs["preprocessed"]
+    direct_estimation_adapter.preprocessed_dir = shared_dirs["preprocessed"]
     cgal_adapter = CGALAdapter(str(CGAL_DIR), preprocessed_dir=str(shared_dirs["preprocessed"]))
     touch_adapter = TOUCHAdapter(str(CGAL_DIR), preprocessed_dir=str(shared_dirs["preprocessed"]))
     
@@ -61,7 +64,7 @@ def run_experiment(runs, grid_cell_size, num_objects, selectivity, run_log_dir):
         "complexities": [],
         "stages": [],
         "exact": {"mean": [], "std": [], "breakdown": []},
-        "estimated": {"mean": [], "std": [], "breakdown": []},
+        "direct_estimation": {"mean": [], "std": [], "breakdown": []},
         "cgal": {"mean": [], "std": []},
         "touch": {"mean": [], "std": []}
     }
@@ -99,27 +102,52 @@ def run_experiment(runs, grid_cell_size, num_objects, selectivity, run_log_dir):
             seed=42,
         )
             
-        exact_adapter.preprocess_from_source(str(file_a), str(file_a), log_dir=str(run_log_dir))
-        exact_adapter.preprocess_from_source(str(file_b), str(file_b), log_dir=str(run_log_dir))
+        # Check/Run Preprocessing for Raytracer
+        if any(a in approaches for a in ["exact", "direct_estimation"]):
+            print("Checking preprocessing (Raytracer)...")
+            exact_adapter.preprocess_from_source(str(file_a), str(file_a), log_dir=str(run_log_dir))
+            exact_adapter.preprocess_from_source(str(file_b), str(file_b), log_dir=str(run_log_dir))
+
+        # Ensure .pre files (no grid) exist for CGAL/TOUCH
+        if any(a in approaches for a in ["cgal", "touch"]):
+            print("Checking preprocessing (CGAL/TOUCH)...")
+            preprocess_exec = RAYSPACE_DIR / "preprocess" / "build" / "bin" / "preprocess_dataset"
+            for file_path in (file_a, file_b):
+                out_pre = shared_dirs["preprocessed"] / f"{file_path.stem}.pre"
+                if not out_pre.exists():
+                    print(f"Preprocessing {file_path.name} for CGAL/TOUCH...")
+                    cmd = [
+                        str(preprocess_exec),
+                        "--mode", "mesh",
+                        "--dataset", str(file_path),
+                        "--output-geometry", str(out_pre),
+                        "--output-timing", str(shared_dirs["timings"] / f"{file_path.stem}_no_grid_timing.json")
+                    ]
+                    subprocess.run(cmd, check=True)
 
         # Benchmarks
-        print("Running Exact Mode...")
-        res_exact = exact_adapter.run_overlap(str(file_a), str(file_b), runs, log_dir=str(run_log_dir), timeout=TIMEOUT_SECONDS)
+        res_exact = {"error": "Skipped"}
+        if "exact" in approaches:
+            print("Running Exact Mode...")
+            res_exact = exact_adapter.run_overlap(str(file_a), str(file_b), runs, log_dir=str(run_log_dir), timeout=timeout)
         
-        print("Running Estimated Mode...")
-        res_est = estimated_adapter.run_overlap(str(file_a), str(file_b), runs, log_dir=str(run_log_dir), timeout=TIMEOUT_SECONDS)
+        res_direct = {"error": "Skipped"}
+        if "direct_estimation" in approaches:
+            print("Running Direct Estimation Mode...")
+            res_direct = direct_estimation_adapter.run_overlap(str(file_a), str(file_b), runs, log_dir=str(run_log_dir), timeout=TIMEOUT_SECONDS)
         
-        # Optional baseline bounds or skip if too slow
-        print("Skipping CGAL Mode...")
-        # res_cgal = cgal_adapter.run_overlap(str(file_a), str(file_b), runs, log_dir=str(run_log_dir), timeout=TIMEOUT_SECONDS)
         res_cgal = {"error": "Skipped"}
+        if "cgal" in approaches:
+            print("Running CGAL Mode...")
+            res_cgal = cgal_adapter.run_overlap(str(file_a), str(file_b), runs, log_dir=str(run_log_dir), timeout=TIMEOUT_SECONDS)
         
-        print("Skipping TOUCH Mode...")
-        # res_touch = touch_adapter.run_overlap(str(file_a), str(file_b), runs, log_dir=str(run_log_dir), timeout=TIMEOUT_SECONDS)
         res_touch = {"error": "Skipped"}
+        if "touch" in approaches:
+            print("Running TOUCH Mode...")
+            res_touch = touch_adapter.run_overlap(str(file_a), str(file_b), runs, log_dir=str(run_log_dir), timeout=TIMEOUT_SECONDS)
 
         # Handle errors gracefully
-        for res in [res_exact, res_est, res_cgal, res_touch]:
+        for res in [res_exact, res_direct, res_cgal, res_touch]:
             if "error" in res:
                 res["mean"] = None
                 res["std"] = None
@@ -131,9 +159,9 @@ def run_experiment(runs, grid_cell_size, num_objects, selectivity, run_log_dir):
         results["exact"]["std"].append(res_exact.get("std"))
         results["exact"]["breakdown"].append(res_exact.get("breakdown", {}))
         
-        results["estimated"]["mean"].append(res_est.get("mean"))
-        results["estimated"]["std"].append(res_est.get("std"))
-        results["estimated"]["breakdown"].append(res_est.get("breakdown", {}))
+        results["direct_estimation"]["mean"].append(res_direct.get("mean"))
+        results["direct_estimation"]["std"].append(res_direct.get("std"))
+        results["direct_estimation"]["breakdown"].append(res_direct.get("breakdown", {}))
         
         results["cgal"]["mean"].append(res_cgal.get("mean"))
         results["cgal"]["std"].append(res_cgal.get("std"))
@@ -141,7 +169,7 @@ def run_experiment(runs, grid_cell_size, num_objects, selectivity, run_log_dir):
         results["touch"]["mean"].append(res_touch.get("mean"))
         results["touch"]["std"].append(res_touch.get("std"))
         
-        print(f"Stage {stage} done. Vertices={vertices_count}, Exact={res_exact.get('mean')}, Est={res_est.get('mean')}")
+        print(f"Stage {stage} done. Vertices={vertices_count}, Exact={res_exact.get('mean')}, Direct={res_direct.get('mean')}, CGAL={res_cgal.get('mean')}, TOUCH={res_touch.get('mean')}")
 
     return results
 
@@ -157,7 +185,7 @@ def plot_results(results, num_objects, selectivity, figures_dir):
 
     for key, color, label, fmt in [
         ('exact', '#1f77b4', 'Exact Raytracer', '-o'),
-        ('estimated', '#2ca02c', 'Estimated Raytracer', '--s'),
+        ('direct_estimation', '#2ca02c', 'Direct Estimation Raytracer', '--s'),
         ('cgal', '#9467bd', 'CGAL', ':d'),
         ('touch', '#8c564b', 'TOUCH', '-^')
     ]:
@@ -186,15 +214,20 @@ def plot_results(results, num_objects, selectivity, figures_dir):
 def main():
     parser = argparse.ArgumentParser(description="Mesh Complexity Benchmark")
     parser.add_argument("--runs", type=int, default=3, help="Number of runs per method")
-    parser.add_argument("--grid-cell-size", type=float, default=1.0, help="Grid resolution for RaySpace")
+    parser.add_argument("--grid-cell-size", type=float, default=5.0, help="Grid resolution for RaySpace")
     parser.add_argument("--num-objects", type=int, default=50000, help="Number of objects per dataset")
     parser.add_argument("--selectivity", type=float, default=0.0005, help="Fixed selectivity target")
+    parser.add_argument("--approaches", type=str, nargs="+", default=["exact", "direct_estimation", "cgal", "touch"], 
+                        choices=["exact", "direct_estimation", "cgal", "touch"], help="Approaches to run")
+    parser.add_argument("--timeout", type=float, default=1200.0, help="Timeout in seconds per run")
     args = parser.parse_args()
+
     
     run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_mesh_complexity")
     run_log_dir = Path(run_layout["logs_dir"])
     figures_dir = Path(run_layout["figures_dir"])
-    results = run_experiment(args.runs, args.grid_cell_size, args.num_objects, args.selectivity, run_log_dir)
+    results = run_experiment(args.runs, args.grid_cell_size, args.num_objects, args.selectivity, run_log_dir, approaches=args.approaches, timeout=args.timeout)
+
     
     if results and results["complexities"]:
         plot_results(results, args.num_objects, args.selectivity, figures_dir)
@@ -209,7 +242,10 @@ def main():
                 "grid_cell_size": args.grid_cell_size,
                 "num_objects": args.num_objects,
                 "selectivity": args.selectivity,
+                "approaches": args.approaches,
+                "timeout": args.timeout,
             },
+
             "results": results,
         }
         write_json(out_json, payload)

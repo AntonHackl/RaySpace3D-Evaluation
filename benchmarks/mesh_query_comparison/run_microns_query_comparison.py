@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 import argparse
-from pathlib import Path
 import sys
+import subprocess
+from pathlib import Path
 
+# Add project root to sys.path to allow imports from 'benchmarks'
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent.parent
-sys.path.insert(0, str(REPO_ROOT))
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from benchmarks.common.scenario_utils import (
-    canonical_cube_pair_paths,
+    RAYSPACE_DIR,
+    canonical_microns_aggregated_paths,
     create_benchmark_run_layout,
-    ensure_cube_pair_dataset,
+    ensure_microns_splits,
+    ensure_microns_aggregated_meshes,
     get_shared_data_dirs,
     write_json,
 )
@@ -25,23 +30,21 @@ from benchmarks.mesh_query_comparison.core import (
     run_selected_queries,
 )
 
-
-DEFAULT_CUBE_COUNTS = [200000, 400000, 600000, 1000000]
-
+REPO_ROOT = SCRIPT_DIR.parent.parent
+RAYSPACE_DIR = REPO_ROOT / "src" / "RaySpace3D"
 
 def main():
-    parser = argparse.ArgumentParser(description="Cube scalability benchmark for mesh query comparison")
-    parser.add_argument("--num-cubes-b", type=int, nargs="+", default=DEFAULT_CUBE_COUNTS)
-    parser.add_argument("--num-cubes-a", type=int, default=1000)
-    parser.add_argument("--min-size", type=float, default=1.0)
-    parser.add_argument("--max-size", type=float, default=2.0)
-    parser.add_argument("--selectivity", type=float, default=0.001)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--grid-cell-size", type=float, default=5.0)
+    parser = argparse.ArgumentParser(description="MICrONS subset benchmark for mesh query comparison")
+    parser.add_argument("--sizes", type=int, nargs="+", default=[4, 8],
+                        help="MICrONS subset sizes in GB to benchmark")
+    parser.add_argument("--source-root", type=str, 
+                        default=str(REPO_ROOT / "datasets_scripts" / "microns_data"),
+                        help="Root directory containing MICrONS GLB subset folders")
     parser.add_argument("--runs", type=int, default=5)
     parser.add_argument("--warmup-runs", type=int, default=1)
-    parser.add_argument("--timeout", type=float, default=120.0)
-
+    parser.add_argument("--timeout", type=float, default=300.0)
+    parser.add_argument("--grid-cell-size", type=float, default=700.0)
+    
     add_query_selection_arguments(parser)
 
     parser.add_argument("--overlap-mode", type=str, default="direct_estimation", choices=["direct_estimation"])
@@ -58,10 +61,14 @@ def main():
 
     queries = resolve_queries(args.queries, args.approaches)
 
-    shared_dirs = get_shared_data_dirs("cube_scalability")
-    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "query_comparison_cube_scalability")
+    shared_dirs = get_shared_data_dirs("microns_query_comparison")
+    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "query_comparison_microns")
     logs_dir = Path(run_layout["logs_dir"])
     figures_dir = Path(run_layout["figures_dir"])
+
+    splits_dir = shared_dirs["root"] / "splits"
+    splits_dir.mkdir(parents=True, exist_ok=True)
+    source_root = Path(args.source_root)
 
     adapters = build_raytracer_query_adapters(
         repo_root=REPO_ROOT,
@@ -85,48 +92,34 @@ def main():
 
     results = []
     case_labels = []
-    for num_cubes_b in args.num_cubes_b:
-        mesh_a, mesh_b = canonical_cube_pair_paths(
-            shared_dirs["raw"],
-            num_cubes_a=args.num_cubes_a,
-            num_cubes_b=num_cubes_b,
-            min_size=args.min_size,
-            max_size=args.max_size,
-            selectivity=args.selectivity,
-            seed=args.seed,
-            grid_cell_size=args.grid_cell_size,
-        )
-        ensure_cube_pair_dataset(
-            mesh_a,
-            mesh_b,
-            num_cubes_a=args.num_cubes_a,
-            num_cubes_b=num_cubes_b,
-            min_size=args.min_size,
-            max_size=args.max_size,
-            selectivity=args.selectivity,
-            seed=args.seed,
-        )
+    
+    for size_gb in args.sizes:
+        print(f"\n--- Preparing MICrONS {size_gb}GB dataset ---")
+        split_a, split_b = ensure_microns_splits(size_gb, source_root, splits_dir)
+        
+        agg_a, agg_b = canonical_microns_aggregated_paths(shared_dirs["raw"], size_gb)
+        ensure_microns_aggregated_meshes(split_a, split_b, agg_a, agg_b)
 
-        case_label = f"na{args.num_cubes_a}_nb{num_cubes_b}"
+        case_label = f"microns_{size_gb}gb"
         case_log_dir = logs_dir / sanitize_case_token(case_label)
+        case_log_dir.mkdir(parents=True, exist_ok=True)
 
-        ensure_preprocessed(adapters, [mesh_a, mesh_b], log_dir=case_log_dir)
+        # Preprocessing
+        ensure_preprocessed(adapters, [agg_a, agg_b], log_dir=case_log_dir)
 
         row = {
-            "num_cubes_a": args.num_cubes_a,
-            "num_cubes_b": num_cubes_b,
-            "mesh1": str(mesh_a),
-            "mesh2": str(mesh_b),
-            "size_bytes1": mesh_a.stat().st_size if mesh_a.exists() else 0,
-            "size_bytes2": mesh_b.stat().st_size if mesh_b.exists() else 0,
-            "selectivity": args.selectivity,
+            "size_gb": size_gb,
+            "mesh1": str(agg_a),
+            "mesh2": str(agg_b),
+            "size_bytes1": agg_a.stat().st_size if agg_a.exists() else 0,
+            "size_bytes2": agg_b.stat().st_size if agg_b.exists() else 0,
         }
         row.update(
             run_selected_queries(
                 adapters=adapters,
                 queries=queries,
-                mesh1=mesh_a,
-                mesh2=mesh_b,
+                mesh1=agg_a,
+                mesh2=agg_b,
                 runs=args.runs,
                 timeout=args.timeout,
                 overlap_query_direction=args.overlap_query_direction,
@@ -137,30 +130,25 @@ def main():
 
         results.append(row)
         case_labels.append(case_label)
-        print(f"num_cubes_b={num_cubes_b}: done")
+        print(f"size_gb={size_gb}: done")
 
     generate_query_comparison_figures(
         results_rows=results,
         queries=queries,
         case_labels=case_labels,
         figures_dir=figures_dir,
-        title_prefix="Cube scalability",
+        title_prefix="MICrONS dataset",
         x_axis_label="Dataset case",
     )
 
     payload = {
         "metadata": {
-            "scenario": "cube_scalability",
+            "scenario": "microns_query_comparison",
             "query_type": "mesh_query_comparison",
             "timestamp": run_layout["timestamp"],
             "run_name": run_layout["run_name"],
             "run_dir": str(run_layout["run_dir"]),
-            "num_cubes_a": args.num_cubes_a,
-            "num_cubes_b": args.num_cubes_b,
-            "min_size": args.min_size,
-            "max_size": args.max_size,
-            "selectivity": args.selectivity,
-            "seed": args.seed,
+            "sizes": args.sizes,
             "grid_cell_size": args.grid_cell_size,
             "runs": args.runs,
             "warmup_runs": args.warmup_runs,
