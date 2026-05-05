@@ -14,6 +14,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
+from benchmarks.common.viz_utils import apply_paper_style, plot_mean_series
 from benchmarks.common.scenario_utils import (
     canonical_cube_pair_paths,
     ensure_cube_pair_dataset,
@@ -77,12 +78,14 @@ def run_experiment(runs, grid_cell_size, run_log_dir, approaches=None, timeout=1
 
     cgal_adapter = CGALAdapter(
         str(CGAL_DIR),
-        preprocessed_dir=str(shared_dirs["preprocessed"])
+        preprocessed_dir=str(shared_dirs["preprocessed"]),
+        grid_cell_size=grid_cell_size
     )
     
     touch_adapter = TOUCHAdapter(
         str(CGAL_DIR),
-        preprocessed_dir=str(shared_dirs["preprocessed"])
+        preprocessed_dir=str(shared_dirs["preprocessed"]),
+        grid_cell_size=grid_cell_size
     )
     
     results = {
@@ -117,8 +120,8 @@ def run_experiment(runs, grid_cell_size, run_log_dir, approaches=None, timeout=1
         
         print(f"\nProcessing: {f1_path.name} vs {f2_path.name}")
 
-        # Check/Run Preprocessing (Exact/Estimated share preprocessed files)
-        if any(a in approaches for a in ["exact", "estimated"]):
+        # Check/Run Preprocessing (Exact/Estimated/CGAL/TOUCH share preprocessed files)
+        if any(a in approaches for a in ["exact", "estimated", "cgal", "touch"]):
             print("Checking preprocessing (Raytracer)...")
             # Force preprocessing if not exists or ensure it's up to date
             # Note: RaytracerAdapter.preprocess_from_source checks existence inside
@@ -234,13 +237,14 @@ def plot_results(results, figures_dir):
         print("No results to plot.")
         return
 
-    fig, (ax_main, ax_breakdown) = plt.subplots(1, 2, figsize=(18, 8))
+    apply_paper_style()
+    fig, (ax_main, ax_breakdown) = plt.subplots(1, 2, figsize=(18, 7.2))
 
     # --- Plot 1: Line Chart (Scaling) ---
-    ax_main.errorbar(counts, results["exact"]["mean"], yerr=results["exact"]["std"], 
-                     fmt='-o', label='Exact Raytracer', capsize=5, color='#1f77b4')
-    ax_main.errorbar(counts, results["estimated"]["mean"], yerr=results["estimated"]["std"], 
-                     fmt='--s', label='Estimated Raytracer', capsize=5, color='#2ca02c')
+    ax_main.errorbar(counts, results["exact"]["mean"], 
+                     fmt='-o', label='Pierce (Two Pass)', capsize=5, color='#1f77b4')
+    ax_main.errorbar(counts, results["estimated"]["mean"], 
+                     fmt='-s', label='Pierce (Selectivity Estimation)', capsize=5, color='#2ca02c')
     
     # Filter valid CGAL points
     cgal_valid_indices = [i for i, m in enumerate(results["cgal"]["mean"]) if m is not None]
@@ -248,8 +252,8 @@ def plot_results(results, figures_dir):
         cgal_counts = [counts[i] for i in cgal_valid_indices]
         cgal_means = [results["cgal"]["mean"][i] for i in cgal_valid_indices]
         cgal_stds = [results["cgal"]["std"][i] for i in cgal_valid_indices]
-        ax_main.errorbar(cgal_counts, cgal_means, yerr=cgal_stds, 
-                         fmt=':d', label='CGAL', capsize=5, color='#9467bd')
+        ax_main.errorbar(cgal_counts, cgal_means, 
+                         fmt='-D', label='CGAL', capsize=5, color='#9467bd')
 
     # Filter valid TOUCH points
     touch_valid_indices = [i for i, m in enumerate(results["touch"]["mean"]) if m is not None]
@@ -257,12 +261,11 @@ def plot_results(results, figures_dir):
         touch_counts = [counts[i] for i in touch_valid_indices]
         touch_means = [results["touch"]["mean"][i] for i in touch_valid_indices]
         touch_stds = [results["touch"]["std"][i] for i in touch_valid_indices]
-        ax_main.errorbar(touch_counts, touch_means, yerr=touch_stds, 
+        ax_main.errorbar(touch_counts, touch_means, 
                          fmt='-^', label='TOUCH', capsize=5, color='#8c564b')
 
-    ax_main.set_xlabel('Number of Cubes in Dataset B (A=200k)', fontsize=12)
-    ax_main.set_ylabel('Execution Time (ms) [Log Scale]', fontsize=12)
-    ax_main.set_title('Scalability: Mesh Overlap Query Time', fontsize=14, fontweight='bold')
+    ax_main.set_xlabel('Number of Cubes in Dataset B (A=200k)')
+    ax_main.set_ylabel('Execution Time (ms) [Log Scale]')
     ax_main.set_yscale('log')
     ax_main.legend(fontsize=12)
     ax_main.grid(True, which="both", ls="-", alpha=0.2)
@@ -340,9 +343,8 @@ def plot_results(results, figures_dir):
 
     ax_breakdown.set_xticks(x_indices)
     ax_breakdown.set_xticklabels([f"{c//1000}k" for c in counts])
-    ax_breakdown.set_xlabel('Dataset Size (Cubes)', fontsize=12)
-    ax_breakdown.set_ylabel('Query Time (ms)', fontsize=12)
-    ax_breakdown.set_title('Query Time Breakdown', fontsize=14, fontweight='bold')
+    ax_breakdown.set_xlabel('Dataset Size (Cubes)')
+    ax_breakdown.set_ylabel('Query Time (ms)')
     ax_breakdown.grid(True, axis='y', which='both', ls='-', alpha=0.1)
     
     # Legend

@@ -7,13 +7,19 @@ from pathlib import Path
 from .base import OverlapBenchmarkAdapter, run_command_streaming
 
 class TOUCHAdapter(OverlapBenchmarkAdapter):
-    def __init__(self, cgal_dir: str, preprocessed_dir: str = "preprocessed", threads: int = None):
+    def __init__(self, cgal_dir: str, preprocessed_dir: str = "preprocessed", threads: int = None, grid_cell_size: float = 5.0):
         super().__init__("TOUCH")
         self.cgal_dir = Path(cgal_dir)
         self.preprocessed_dir = Path(preprocessed_dir)
         # Executable name as defined in CMakeLists.txt
         self.executable = self.cgal_dir / "build" / "cgal_touch"
         self.threads = threads
+        self.grid_cell_size = grid_cell_size
+
+    def _get_preprocessed_path(self, file_path: str) -> Path:
+        input_path = Path(file_path)
+        grid_token = str(self.grid_cell_size).replace(".", "_")
+        return self.preprocessed_dir / f"{input_path.stem}_g{grid_token}.pre"
 
     def run_overlap(
         self,
@@ -28,8 +34,8 @@ class TOUCHAdapter(OverlapBenchmarkAdapter):
             return {"error": f"Executable not found: {self.executable}"}
 
         # TOUCH uses the same .pre files as CGAL overlap
-        p1 = self.preprocessed_dir / Path(file1).with_suffix('.pre').name
-        p2 = self.preprocessed_dir / Path(file2).with_suffix('.pre').name
+        p1 = self._get_preprocessed_path(file1)
+        p2 = self._get_preprocessed_path(file2)
 
         if not p1.exists() or not p2.exists():
             return {"error": f"TOUCH requires .pre files. One of these does not exist: {p1}, {p2}"}

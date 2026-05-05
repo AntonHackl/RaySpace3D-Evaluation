@@ -8,6 +8,7 @@ import json
 import argparse
 import re
 import matplotlib.pyplot as plt
+from benchmarks.common.viz_utils import apply_paper_style, plot_mean_series
 import numpy as np
 from pathlib import Path
 
@@ -136,28 +137,25 @@ def visualize_selectivity(summary_file, output_path=None):
         num_cubes_str = f" ({num_cubes} cubes)"
 
     # --- Plot 1: Scaling Line Plot ---
-    fig_main, ax_main = plt.subplots(figsize=(10, 8))
-    ax_main.errorbar(valid_selectivities, exact_means, yerr=exact_stds, label='Two Pass', 
-                marker='o', capsize=5, linestyle='-', color='#1f77b4')
+    apply_paper_style()
+    fig_main, ax_main = plt.subplots(figsize=(10, 7.2))
+    plot_mean_series(ax_main, valid_selectivities, exact_means, "exact")
     
     if any(x is not None for x in est_means):
-        ax_main.errorbar(valid_selectivities, est_means, yerr=est_stds, label='Estimated Raytracer', 
-                    marker='s', capsize=5, linestyle='--', color='#2ca02c')
+        plot_mean_series(ax_main, valid_selectivities, est_means, "estimated")
     
     if any(x is not None for x in direct_est_means):
-        ax_main.errorbar(valid_selectivities, direct_est_means, yerr=direct_est_stds, label='Selectivity Estimation', 
-                    marker='X', capsize=5, linestyle=':', color='#ff7f0e')
+        plot_mean_series(ax_main, valid_selectivities, direct_est_means, "direct_estimation")
 
     if any(x is not None for x in mem10_means):
-        ax_main.errorbar(valid_selectivities, mem10_means, yerr=mem10_stds, label='10% remaining', 
-                    marker='v', capsize=5, linestyle='--', color='#e377c2')
+        plot_mean_series(ax_main, valid_selectivities, mem10_means, "estimated_mem10")
 
     if any(x is not None for x in tdbase_means):
         td_sel = [s for s, m in zip(valid_selectivities, tdbase_means) if m is not None]
         td_means = [m for m in tdbase_means if m is not None]
         td_stds = [s for s, m in zip(tdbase_stds, tdbase_means) if m is not None]
         
-        ax_main.errorbar(td_sel, td_means, yerr=td_stds, label='TDBase',
+        ax_main.errorbar(td_sel, td_means, label='TDBase',
                     marker='^', capsize=5, linestyle='-.', color='#d62728')
 
     if any(x is not None for x in cgal_means):
@@ -165,22 +163,19 @@ def visualize_selectivity(summary_file, output_path=None):
         cm = [m for m in cgal_means if m is not None]
         cs = [s for s, m in zip(cgal_stds, cgal_means) if m is not None]
         
-        ax_main.errorbar(cgal_sel, cm, yerr=cs, label='CGAL',
-                    marker='d', capsize=5, linestyle=':', color='#9467bd')
+        plot_mean_series(ax_main, cgal_sel, cm, "cgal")
 
     if any(x is not None for x in touch_means):
         touch_sel = [s for s, m in zip(valid_selectivities, touch_means) if m is not None]
         tm = [m for m in touch_means if m is not None]
         ts = [s for s, m in zip(touch_stds, touch_means) if m is not None]
         
-        ax_main.errorbar(touch_sel, tm, yerr=ts, label='TOUCH',
-                    marker='p', capsize=5, linestyle='-', color='#8c564b')
+        plot_mean_series(ax_main, touch_sel, tm, "touch")
 
     ax_main.set_xscale('log')
     ax_main.set_yscale('log')
-    ax_main.set_xlabel('Selectivity (Log Scale)', fontsize=12)
-    ax_main.set_ylabel('Query Time (ms) [Log Scale]', fontsize=12)
-    ax_main.set_title(f'Mesh Overlap Join Performance vs. Selectivity{num_cubes_str}', fontsize=14, fontweight='bold')
+    ax_main.set_xlabel('Selectivity (Log Scale)')
+    ax_main.set_ylabel('Query Time (ms) [Log Scale]')
     ax_main.grid(True, which="both", ls="-", alpha=0.2)
     ax_main.legend(fontsize=12)
 
@@ -230,7 +225,7 @@ def visualize_selectivity(summary_file, output_path=None):
         "exact": "2P",
         "estimated": "Est",
         "direct_estimation": "SE",
-        "estimated_mem10": "10%",
+        "estimated_mem10": "10G",
         "tdbase": "TD",
         "cgal": "CG",
         "touch": "TO"
@@ -300,7 +295,6 @@ def visualize_selectivity(summary_file, output_path=None):
     ax_breakdown.set_xticklabels([f"{s}" for s in valid_selectivities])
     ax_breakdown.set_xlabel('Selectivity (Grouped by Approach: 2P, SE, 10%, ...)', fontsize=12)
     ax_breakdown.set_ylabel('Query Time (ms)', fontsize=12)
-    ax_breakdown.set_title('Query Time Breakdown', fontsize=14, fontweight='bold')
     ax_breakdown.grid(True, axis='y', which='both', ls='-', alpha=0.1)
 
     # Add legend

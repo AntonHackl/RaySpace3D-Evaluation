@@ -78,8 +78,9 @@ def canonical_nu_pair_paths(
     nv: int = 150,
     vs: int = 100,
     radius: int = 30,
+    prefix: str = "tdbase",
 ) -> Tuple[Path, Path]:
-    stem = f"tdbase_n_nv{nv}_nu{nu}"
+    stem = f"{prefix}_n_nv{nv}_nu{nu}"
     n_file = raw_dir / f"{stem}_n_nv{nv}_nu{nu}_vs{vs}_r{radius}.dt"
     v_file = raw_dir / f"{stem}_v_nv{nv}_nu{nu}_vs{vs}_r{radius}.dt"
     return n_file, v_file
@@ -92,9 +93,10 @@ def canonical_nn_pair_paths(
     nv: int = 150,
     vs: int = 100,
     radius: int = 30,
+    prefix: str = "tdbase",
 ) -> Tuple[Path, Path]:
-    stem1 = f"tdbase_n_nv{nv}_nu{nu}"
-    stem2 = f"tdbase_nn_nv{nv}_nu{nu}"
+    stem1 = f"{prefix}_n_nv{nv}_nu{nu}"
+    stem2 = f"{prefix}_nn_nv{nv}_nu{nu}"
     n_file1 = raw_dir / f"{stem1}_n_nv{nv}_nu{nu}_vs{vs}_r{radius}.dt"
     n_file2 = raw_dir / f"{stem2}_n_nv{nv}_nu{nu}_vs{vs}_r{radius}.dt"
     return n_file1, n_file2

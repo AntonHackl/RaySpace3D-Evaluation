@@ -16,6 +16,7 @@ from benchmarks.common.scenario_utils import (
     get_shared_data_dirs,
     write_json,
 )
+from benchmarks.common.viz_utils import generate_scalability_figure, generate_breakdown_figure
 from benchmarks.mesh_intersection.adapters.raytracer_adapter import RaytracerIntersectionAdapter
 
 
@@ -29,7 +30,7 @@ def main():
     parser.add_argument("--runs", type=int, default=5)
     parser.add_argument("--warmup-runs", type=int, default=1)
     parser.add_argument("--timeout", type=float, default=300.0)
-    parser.add_argument("--grid-cell-size", type=float, default=5.0)
+    parser.add_argument("--grid-cell-size", type=float, default=700.0)
     parser.add_argument("--overlap-max-iterations", type=int, default=100)
     parser.add_argument("--containment-max-iterations", type=int, default=100)
     parser.add_argument("--hash-load-factor", type=float, default=0.5)
@@ -55,6 +56,8 @@ def main():
         "--query-direction", args.query_direction,
     ]
 
+    run_log_dir = run_layout["logs_dir"]
+
     results = []
     for size_gb in args.sizes:
         print(f"--- Preparing MICrONS {size_gb}GB dataset ---")
@@ -65,7 +68,7 @@ def main():
 
         for file_path in (agg_a, agg_b):
             if not estimated_adapter.check_preprocessed(str(file_path)):
-                estimated_adapter.preprocess_from_source(str(file_path), str(file_path))
+                estimated_adapter.preprocess_from_source(str(file_path), str(file_path), log_dir=str(run_log_dir))
 
         entry = {
             "size_gb": size_gb,
@@ -77,7 +80,8 @@ def main():
         }
 
         res = estimated_adapter.run_intersection(
-            str(agg_a), str(agg_b), args.runs, timeout=args.timeout, extra_args=extra_args
+            str(agg_a), str(agg_b), args.runs, timeout=args.timeout, 
+            log_dir=str(run_log_dir), extra_args=extra_args
         )
         entry["estimated"] = res
 
@@ -111,6 +115,32 @@ def main():
     out = run_layout["results_json"]
     write_json(out, payload)
     print(f"Saved: {out}")
+
+    # Generate figures automatically
+    figures_dir = Path(run_layout["figures_dir"])
+    generate_scalability_figure(
+        results=results,
+        approaches=["estimated"],
+        figures_dir=figures_dir,
+        timestamp=run_layout["timestamp"],
+        scenario_name="microns_intersection",
+        x_axis_key="size_gb",
+        x_axis_label="MICrONS subset size (GB)",
+        y_axis_label="Query time (ms) [log scale]",
+        title="MICrONS Intersection Scalability"
+    )
+    
+    generate_breakdown_figure(
+        results=results,
+        approaches=["estimated"],
+        figures_dir=figures_dir,
+        timestamp=run_layout["timestamp"],
+        scenario_name="microns_intersection",
+        x_axis_key="size_gb",
+        x_axis_label="Dataset Size",
+        y_axis_label="Query time (ms)",
+        title="Intersection Runtime Breakdown"
+    )
 
 
 if __name__ == "__main__":

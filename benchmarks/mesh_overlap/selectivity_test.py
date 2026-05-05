@@ -34,6 +34,7 @@ MIN_SIZE = 1
 MAX_SIZE = 4
 GRID_CELL_SIZE = 5
 TIMEOUT_SECONDS = 120.0  # 2 minutes timeout per run
+ESTIMATED_MEM10_FIXED_BYTES = 10 * 1024 * 1024 * 1024  # 10 GiB fixed hash table budget
 
 WORKSPACE_ROOT = Path(__file__).resolve().parent.parent.parent
 RAYSPACE_DIR = WORKSPACE_ROOT / "src/RaySpace3D"
@@ -139,12 +140,14 @@ def main():
         if "cgal" in args.approaches:
             cgal_adapter = CGALAdapter(
                 str(CGAL_DIR),
-                preprocessed_dir=str(shared_dirs["preprocessed"])
+                preprocessed_dir=str(shared_dirs["preprocessed"]),
+                grid_cell_size=grid_cell_size
             )
         if "touch" in args.approaches:
             touch_adapter = TOUCHAdapter(
                 str(CGAL_DIR),
-                preprocessed_dir=str(shared_dirs["preprocessed"])
+                preprocessed_dir=str(shared_dirs["preprocessed"]),
+                grid_cell_size=grid_cell_size
             )
         # CGAL and TOUCH use the same preprocessed files as Raytracer (.pre), which are already generated.
 
@@ -177,6 +180,8 @@ def main():
                 current_adapter = touch_adapter
                 current_adapter.name = "touch"
             else:
+                adapter.hash_table_size = None
+                adapter.hash_table_free_mem_fraction = None
                 adapter.mode = mode
                 # Update executable manually as correct binary depends on mode
                 if mode == "exact":
@@ -192,7 +197,12 @@ def main():
                     adapter.mode = "direct_estimation"
                     adapter.executable = adapter.rayspace_dir / "query/build/bin/raytracer_overlap_direct_estimation"
                     adapter.name = "estimated_mem10"
-                    adapter.hash_table_free_mem_fraction = 0.1
+                    hash_table_slots = ESTIMATED_MEM10_FIXED_BYTES // 8  # unsigned long long slots
+                    if hash_table_slots < 1024:
+                        hash_table_slots = 1024
+                    if (hash_table_slots % 2) == 0:
+                        hash_table_slots += 1
+                    adapter.hash_table_size = int(hash_table_slots)
                 current_adapter = adapter
                 
             results = current_adapter.run_overlap(

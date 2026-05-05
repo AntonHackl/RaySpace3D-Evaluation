@@ -14,6 +14,7 @@ from benchmarks.common.scenario_utils import (
     get_shared_data_dirs,
     write_json,
 )
+from benchmarks.common.viz_utils import generate_scalability_figure, generate_breakdown_figure
 from benchmarks.mesh_intersection.adapters.cgal_adapter import CGALIntersectionAdapter
 from benchmarks.mesh_intersection.adapters.raytracer_adapter import RaytracerIntersectionAdapter
 
@@ -57,6 +58,8 @@ def main():
         threads=args.threads,
     )
 
+    run_log_dir = run_layout["logs_dir"]
+
     results = []
     for nu in args.nu:
         n_path, v_path = canonical_nu_pair_paths(shared_dirs["raw"], nu=nu)
@@ -64,7 +67,7 @@ def main():
 
         for f_path in (n_path, v_path):
             if not estimated.check_preprocessed(str(f_path)):
-                estimated.preprocess_from_source(str(f_path), str(f_path))
+                estimated.preprocess_from_source(str(f_path), str(f_path), log_dir=str(run_log_dir))
 
         row = {
             "nu": nu,
@@ -75,16 +78,16 @@ def main():
         }
 
         if "estimated" in args.approaches:
-            row["estimated"] = estimated.run_intersection(str(v_path), str(n_path), args.runs, timeout=args.timeout)
+            row["estimated"] = estimated.run_intersection(str(v_path), str(n_path), args.runs, timeout=args.timeout, log_dir=str(run_log_dir))
 
         if "estimate_only" in args.approaches:
             estimated.mode = "estimate_only"
             estimated.name = "Raytracer_estimate_only"
             estimated.executable = estimated.rayspace_dir / "query" / "build" / "bin" / "raytracer_intersection_estimated"
-            row["estimate_only"] = estimated.run_intersection(str(v_path), str(n_path), args.runs, timeout=args.timeout)
+            row["estimate_only"] = estimated.run_intersection(str(v_path), str(n_path), args.runs, timeout=args.timeout, log_dir=str(run_log_dir))
 
         if "cgal" in args.approaches:
-            row["cgal"] = cgal.run_intersection(str(v_path), str(n_path), args.runs, timeout=args.timeout)
+            row["cgal"] = cgal.run_intersection(str(v_path), str(n_path), args.runs, timeout=args.timeout, log_dir=str(run_log_dir))
 
         results.append(row)
         print(f"nu={nu}: done")
@@ -110,6 +113,34 @@ def main():
     out = Path(run_layout["results_json"])
     write_json(out, payload)
     print(f"Saved: {out}")
+
+    # Generate figures automatically
+    figures_dir = Path(run_layout["figures_dir"])
+    generate_scalability_figure(
+        results=results,
+        approaches=args.approaches,
+        figures_dir=figures_dir,
+        timestamp=run_layout["timestamp"],
+        scenario_name="intersection_nu_scalability",
+        x_axis_key="nu",
+        x_axis_label="Nu (Number of objects)",
+        y_axis_label="Query time (ms) [log scale]",
+        title="Nu Scalability for Mesh Intersection"
+    )
+    
+    # Breakdown only makes sense for Raytracer (estimated)
+    if "estimated" in args.approaches or "estimate_only" in args.approaches:
+        generate_breakdown_figure(
+            results=results,
+            approaches=[a for a in args.approaches if "estimate" in a],
+            figures_dir=figures_dir,
+            timestamp=run_layout["timestamp"],
+            scenario_name="intersection_nu_scalability",
+            x_axis_key="nu",
+            x_axis_label="Nu",
+            y_axis_label="Query time (ms)",
+            title="Intersection Runtime Breakdown"
+        )
 
 
 if __name__ == "__main__":

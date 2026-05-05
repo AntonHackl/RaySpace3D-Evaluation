@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Sequence
 
 import matplotlib.pyplot as plt
+from benchmarks.common.viz_utils import apply_paper_style
 import numpy as np
 
 from benchmarks.mesh_containment.adapters.raytracer_adapter import RaytracerContainmentAdapter
@@ -272,7 +273,8 @@ def generate_query_comparison_figures(
 
     # Figure 1: Total query time comparison across all selected query types.
     width = 0.8 / max(1, len(queries))
-    fig, ax = plt.subplots(figsize=(max(10, 2.5 * len(case_labels)), 6))
+    apply_paper_style()
+    fig, ax = plt.subplots(figsize=(max(10, 2.5 * len(case_labels)), 6.8))
     for idx, query in enumerate(queries):
         means = []
         for row in results_rows:
@@ -282,12 +284,11 @@ def generate_query_comparison_figures(
         offsets = x - (0.4 - width / 2.0) + idx * width
         ax.bar(offsets, means, width=width, label=query)
 
-    ax.set_title(f"{title_prefix}: Total Query Time Comparison")
-    ax.set_xlabel(x_axis_label)
+        ax.set_xlabel(x_axis_label)
     ax.set_ylabel("Query time (ms)")
     ax.set_xticks(x)
     ax.set_xticklabels(case_labels, rotation=20, ha="right")
-    ax.grid(True, axis="y", linestyle="--", alpha=0.3)
+    ax.grid(True, axis="y", linestyle="-", alpha=0.3)
     ax.legend()
     fig.tight_layout()
     fig.savefig(figures_dir / "query_time_comparison.png", dpi=180)
@@ -297,7 +298,8 @@ def generate_query_comparison_figures(
     # Figure 1b: Query-labeled grouped stacked breakdown comparison (one chart, all datasets).
     # This chart shows one "set of bars" per dataset, where each set compares query types.
     width = 0.8 / max(1, len(queries))
-    fig, ax = plt.subplots(figsize=(max(12, 3.0 * len(case_labels)), 7))
+    apply_paper_style()
+    fig, ax = plt.subplots(figsize=(max(12, 3.0 * len(case_labels)), 7.2))
     bottoms = np.zeros((len(case_labels), len(queries)))
 
     active_components_added = set()
@@ -334,12 +336,11 @@ def generate_query_comparison_figures(
                 )
                 bottoms[:, q_idx] += vals
 
-    ax.set_title(f"{title_prefix}: Query Time Breakdown Comparison")
-    ax.set_xlabel(x_axis_label)
+        ax.set_xlabel(x_axis_label)
     ax.set_ylabel("Breakdown time (ms)")
     ax.set_xticks(x)
     ax.set_xticklabels(case_labels, rotation=20, ha="right")
-    ax.grid(True, axis="y", linestyle="--", alpha=0.3)
+    ax.grid(True, axis="y", linestyle="-", alpha=0.3)
     ax.legend(loc="upper right", fontsize=9, title="Phases")
 
     # Add annotation for query order
@@ -364,7 +365,8 @@ def generate_query_comparison_figures(
         if not group_names:
             continue
 
-        fig, ax = plt.subplots(figsize=(max(10, 2.5 * len(case_labels)), 6))
+        apply_paper_style()
+        fig, ax = plt.subplots(figsize=(max(10, 2.5 * len(case_labels)), 6.8))
         bottoms = np.zeros(len(case_labels), dtype=float)
 
         for group_name, vals in zip(group_names, group_values):
@@ -377,12 +379,11 @@ def generate_query_comparison_figures(
             )
             bottoms += vals
 
-        ax.set_title(f"{title_prefix}: {query} breakdown")
         ax.set_xlabel(x_axis_label)
         ax.set_ylabel("Time (ms)")
         ax.set_xticks(x)
         ax.set_xticklabels(case_labels, rotation=20, ha="right")
-        ax.grid(True, axis="y", linestyle="--", alpha=0.3)
+        ax.grid(True, axis="y", linestyle="-", alpha=0.3)
         ax.legend(loc="upper right", fontsize=9)
         fig.tight_layout()
         safe_query = sanitize_case_token(query)

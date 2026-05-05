@@ -98,9 +98,11 @@ def main():
             warmup_runs=2
         )
 
+        run_log_dir = run_layout["logs_dir"]
+
         print("Ensuring preprocessed files (Raytracer)...")
-        adapter.preprocess_from_source(str(obj_a), str(dt_a))
-        adapter.preprocess_from_source(str(obj_b), str(dt_b))
+        adapter.preprocess_from_source(str(obj_a), str(dt_a), log_dir=str(run_log_dir))
+        adapter.preprocess_from_source(str(obj_b), str(dt_b), log_dir=str(run_log_dir))
 
         res_per_sel = {
             "selectivity": selectivity,
@@ -116,6 +118,7 @@ def main():
                     str(obj_b),
                     num_runs=args.runs,
                     timeout=TIMEOUT_SECONDS,
+                    log_dir=str(run_log_dir),
                 )
                 if "error" in cgal_results:
                     print(f"[cgal] Error: {cgal_results['error']}")
@@ -139,7 +142,8 @@ def main():
                 str(obj_a),
                 str(obj_b),
                 num_runs=args.runs,
-                timeout=TIMEOUT_SECONDS
+                timeout=TIMEOUT_SECONDS,
+                log_dir=str(run_log_dir),
             )
 
             result_key = mode

@@ -15,6 +15,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
+from benchmarks.common.viz_utils import apply_paper_style, plot_mean_series
 from benchmarks.common.scenario_utils import (
     canonical_nn_pair_paths,
     ensure_nn_pair_dataset,
@@ -98,12 +99,14 @@ def run_experiment(runs, grid_cell_size, nu_counts, run_log_dir, approaches=None
 
     cgal_adapter = CGALAdapter(
         str(CGAL_DIR),
-        preprocessed_dir=str(PREPROCESSED_DIR)
+        preprocessed_dir=str(PREPROCESSED_DIR),
+        grid_cell_size=grid_cell_size
     )
     
     touch_adapter = TOUCHAdapter(
         str(CGAL_DIR),
-        preprocessed_dir=str(PREPROCESSED_DIR)
+        preprocessed_dir=str(PREPROCESSED_DIR),
+        grid_cell_size=grid_cell_size
     )
 
     tdbase_adapter = TDBaseAdapter(
@@ -152,10 +155,10 @@ def run_experiment(runs, grid_cell_size, nu_counts, run_log_dir, approaches=None
                 print(f"Error in exact run: {res_exact['error']}")
                 res_exact = {"mean": None, "std": None, "breakdown": {}}
             
-        # Run Direct Estimation Benchmark
+        # Run Selectivity Estimation Benchmark
         res_direct = {"mean": None, "std": None, "breakdown": {}}
         if "direct_estimation" in approaches:
-            print(f"Running Direct Estimation Mode ({runs} runs)...")
+            print(f"Running Selectivity Estimation Mode ({runs} runs)...")
             res_direct = direct_estimation_adapter.run_overlap(
                 str(f_v_path), 
                 str(f_n_path), 
@@ -164,7 +167,7 @@ def run_experiment(runs, grid_cell_size, nu_counts, run_log_dir, approaches=None
                 timeout=timeout
             )
             if "error" in res_direct:
-                print(f"Error in direct estimation run: {res_direct['error']}")
+                print(f"Error in selectivity estimation run: {res_direct['error']}")
                 res_direct = {"mean": None, "std": None, "breakdown": {}}
 
         # Run CGAL Benchmark
@@ -265,7 +268,7 @@ def run_experiment(runs, grid_cell_size, nu_counts, run_log_dir, approaches=None
         cgal_str = f"{res_cgal['mean']:.2f}ms" if res_cgal['mean'] is not None else "N/A"
         touch_str = f"{res_touch['mean']:.2f}ms" if res_touch['mean'] is not None else "N/A"
         td_str = f"{res_td['mean']:.2f}ms" if res_td['mean'] is not None else "N/A"
-        print(f"Done nu={nu}: Exact={exact_str}, Direct={direct_str}, CGAL={cgal_str}, TOUCH={touch_str}, TDBase={td_str}")
+        print(f"Done nu={nu}: Exact={exact_str}, Selectivity Estimation={direct_str}, CGAL={cgal_str}, TOUCH={touch_str}, TDBase={td_str}")
 
     return results
 
@@ -288,8 +291,8 @@ def plot_results(results, figures_dir):
                 exact_counts = [counts[i] for i in exact_valid_indices]
                 exact_means = [results["exact"]["mean"][i] for i in exact_valid_indices]
                 exact_stds = [results["exact"]["std"][i] for i in exact_valid_indices]
-                ax.errorbar(exact_counts, exact_means, yerr=exact_stds,
-                                fmt='-o', label='Exact Raytracer', capsize=5, color='#1f77b4')
+                ax.errorbar(exact_counts, exact_means,
+                                fmt='-o', label='Pierce (Two Pass)', capsize=5, color='#1f77b4')
 
         if "direct_estimation" in enabled:
             direct_valid_indices = [i for i, m in enumerate(results["direct_estimation"]["mean"]) if m is not None]
@@ -297,8 +300,8 @@ def plot_results(results, figures_dir):
                 direct_counts = [counts[i] for i in direct_valid_indices]
                 direct_means = [results["direct_estimation"]["mean"][i] for i in direct_valid_indices]
                 direct_stds = [results["direct_estimation"]["std"][i] for i in direct_valid_indices]
-                ax.errorbar(direct_counts, direct_means, yerr=direct_stds,
-                                fmt='--s', label='Direct Estimation Raytracer', capsize=5, color='#2ca02c')
+                ax.errorbar(direct_counts, direct_means,
+                                fmt='-s', label='Pierce (Selectivity Estimation)', capsize=5, color='#2ca02c')
         
         # Filter valid CGAL points
         cgal_valid_indices = [i for i, m in enumerate(results["cgal"]["mean"]) if m is not None] if "cgal" in enabled else []
@@ -306,8 +309,8 @@ def plot_results(results, figures_dir):
             cgal_counts = [counts[i] for i in cgal_valid_indices]
             cgal_means = [results["cgal"]["mean"][i] for i in cgal_valid_indices]
             cgal_stds = [results["cgal"]["std"][i] for i in cgal_valid_indices]
-            ax.errorbar(cgal_counts, cgal_means, yerr=cgal_stds, 
-                             fmt=':d', label='CGAL', capsize=5, color='#9467bd')
+            ax.errorbar(cgal_counts, cgal_means, 
+                             fmt='-D', label='CGAL', capsize=5, color='#9467bd')
 
         # Filter valid TOUCH points
         touch_valid_indices = [i for i, m in enumerate(results["touch"]["mean"]) if m is not None] if "touch" in enabled else []
@@ -315,7 +318,7 @@ def plot_results(results, figures_dir):
             touch_counts = [counts[i] for i in touch_valid_indices]
             touch_means = [results["touch"]["mean"][i] for i in touch_valid_indices]
             touch_stds = [results["touch"]["std"][i] for i in touch_valid_indices]
-            ax.errorbar(touch_counts, touch_means, yerr=touch_stds, 
+            ax.errorbar(touch_counts, touch_means, 
                              fmt='-^', label='TOUCH', capsize=5, color='#8c564b')
 
         # Filter valid TDBase points
@@ -324,12 +327,11 @@ def plot_results(results, figures_dir):
             td_counts = [counts[i] for i in td_valid_indices]
             td_means = [results["tdbase"]["mean"][i] for i in td_valid_indices]
             td_stds = [results["tdbase"]["std"][i] for i in td_valid_indices]
-            ax.errorbar(td_counts, td_means, yerr=td_stds, 
-                             fmt='-.x', label='TDBase', capsize=5, color='#d62728')
+            ax.errorbar(td_counts, td_means, 
+                             fmt='-X', label='TDBase', capsize=5, color='#d62728')
 
-        ax.set_xlabel('Nuclei per Vessel (Total objects ≃ Nu * 300)', fontsize=12)
-        ax.set_ylabel('Execution Time (ms) [Log Scale]', fontsize=12)
-        ax.set_title('Scalability: Mesh Overlap Query Time', fontsize=14, fontweight='bold')
+        ax.set_xlabel('Nuclei per Vessel (Total objects ≃ Nu * 300)')
+        ax.set_ylabel('Execution Time (ms) [Log Scale]')
         ax.set_yscale('log')
         ax.legend(fontsize=12)
         ax.grid(True, which="both", ls="-", alpha=0.2)
@@ -444,9 +446,8 @@ def plot_results(results, figures_dir):
 
         ax.set_xticks(x_indices)
         ax.set_xticklabels([str(c) for c in counts])
-        ax.set_xlabel('Nuclei per Vessel', fontsize=12)
-        ax.set_ylabel('Query Time (ms)', fontsize=12)
-        ax.set_title('RaySpace3D Query Time Breakdown', fontsize=14, fontweight='bold')
+        ax.set_xlabel('Nuclei per Vessel')
+        ax.set_ylabel('Query Time (ms)')
         ax.grid(True, axis='y', which='both', ls='-', alpha=0.1)
 
         for j, mode in enumerate(modes_to_plot):
@@ -475,7 +476,8 @@ def plot_results(results, figures_dir):
             )
 
     # 1. Generate Combined Figure
-    fig, (ax_main, ax_breakdown) = plt.subplots(1, 2, figsize=(20, 8))
+    apply_paper_style()
+    fig, (ax_main, ax_breakdown) = plt.subplots(1, 2, figsize=(20, 7.2))
     generate_scaling_plot(ax_main, results, counts)
     generate_breakdown_plot(ax_breakdown, results, counts)
     plt.tight_layout()
@@ -486,7 +488,8 @@ def plot_results(results, figures_dir):
     plt.close(fig)
 
     # 2. Generate Separate Scaling Figure
-    fig_scaling, ax_scaling = plt.subplots(figsize=(10, 8))
+    apply_paper_style()
+    fig_scaling, ax_scaling = plt.subplots(figsize=(10, 7.2))
     generate_scaling_plot(ax_scaling, results, counts)
     plt.tight_layout()
     scaling_path = figures_dir / "mesh_overlap_nn_scalability_scaling.png"
@@ -496,7 +499,8 @@ def plot_results(results, figures_dir):
     plt.close(fig_scaling)
 
     # 3. Generate Separate Breakdown Figure
-    fig_breakdown, ax_breakdown_sep = plt.subplots(figsize=(12, 8))
+    apply_paper_style()
+    fig_breakdown, ax_breakdown_sep = plt.subplots(figsize=(12, 7.2))
     generate_breakdown_plot(ax_breakdown_sep, results, counts)
     plt.tight_layout()
     breakdown_path = figures_dir / "mesh_overlap_nn_scalability_breakdown.png"
@@ -542,7 +546,7 @@ def main():
     
     if results and results["counts"]:
         print("\nResults Summary:")
-        header = f"{'Nu':<10} {'Exact (ms)':<15} {'Direct Est (ms)':<15} {'CGAL (ms)':<15} {'TOUCH (ms)':<15} {'TDBase (ms)':<15}"
+        header = f"{'Nu':<10} {'Exact (ms)':<15} {'Selectivity Estimation (ms)':<15} {'CGAL (ms)':<15} {'TOUCH (ms)':<15} {'TDBase (ms)':<15}"
         print(header)
         print("-" * len(header))
         for i, n in enumerate(results["counts"]):

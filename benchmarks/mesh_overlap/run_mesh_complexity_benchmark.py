@@ -9,6 +9,7 @@ from datetime import datetime
 import subprocess 
 import json
 from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
+from benchmarks.common.viz_utils import apply_paper_style, plot_mean_series
 from benchmarks.common.scenario_utils import (
     canonical_sphere_pair_paths,
     count_vertices,
@@ -57,8 +58,8 @@ def run_experiment(runs, grid_cell_size, num_objects, selectivity, run_log_dir, 
     )
     exact_adapter.preprocessed_dir = shared_dirs["preprocessed"]
     direct_estimation_adapter.preprocessed_dir = shared_dirs["preprocessed"]
-    cgal_adapter = CGALAdapter(str(CGAL_DIR), preprocessed_dir=str(shared_dirs["preprocessed"]))
-    touch_adapter = TOUCHAdapter(str(CGAL_DIR), preprocessed_dir=str(shared_dirs["preprocessed"]))
+    cgal_adapter = CGALAdapter(str(CGAL_DIR), preprocessed_dir=str(shared_dirs["preprocessed"]), grid_cell_size=grid_cell_size)
+    touch_adapter = TOUCHAdapter(str(CGAL_DIR), preprocessed_dir=str(shared_dirs["preprocessed"]), grid_cell_size=grid_cell_size)
     
     results = {
         "complexities": [],
@@ -102,28 +103,11 @@ def run_experiment(runs, grid_cell_size, num_objects, selectivity, run_log_dir, 
             seed=42,
         )
             
-        # Check/Run Preprocessing for Raytracer
-        if any(a in approaches for a in ["exact", "direct_estimation"]):
+        # Check/Run Preprocessing for Raytracer (also used by CGAL/TOUCH)
+        if any(a in approaches for a in ["exact", "direct_estimation", "cgal", "touch"]):
             print("Checking preprocessing (Raytracer)...")
             exact_adapter.preprocess_from_source(str(file_a), str(file_a), log_dir=str(run_log_dir))
             exact_adapter.preprocess_from_source(str(file_b), str(file_b), log_dir=str(run_log_dir))
-
-        # Ensure .pre files (no grid) exist for CGAL/TOUCH
-        if any(a in approaches for a in ["cgal", "touch"]):
-            print("Checking preprocessing (CGAL/TOUCH)...")
-            preprocess_exec = RAYSPACE_DIR / "preprocess" / "build" / "bin" / "preprocess_dataset"
-            for file_path in (file_a, file_b):
-                out_pre = shared_dirs["preprocessed"] / f"{file_path.stem}.pre"
-                if not out_pre.exists():
-                    print(f"Preprocessing {file_path.name} for CGAL/TOUCH...")
-                    cmd = [
-                        str(preprocess_exec),
-                        "--mode", "mesh",
-                        "--dataset", str(file_path),
-                        "--output-geometry", str(out_pre),
-                        "--output-timing", str(shared_dirs["timings"] / f"{file_path.stem}_no_grid_timing.json")
-                    ]
-                    subprocess.run(cmd, check=True)
 
         # Benchmarks
         res_exact = {"error": "Skipped"}
@@ -133,7 +117,7 @@ def run_experiment(runs, grid_cell_size, num_objects, selectivity, run_log_dir, 
         
         res_direct = {"error": "Skipped"}
         if "direct_estimation" in approaches:
-            print("Running Direct Estimation Mode...")
+            print("Running Selectivity Estimation Mode...")
             res_direct = direct_estimation_adapter.run_overlap(str(file_a), str(file_b), runs, log_dir=str(run_log_dir), timeout=TIMEOUT_SECONDS)
         
         res_cgal = {"error": "Skipped"}
@@ -169,7 +153,7 @@ def run_experiment(runs, grid_cell_size, num_objects, selectivity, run_log_dir, 
         results["touch"]["mean"].append(res_touch.get("mean"))
         results["touch"]["std"].append(res_touch.get("std"))
         
-        print(f"Stage {stage} done. Vertices={vertices_count}, Exact={res_exact.get('mean')}, Direct={res_direct.get('mean')}, CGAL={res_cgal.get('mean')}, TOUCH={res_touch.get('mean')}")
+        print(f"Stage {stage} done. Vertices={vertices_count}, Exact={res_exact.get('mean')}, Selectivity Estimation={res_direct.get('mean')}, CGAL={res_cgal.get('mean')}, TOUCH={res_touch.get('mean')}")
 
     return results
 
@@ -181,24 +165,24 @@ def plot_results(results, num_objects, selectivity, figures_dir):
     if not complexities:
         return
 
-    plt.figure(figsize=(10, 8))
+    apply_paper_style()
+    plt.figure(figsize=(10, 7.2))
 
     for key, color, label, fmt in [
-        ('exact', '#1f77b4', 'Exact Raytracer', '-o'),
-        ('direct_estimation', '#2ca02c', 'Direct Estimation Raytracer', '--s'),
-        ('cgal', '#9467bd', 'CGAL', ':d'),
-        ('touch', '#8c564b', 'TOUCH', '-^')
+        ('exact', '#1f77b4', 'Pierce (Two Pass)', '-o'),
+        ('direct_estimation', '#1f77b4', 'Pierce (Selectivity Estimation)', '-s'),
+        ('cgal', '#ff7f0e', 'CGAL', '-D'),
+        ('touch', '#2ca02c', 'TOUCH', '-^')
     ]:
         valid_indices = [i for i, m in enumerate(results[key]["mean"]) if m is not None]
         if valid_indices:
             x_vals = [complexities[i] for i in valid_indices]
             means = [results[key]["mean"][i] for i in valid_indices]
             stds = [results[key]["std"][i] for i in valid_indices]
-            plt.errorbar(x_vals, means, yerr=stds, fmt=fmt, label=label, capsize=5, color=color)
+            plt.errorbar(x_vals, means, fmt=fmt, label=label, capsize=5, color=color)
 
-    plt.xlabel('Mesh Complexity (Vertices per Mesh)', fontsize=12)
-    plt.ylabel('Execution Time (ms) [Log Scale]', fontsize=12)
-    plt.title(f'Mesh Complexity Benchmark\nAmount of Objects: {num_objects}, Selectivity: {selectivity}', fontsize=14, fontweight='bold')
+    plt.xlabel('Mesh Complexity (Vertices per Mesh)')
+    plt.ylabel('Execution Time (ms) [Log Scale]')
     plt.yscale('log')
     plt.xscale('log') # Use log scale for complexity as well to spread points evenly
     plt.legend(fontsize=12)

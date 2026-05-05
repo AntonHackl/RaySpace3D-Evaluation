@@ -21,4 +21,4 @@ srun \
     --container-name rayspace \
     --container-workdir /sc/home/anton.hackl/Spatial_Data_Management/RaySpace3D-Evaluation/benchmarks/mesh_overlap \
     --container-mounts /sc/home/anton.hackl/:/sc/home/anton.hackl/ \
-    bash -c 'bash ../../build_all.sh --only tdbase --clean --jobs $SLURM_CPUS_PER_TASK && bash generate_data.sh'
+    bash -c 'bash ../../build_all.sh --only tdbase --clean --jobs $SLURM_CPUS_PER_TASK && bash ../data_generation/generate_data.sh'

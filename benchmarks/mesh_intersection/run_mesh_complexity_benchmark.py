@@ -52,6 +52,8 @@ def main():
     )
     cgal = CGALIntersectionAdapter(str(CGAL_BASE_DIR), preprocessed_dir=str(dirs["preprocessed"]))
 
+    run_log_dir = run_layout["logs_dir"]
+
     results = []
     for stage in args.stages:
         template = SPHERE_TEMPLATE_DIR / f"Sphere_Stage_{stage}.obj"
@@ -83,7 +85,7 @@ def main():
 
         for file_path in (obj_a, obj_b):
             if not estimated.check_preprocessed(str(file_path)):
-                estimated.preprocess_from_source(str(file_path), str(file_path))
+                estimated.preprocess_from_source(str(file_path), str(file_path), log_dir=str(run_log_dir))
 
         row = {
             "stage": stage,
@@ -95,14 +97,14 @@ def main():
         }
 
         if "estimated" in args.approaches:
-            row["estimated"] = estimated.run_intersection(str(obj_a), str(obj_b), args.runs, timeout=args.timeout)
+            row["estimated"] = estimated.run_intersection(str(obj_a), str(obj_b), args.runs, timeout=args.timeout, log_dir=str(run_log_dir))
         if "estimate_only" in args.approaches:
             estimated.mode = "estimate_only"
             estimated.name = "Raytracer_estimate_only"
             estimated.executable = estimated.rayspace_dir / "query" / "build" / "bin" / "raytracer_intersection_estimated"
-            row["estimate_only"] = estimated.run_intersection(str(obj_a), str(obj_b), args.runs, timeout=args.timeout)
+            row["estimate_only"] = estimated.run_intersection(str(obj_a), str(obj_b), args.runs, timeout=args.timeout, log_dir=str(run_log_dir))
         if "cgal" in args.approaches:
-            row["cgal"] = cgal.run_intersection(str(obj_a), str(obj_b), args.runs, timeout=args.timeout)
+            row["cgal"] = cgal.run_intersection(str(obj_a), str(obj_b), args.runs, timeout=args.timeout, log_dir=str(run_log_dir))
 
         results.append(row)
         print(f"stage={stage}: done")

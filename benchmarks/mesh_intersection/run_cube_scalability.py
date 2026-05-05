@@ -17,6 +17,7 @@ from benchmarks.common.scenario_utils import (
     get_shared_data_dirs,
     write_json,
 )
+from benchmarks.common.viz_utils import generate_scalability_figure, generate_breakdown_figure
 from benchmarks.mesh_intersection.adapters.cgal_adapter import CGALIntersectionAdapter
 from benchmarks.mesh_intersection.adapters.raytracer_adapter import RaytracerIntersectionAdapter
 
@@ -59,6 +60,8 @@ def main():
     )
     cgal_adapter = CGALIntersectionAdapter(str(CGAL_BASE_DIR), preprocessed_dir=str(dirs["preprocessed"]))
 
+    run_log_dir = run_layout["logs_dir"]
+
     results = []
     for count_b in args.counts:
         fixed_a, ds_b = canonical_cube_pair_paths(
@@ -85,7 +88,7 @@ def main():
 
         for file_path in (fixed_a, ds_b):
             if not estimated_adapter.check_preprocessed(str(file_path)):
-                estimated_adapter.preprocess_from_source(str(file_path), str(file_path))
+                estimated_adapter.preprocess_from_source(str(file_path), str(file_path), log_dir=str(run_log_dir))
 
         entry = {
             "count_a": args.fixed_count,
@@ -97,18 +100,18 @@ def main():
         }
 
         if "estimated" in args.approaches:
-            res = estimated_adapter.run_intersection(str(fixed_a), str(ds_b), args.runs, timeout=args.timeout)
+            res = estimated_adapter.run_intersection(str(fixed_a), str(ds_b), args.runs, timeout=args.timeout, log_dir=str(run_log_dir))
             entry["estimated"] = res
 
         if "estimate_only" in args.approaches:
             estimated_adapter.mode = "estimate_only"
             estimated_adapter.name = "Raytracer_estimate_only"
             estimated_adapter.executable = estimated_adapter.rayspace_dir / "query" / "build" / "bin" / "raytracer_intersection_estimated"
-            res = estimated_adapter.run_intersection(str(fixed_a), str(ds_b), args.runs, timeout=args.timeout)
+            res = estimated_adapter.run_intersection(str(fixed_a), str(ds_b), args.runs, timeout=args.timeout, log_dir=str(run_log_dir))
             entry["estimate_only"] = res
 
         if "cgal" in args.approaches:
-            res = cgal_adapter.run_intersection(str(fixed_a), str(ds_b), args.runs, timeout=args.timeout)
+            res = cgal_adapter.run_intersection(str(fixed_a), str(ds_b), args.runs, timeout=args.timeout, log_dir=str(run_log_dir))
             entry["cgal"] = res
 
         results.append(entry)
@@ -140,6 +143,33 @@ def main():
     out = run_layout["results_json"]
     write_json(out, payload)
     print(f"Saved: {out}")
+
+    # Generate figures automatically
+    figures_dir = Path(run_layout["figures_dir"])
+    generate_scalability_figure(
+        results=results,
+        approaches=args.approaches,
+        figures_dir=figures_dir,
+        timestamp=run_layout["timestamp"],
+        scenario_name="intersection_cube_scalability",
+        x_axis_key="count_b",
+        x_axis_label="Count B (Number of cubes)",
+        y_axis_label="Query time (ms) [log scale]",
+        title="Cube Scalability for Mesh Intersection"
+    )
+    
+    if "estimated" in args.approaches or "estimate_only" in args.approaches:
+        generate_breakdown_figure(
+            results=results,
+            approaches=[a for a in args.approaches if "estimate" in a],
+            figures_dir=figures_dir,
+            timestamp=run_layout["timestamp"],
+            scenario_name="intersection_cube_scalability",
+            x_axis_key="count_b",
+            x_axis_label="Cube Count",
+            y_axis_label="Query time (ms)",
+            title="Intersection Runtime Breakdown"
+        )
 
 
 if __name__ == "__main__":

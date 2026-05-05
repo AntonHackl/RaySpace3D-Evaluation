@@ -23,87 +23,13 @@ from benchmarks.common.scenario_utils import (
     get_shared_data_dirs,
     write_json,
 )
+from benchmarks.common.viz_utils import generate_scalability_figure, generate_breakdown_figure
 from benchmarks.mesh_overlap.adapters.raytracer_adapter import RaytracerAdapter
 from benchmarks.mesh_overlap.adapters.cgal_adapter import CGALAdapter
 from benchmarks.mesh_overlap.adapters.touch_adapter import TOUCHAdapter
 
 CGAL_DIR = REPO_ROOT / "baselines/RaySpace3DBaselines/CGAL"
 
-def generate_microns_scalability_figure(results, approaches, figures_dir: Path, timestamp: str):
-    """Generate a line plot for MICrONS overlap scalability from successful runs."""
-    figures_dir.mkdir(parents=True, exist_ok=True)
-
-    style_map = {
-        "direct_estimation": ("Direct Estimation", "#1f77b4", "o", "-"),
-        "cgal": ("CGAL", "#ff7f0e", "s", "--"),
-        "touch": ("TOUCH", "#2ca02c", "^", "-."),
-    }
-
-    plt.figure(figsize=(10, 6))
-    has_any_series = False
-
-    for approach in approaches:
-        x_vals = []
-        y_vals = []
-        y_errs = []
-        for row in results:
-            res = row.get(approach)
-            if not isinstance(res, dict) or "error" in res:
-                continue
-            mean = res.get("mean")
-            std = res.get("std")
-            if mean is None:
-                continue
-            x_vals.append(row.get("size_gb"))
-            y_vals.append(mean)
-            y_errs.append(0.0 if std is None else std)
-
-        if not x_vals:
-            continue
-
-        has_any_series = True
-        sorted_points = sorted(zip(x_vals, y_vals, y_errs), key=lambda t: t[0])
-        xs = [p[0] for p in sorted_points]
-        ys = [p[1] for p in sorted_points]
-        es = [p[2] for p in sorted_points]
-
-        label, color, marker, linestyle = style_map.get(
-            approach, (approach, "#444444", "o", "-")
-        )
-        plt.errorbar(
-            xs,
-            ys,
-            yerr=es,
-            fmt=marker,
-            linestyle=linestyle,
-            color=color,
-            capsize=4,
-            linewidth=2,
-            markersize=7,
-            label=label,
-        )
-
-    if not has_any_series:
-        print("No successful approach results available; skipping MICrONS scalability figure.")
-        plt.close()
-        return
-
-    plt.yscale("log")
-    plt.xlabel("MICrONS subset size (GB)")
-    plt.ylabel("Overlap query time (ms) [log scale]")
-    plt.title("MICrONS Overlap Scalability")
-    plt.grid(True, which="both", linestyle="--", alpha=0.3)
-    plt.legend()
-    plt.tight_layout()
-
-    output_png = figures_dir / f"microns_overlap_scalability_{timestamp}.png"
-    output_pdf = figures_dir / f"microns_overlap_scalability_{timestamp}.pdf"
-    plt.savefig(output_png, dpi=300, bbox_inches="tight")
-    plt.savefig(output_pdf, bbox_inches="tight")
-    plt.close()
-
-    print(f"Saved figure: {output_png}")
-    print(f"Saved figure: {output_pdf}")
 
 def main():
     parser = argparse.ArgumentParser(description="MICrONS subset benchmark for mesh overlap (Direct Estimation, CGAL, TOUCH)")
@@ -138,9 +64,9 @@ def main():
             timings_dir=str(dirs["timings"]), grid_cell_size=args.grid_cell_size, warmup_runs=args.warmup_runs,
         )
     if "cgal" in args.approaches:
-        adapters["cgal"] = CGALAdapter(str(CGAL_DIR), preprocessed_dir=str(dirs["preprocessed"]))
+        adapters["cgal"] = CGALAdapter(str(CGAL_DIR), preprocessed_dir=str(dirs["preprocessed"]), grid_cell_size=args.grid_cell_size)
     if "touch" in args.approaches:
-        adapters["touch"] = TOUCHAdapter(str(CGAL_DIR), preprocessed_dir=str(dirs["preprocessed"]))
+        adapters["touch"] = TOUCHAdapter(str(CGAL_DIR), preprocessed_dir=str(dirs["preprocessed"]), grid_cell_size=args.grid_cell_size)
 
     results = []
     for size_gb in args.sizes:
@@ -150,29 +76,18 @@ def main():
         agg_a, agg_b = canonical_microns_aggregated_paths(dirs["raw"], size_gb)
         ensure_microns_aggregated_meshes(split_a, split_b, agg_a, agg_b)
 
-        # Preprocessing for Raytracer (with grid)
-        if "direct_estimation" in args.approaches:
-             adapter = adapters["direct_estimation"]
+        # Preprocessing (All approaches share the Raytracer .pre files)
+        if any(a in args.approaches for a in ["direct_estimation", "cgal", "touch"]):
+             # Use direct_estimation adapter for preprocessing if it exists, otherwise create a temporary one
+             pre_adapter = adapters.get("direct_estimation")
+             if not pre_adapter:
+                 pre_adapter = RaytracerAdapter(
+                     str(RAYSPACE_DIR), mode="direct_estimation", preprocessed_dir=str(dirs["preprocessed"]),
+                     timings_dir=str(dirs["timings"]), grid_cell_size=args.grid_cell_size,
+                 )
              for file_path in (agg_a, agg_b):
-                 if not adapter.check_preprocessed(str(file_path)):
-                     adapter.preprocess_from_source(str(file_path), str(file_path), log_dir=str(run_log_dir))
-        
-        # Preprocessing for CGAL/TOUCH (no grid, .pre extension)
-        if "cgal" in args.approaches or "touch" in args.approaches:
-            print("Checking preprocessing for CGAL/TOUCH (no grid)...")
-            preprocess_exec = RAYSPACE_DIR / "preprocess" / "build" / "bin" / "preprocess_dataset"
-            for file_path in (agg_a, agg_b):
-                out_pre = dirs["preprocessed"] / f"{file_path.stem}.pre"
-                if not out_pre.exists():
-                    print(f"Preprocessing {file_path.name} for CGAL/TOUCH...")
-                    cmd = [
-                        str(preprocess_exec),
-                        "--mode", "mesh",
-                        "--dataset", str(file_path),
-                        "--output-geometry", str(out_pre),
-                        "--output-timing", str(dirs["timings"] / f"{file_path.stem}_no_grid_timing.json")
-                    ]
-                    subprocess.run(cmd, check=True)
+                 if not pre_adapter.check_preprocessed(str(file_path)):
+                     pre_adapter.preprocess_from_source(str(file_path), str(file_path), log_dir=str(run_log_dir))
 
         entry = {
             "size_gb": size_gb,
@@ -231,12 +146,32 @@ def main():
     write_json(out, payload)
     print(f"Saved: {out}")
 
-    generate_microns_scalability_figure(
+    # Generate figures automatically
+    figures_dir = Path(run_layout["figures_dir"])
+    generate_scalability_figure(
         results=results,
         approaches=args.approaches,
-        figures_dir=Path(run_layout["figures_dir"]),
+        figures_dir=figures_dir,
         timestamp=run_layout["timestamp"],
+        scenario_name="microns_overlap",
+        x_axis_key="size_gb",
+        x_axis_label="MICrONS subset size (GB)",
+        y_axis_label="Overlap query time (ms) [log scale]",
+        title="MICrONS Overlap Scalability"
     )
+    
+    if "direct_estimation" in args.approaches:
+        generate_breakdown_figure(
+            results=results,
+            approaches=["direct_estimation"],
+            figures_dir=figures_dir,
+            timestamp=run_layout["timestamp"],
+            scenario_name="microns_overlap",
+            x_axis_key="size_gb",
+            x_axis_label="Dataset Size",
+            y_axis_label="Query time (ms)",
+            title="Overlap Runtime Breakdown"
+        )
 
 if __name__ == "__main__":
     main()
