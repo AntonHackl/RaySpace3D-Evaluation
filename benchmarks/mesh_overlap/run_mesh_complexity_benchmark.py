@@ -9,7 +9,7 @@ from datetime import datetime
 import subprocess 
 import json
 from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
-from benchmarks.common.viz_utils import apply_paper_style, plot_mean_series
+from benchmarks.common.viz_utils import apply_paper_style, style_for
 from benchmarks.common.scenario_utils import (
     canonical_sphere_pair_paths,
     count_vertices,
@@ -168,18 +168,20 @@ def plot_results(results, num_objects, selectivity, figures_dir):
     apply_paper_style()
     plt.figure(figsize=(10, 7.2))
 
-    for key, color, label, fmt in [
-        ('exact', '#1f77b4', 'Pierce (Two Pass)', '-o'),
-        ('direct_estimation', '#1f77b4', 'Pierce (Selectivity Estimation)', '-s'),
-        ('cgal', '#ff7f0e', 'CGAL', '-D'),
-        ('touch', '#2ca02c', 'TOUCH', '-^')
-    ]:
+    for key in ["exact", "direct_estimation", "cgal", "touch"]:
         valid_indices = [i for i, m in enumerate(results[key]["mean"]) if m is not None]
         if valid_indices:
             x_vals = [complexities[i] for i in valid_indices]
             means = [results[key]["mean"][i] for i in valid_indices]
             stds = [results[key]["std"][i] for i in valid_indices]
-            plt.errorbar(x_vals, means, fmt=fmt, label=label, capsize=5, color=color)
+            st = style_for(key)
+            plt.plot(
+                x_vals,
+                means,
+                f"-{st['marker']}",
+                label=st["label"],
+                color=st["color"],
+            )
 
     plt.xlabel('Mesh Complexity (Vertices per Mesh)')
     plt.ylabel('Execution Time (ms) [Log Scale]')
@@ -204,7 +206,17 @@ def main():
     parser.add_argument("--approaches", type=str, nargs="+", default=["exact", "direct_estimation", "cgal", "touch"], 
                         choices=["exact", "direct_estimation", "cgal", "touch"], help="Approaches to run")
     parser.add_argument("--timeout", type=float, default=1200.0, help="Timeout in seconds per run")
+    parser.add_argument("--revisualize", type=str, help="Path to results.json to re-generate plots from")
     args = parser.parse_args()
+
+    if args.revisualize:
+        print(f"Re-visualizing results from {args.revisualize}...")
+        with open(args.revisualize, "r") as f:
+            data = json.load(f)
+        results = data["results"]
+        figures_dir = Path(args.revisualize).parent / "figures"
+        plot_results(results, data.get("metadata", {}).get("num_objects"), data.get("metadata", {}).get("selectivity"), figures_dir)
+        return
 
     
     run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_mesh_complexity")

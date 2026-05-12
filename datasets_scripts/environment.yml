@@ -31,3 +31,4 @@ dependencies:
       - pyarrow
       - pytest
       - huggingface_hub
+      - kagglehub

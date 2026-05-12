@@ -64,6 +64,8 @@ def visualize_selectivity(summary_file, output_path=None):
     direct_est_stds = []
     mem10_means = []
     mem10_stds = []
+    direct_est_mem_gib = []
+    mem10_mem_gib = []
 
     # Filter data
     valid_selectivities = []
@@ -107,16 +109,22 @@ def visualize_selectivity(summary_file, output_path=None):
         if "direct_estimation" in d and "error" not in d["direct_estimation"]:
             direct_est_means.append(d["direct_estimation"]["mean_ms"])
             direct_est_stds.append(d["direct_estimation"]["std_ms"])
+            direct_mem_bytes = d["direct_estimation"].get("memory", {}).get("total_allocated_bytes", 0)
+            direct_est_mem_gib.append(direct_mem_bytes / float(1024 ** 3) if direct_mem_bytes else None)
         else:
             direct_est_means.append(None)
             direct_est_stds.append(None)
+            direct_est_mem_gib.append(None)
 
         if "estimated_mem10" in d and "error" not in d["estimated_mem10"]:
             mem10_means.append(d["estimated_mem10"]["mean_ms"])
             mem10_stds.append(d["estimated_mem10"]["std_ms"])
+            mem10_mem_bytes = d["estimated_mem10"].get("memory", {}).get("total_allocated_bytes", 0)
+            mem10_mem_gib.append(mem10_mem_bytes / float(1024 ** 3) if mem10_mem_bytes else None)
         else:
             mem10_means.append(None)
             mem10_stds.append(None)
+            mem10_mem_gib.append(None)
 
     if not valid_selectivities:
         print("No valid data points found.")
@@ -139,6 +147,7 @@ def visualize_selectivity(summary_file, output_path=None):
     # --- Plot 1: Scaling Line Plot ---
     apply_paper_style()
     fig_main, ax_main = plt.subplots(figsize=(10, 7.2))
+    ax_mem = ax_main.twinx()
     plot_mean_series(ax_main, valid_selectivities, exact_means, "exact")
     
     if any(x is not None for x in est_means):
@@ -176,8 +185,28 @@ def visualize_selectivity(summary_file, output_path=None):
     ax_main.set_yscale('log')
     ax_main.set_xlabel('Selectivity (Log Scale)')
     ax_main.set_ylabel('Query Time (ms) [Log Scale]')
+
+    mem_plotted = False
+    if any(v is not None for v in direct_est_mem_gib):
+        x = [s for s, v in zip(valid_selectivities, direct_est_mem_gib) if v is not None]
+        y = [v for v in direct_est_mem_gib if v is not None]
+        ax_mem.plot(x, y, linestyle='--', marker='o', color='#9467bd', label='SE Memory (GiB)')
+        mem_plotted = True
+
+    if any(v is not None for v in mem10_mem_gib):
+        x = [s for s, v in zip(valid_selectivities, mem10_mem_gib) if v is not None]
+        y = [v for v in mem10_mem_gib if v is not None]
+        ax_mem.plot(x, y, linestyle='--', marker='s', color='#8c564b', label='10G Memory (GiB)')
+        mem_plotted = True
+
+    if mem_plotted:
+        ax_mem.set_yscale('log')
+        ax_mem.set_ylabel('Allocated Memory (GiB) [Log Scale]')
+
     ax_main.grid(True, which="both", ls="-", alpha=0.2)
-    ax_main.legend(fontsize=12)
+    h1, l1 = ax_main.get_legend_handles_labels()
+    h2, l2 = ax_mem.get_legend_handles_labels()
+    ax_main.legend(h1 + h2, l1 + l2, fontsize=12)
 
     # Annotate improvement factor
     for sl, ex, est in zip(valid_selectivities, exact_means, est_means):

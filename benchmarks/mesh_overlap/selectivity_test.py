@@ -235,6 +235,17 @@ def main():
                     "intersections": results.get("num_intersections", 0),
                     "breakdown": breakdown
                 }
+                memory_stats = {
+                    "hash_table_allocated_bytes": results.get("hash_table_allocated_bytes", 0),
+                    "result_buffer_allocated_bytes": results.get("result_buffer_allocated_bytes", 0),
+                    "result_buffer_used_bytes": results.get("result_buffer_used_bytes", 0),
+                }
+                if any(v and v > 0 for v in memory_stats.values()):
+                    memory_stats["total_allocated_bytes"] = (
+                        memory_stats["hash_table_allocated_bytes"] +
+                        memory_stats["result_buffer_allocated_bytes"]
+                    )
+                    res_per_sel[result_key]["memory"] = memory_stats
                 if "universe_extents1" in results:
                     res_per_sel["universe_extents1"] = results["universe_extents1"]
                 if "universe_extents2" in results:

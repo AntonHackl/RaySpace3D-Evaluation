@@ -141,6 +141,10 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
         hash_contentions = 0
         contention_pct = 0.0
         actual_hash_table_size = 0
+        hash_table_allocated_bytes = 0
+        result_buffer_capacity = 0
+        result_buffer_allocated_bytes = 0
+        result_buffer_used_bytes = 0
         
         print(f"[{self.name}] Running benchmark...")
 
@@ -287,6 +291,26 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
                             actual_hash_table_size = int(line.split(":", 1)[1].strip())
                         except (ValueError, IndexError):
                             pass
+                    elif "Hash Table Allocated Bytes:" in line:
+                        try:
+                            hash_table_allocated_bytes = int(line.split(":", 1)[1].strip())
+                        except (ValueError, IndexError):
+                            pass
+                    elif "Result Buffer Capacity:" in line:
+                        try:
+                            result_buffer_capacity = int(line.split(":", 1)[1].strip())
+                        except (ValueError, IndexError):
+                            pass
+                    elif "Result Buffer Allocated Bytes:" in line:
+                        try:
+                            result_buffer_allocated_bytes = int(line.split(":", 1)[1].strip())
+                        except (ValueError, IndexError):
+                            pass
+                    elif "Result Buffer Used Bytes:" in line:
+                        try:
+                            result_buffer_used_bytes = int(line.split(":", 1)[1].strip())
+                        except (ValueError, IndexError):
+                            pass
 
                 # Parse contention from any run (last value wins)
                 for line in lines:
@@ -410,4 +434,8 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
             "hash_contentions": hash_contentions,
             "contention_pct": contention_pct,
             "actual_hash_table_size": actual_hash_table_size,
+            "hash_table_allocated_bytes": hash_table_allocated_bytes,
+            "result_buffer_capacity": result_buffer_capacity,
+            "result_buffer_allocated_bytes": result_buffer_allocated_bytes,
+            "result_buffer_used_bytes": result_buffer_used_bytes,
         }

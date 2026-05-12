@@ -4,3 +4,6 @@
 [submodule "baselines/RaySpace3DBaselines"]
 	path = baselines/RaySpace3DBaselines
 	url = ../RaySpace3DBaslines
+[submodule "3dpipe"]
+	path = 3dpipe
+	url = https://github.com/lyuheng/3dpipe

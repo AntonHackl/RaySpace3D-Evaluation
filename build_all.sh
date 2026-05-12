@@ -17,7 +17,7 @@
 #   ./build_all.sh              # Build everything
 #   ./build_all.sh --clean      # Clean build (remove build dirs first)
 #   ./build_all.sh --only X     # Build only component X
-#                               #   X = preprocess | query | cgal | cuda | sql
+#                               #   X = preprocess | query | cgal | cuda | sql | tdbase | 3dpipe
 #   ./build_all.sh --jobs N     # Use N parallel jobs (default: $(nproc))
 # =============================================================================
 
@@ -49,7 +49,7 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             echo "Usage: $0 [--clean] [--only COMPONENT] [--jobs N] [-- EXTRA_CMAKE_ARGS]"
             echo ""
-            echo "Components: preprocess, query, tdbase, cgal, cuda, sql"
+            echo "Components: preprocess, query, tdbase, cgal, cuda, sql, 3dpipe"
             exit 0
             ;;
         *) 
@@ -306,6 +306,19 @@ if should_build "tdbase"; then
     build_cmake_project \
         "TDBase Baseline" \
         "$SCRIPT_DIR/baselines/RaySpace3DBaselines/tdbase_patch" \
+        "tdbase_env" \
+        "-DUSE_GPU=ON $EXTRA_ARGS" \
+        || true
+fi
+
+# -----------------------------------------------------------------------
+# 7. 3DPipe (submodule)
+# -----------------------------------------------------------------------
+if should_build "3dpipe"; then
+    export USE_GPU=1
+    build_cmake_project \
+        "3DPipe" \
+        "$SCRIPT_DIR/3dpipe/src" \
         "tdbase_env" \
         "-DUSE_GPU=ON $EXTRA_ARGS" \
         || true

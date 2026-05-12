@@ -79,5 +79,7 @@ cmake-build-*/
 
 carlaocc_dataset/
 microns_data/
+datasets_scripts/modelnet_data/
+modelnet_data/
 
 tmp/

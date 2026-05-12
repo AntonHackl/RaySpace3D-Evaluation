@@ -15,9 +15,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
-from benchmarks.common.viz_utils import apply_paper_style, plot_mean_series
+from benchmarks.common.viz_utils import apply_paper_style, plot_mean_series, style_for
 from benchmarks.common.scenario_utils import (
+    canonical_nn_pair_paths,
     canonical_nu_pair_paths,
+    ensure_nn_pair_dataset,
     ensure_nu_pair_dataset,
     get_shared_data_dirs,
 )
@@ -48,16 +50,26 @@ TIMEOUT_SECONDS = 120.0
 DEFAULT_NU_COUNTS = [200, 400, 600, 800]
 LEGACY_RAW_DIR = RAW_DIR
 SHARED_SCENARIO = "nu_scalability"
-LARGE_NU_NN_LEGACY_RAW_DIR = SCRIPT_DIR / "data" / "raw"
+LARGE_NU_V_LEGACY_RAW_DIR = SCRIPT_DIR / "data" / "raw"
 
-def resolve_nu_dataset_pair(
+def resolve_dataset_pair(
     raw_shared_dir: Path,
     nu: int,
     *,
     nv: int = 150,
     prefix: str = "tdbase",
+    profile_kind: str = "nu_v",
     legacy_raw_dirs=None,
 ):
+    if profile_kind == "nu_nn":
+        n_file1, n_file2 = canonical_nn_pair_paths(raw_shared_dir, nu=nu, nv=nv, prefix=prefix)
+        ensure_nn_pair_dataset(
+            n_file1,
+            n_file2,
+            legacy_raw_dirs=legacy_raw_dirs if legacy_raw_dirs is not None else [LEGACY_RAW_DIR],
+        )
+        return n_file1, n_file2
+
     n_file, v_file = canonical_nu_pair_paths(raw_shared_dir, nu=nu, nv=nv, prefix=prefix)
     ensure_nu_pair_dataset(
         n_file,
@@ -85,11 +97,18 @@ def run_experiment(
         print("Direct estimation hash contention tracking: enabled")
     
     # Ensure directories exist
-    if dataset_profile == "large_nu_nn":
+    profile_kind = "nu_v"
+    if dataset_profile == "large_nu_v":
         shared_dirs = get_shared_data_dirs("large_nu_nn_scalability")
         dataset_nv = 750
         dataset_prefix = "tdbase_large"
-        legacy_raw_dirs = [LARGE_NU_NN_LEGACY_RAW_DIR, LEGACY_RAW_DIR]
+        legacy_raw_dirs = [LARGE_NU_V_LEGACY_RAW_DIR, LEGACY_RAW_DIR]
+    elif dataset_profile == "large_nu_nn":
+        shared_dirs = get_shared_data_dirs("large_nu_nn_scalability")
+        dataset_nv = 750
+        dataset_prefix = "tdbase_large"
+        profile_kind = "nu_nn"
+        legacy_raw_dirs = [LARGE_NU_V_LEGACY_RAW_DIR, LEGACY_RAW_DIR]
     else:
         shared_dirs = get_shared_data_dirs(SHARED_SCENARIO)
         dataset_nv = 150
@@ -152,11 +171,12 @@ def run_experiment(
     }
 
     for nu in nu_counts:
-        f_v_path, f_n_path = resolve_nu_dataset_pair(
+        f_v_path, f_n_path = resolve_dataset_pair(
             shared_raw_dir,
             nu,
             nv=dataset_nv,
             prefix=dataset_prefix,
+            profile_kind=profile_kind,
             legacy_raw_dirs=legacy_raw_dirs,
         )
         
@@ -324,8 +344,16 @@ def plot_results(results, figures_dir):
                 exact_counts = [counts[i] for i in exact_valid_indices]
                 exact_means = [results["exact"]["mean"][i] for i in exact_valid_indices]
                 exact_stds = [results["exact"]["std"][i] for i in exact_valid_indices]
-                ax.errorbar(exact_counts, exact_means,
-                                fmt='-o', label='Pierce (Two Pass)', capsize=5, color='#1f77b4')
+                st = style_for("exact")
+                ax.errorbar(
+                    exact_counts,
+                    exact_means,
+                    yerr=exact_stds,
+                    fmt=f"-{st['marker']}",
+                    label=st["label"],
+                    capsize=5,
+                    color=st["color"],
+                )
 
         if "direct_estimation" in enabled:
             direct_valid_indices = [i for i, m in enumerate(results["direct_estimation"]["mean"]) if m is not None]
@@ -333,8 +361,16 @@ def plot_results(results, figures_dir):
                 direct_counts = [counts[i] for i in direct_valid_indices]
                 direct_means = [results["direct_estimation"]["mean"][i] for i in direct_valid_indices]
                 direct_stds = [results["direct_estimation"]["std"][i] for i in direct_valid_indices]
-                ax.errorbar(direct_counts, direct_means,
-                                fmt='-s', label='Pierce (Selectivity Estimation)', capsize=5, color='#2ca02c')
+                st = style_for("direct_estimation")
+                ax.errorbar(
+                    direct_counts,
+                    direct_means,
+                    yerr=direct_stds,
+                    fmt=f"-{st['marker']}",
+                    label=st["label"],
+                    capsize=5,
+                    color=st["color"],
+                )
         
         # Filter valid CGAL points
         cgal_valid_indices = [i for i, m in enumerate(results["cgal"]["mean"]) if m is not None] if "cgal" in enabled else []
@@ -342,8 +378,16 @@ def plot_results(results, figures_dir):
             cgal_counts = [counts[i] for i in cgal_valid_indices]
             cgal_means = [results["cgal"]["mean"][i] for i in cgal_valid_indices]
             cgal_stds = [results["cgal"]["std"][i] for i in cgal_valid_indices]
-            ax.errorbar(cgal_counts, cgal_means, 
-                             fmt='-D', label='CGAL', capsize=5, color='#9467bd')
+            st = style_for("cgal")
+            ax.errorbar(
+                cgal_counts,
+                cgal_means,
+                yerr=cgal_stds,
+                fmt=f"-{st['marker']}",
+                label=st["label"],
+                capsize=5,
+                color=st["color"],
+            )
 
         # Filter valid TOUCH points
         touch_valid_indices = [i for i, m in enumerate(results["touch"]["mean"]) if m is not None] if "touch" in enabled else []
@@ -351,8 +395,16 @@ def plot_results(results, figures_dir):
             touch_counts = [counts[i] for i in touch_valid_indices]
             touch_means = [results["touch"]["mean"][i] for i in touch_valid_indices]
             touch_stds = [results["touch"]["std"][i] for i in touch_valid_indices]
-            ax.errorbar(touch_counts, touch_means, 
-                             fmt='-^', label='TOUCH', capsize=5, color='#8c564b')
+            st = style_for("touch")
+            ax.errorbar(
+                touch_counts,
+                touch_means,
+                yerr=touch_stds,
+                fmt=f"-{st['marker']}",
+                label=st["label"],
+                capsize=5,
+                color=st["color"],
+            )
 
         # Filter valid TDBase points
         td_valid_indices = [i for i, m in enumerate(results["tdbase"]["mean"]) if m is not None] if "tdbase" in enabled else []
@@ -360,8 +412,16 @@ def plot_results(results, figures_dir):
             td_counts = [counts[i] for i in td_valid_indices]
             td_means = [results["tdbase"]["mean"][i] for i in td_valid_indices]
             td_stds = [results["tdbase"]["std"][i] for i in td_valid_indices]
-            ax.errorbar(td_counts, td_means, 
-                             fmt='-X', label='TDBase', capsize=5, color='#d62728')
+            st = style_for("tdbase")
+            ax.errorbar(
+                td_counts,
+                td_means,
+                yerr=td_stds,
+                fmt=f"-{st['marker']}",
+                label=st["label"],
+                capsize=5,
+                color=st["color"],
+            )
 
         ax.set_xlabel('Nuclei per Vessel (Total objects ≃ Nu * 300)')
         ax.set_ylabel('Execution Time (ms) [Log Scale]')
@@ -554,9 +614,9 @@ def main():
     parser.add_argument(
         "--dataset-profile",
         type=str,
-        choices=["standard", "large_nu_nn"],
+        choices=["standard", "large_nu_v", "large_nu_nn"],
         default="standard",
-        help="Dataset source profile: standard nu_scalability or large_nu_nn generated data",
+        help="Dataset source profile: standard nu_scalability, large_nu_v, or large_nu_nn generated data",
     )
     args = parser.parse_args()
     

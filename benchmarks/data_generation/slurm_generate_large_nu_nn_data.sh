@@ -25,7 +25,7 @@ PREFIX=\${PREFIX:-tdbase_large}
 mkdir -p \"\$OUTPUT_DIR\"
 cd \"\$TDBASE_BUILD_DIR\"
 
-for nu in 200 400 600 800; do
+for nu in 200 400; do
     echo \"Generating LARGE nu dataset with prefix=\$PREFIX, nv=\$NV, nu=\$nu...\"
     ./tdbase simulator \
         -n \"\$BASE_DIR/baselines/RaySpace3DBaselines/tdbase/data/nuclei.pt\" \

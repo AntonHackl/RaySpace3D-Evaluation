@@ -6,8 +6,8 @@ from pathlib import Path
 
 APPROACH_STYLES = {
     "exact": {"label": "Pierce (Two Pass)", "color": "#1f77b4", "marker": "o"},
-    "direct_estimation": {"label": "Pierce (Selectivity Estimation)", "color": "#1f77b4", "marker": "s"},
-    "estimated": {"label": "Pierce (Selectivity Estimation)", "color": "#1f77b4", "marker": "s"},
+    "direct_estimation": {"label": "Pierce", "color": "#1f77b4", "marker": "s"},
+    "estimated": {"label": "Pierce", "color": "#1f77b4", "marker": "s"},
     "estimated_mem10": {"label": "Pierce (Selectivity Estimation, 10 GiB Hash Table)", "color": "#1f77b4", "marker": "v"},
     "cgal": {"label": "CGAL", "color": "#ff7f0e", "marker": "D"},
     "touch": {"label": "TOUCH", "color": "#2ca02c", "marker": "^"},
@@ -115,13 +115,43 @@ def generate_breakdown_figure(results, approaches, figures_dir: Path, timestamp:
 
         sorted_keys = sorted(list(breakdown_keys))
 
+        # Preferred intersection phase order (bottom -> top in stacked bars).
+        phase_order = [
+            "selectivity estimation",
+            "raytrace_overlap_hash_mesh1tomesh2",
+            "raytrace_overlap_hash_mesh2tomesh1",
+            "raytrace_containment_hash_mesh1tomesh2",
+            "raytrace_containment_hash_mesh2tomesh1",
+            "compact_hash_table_pairs",
+        ]
+        phase_labels = {
+            "selectivity estimation": "Selectivity Estimation",
+            "raytrace_overlap_hash_mesh1tomesh2": "Edge (M1->M2)",
+            "raytrace_overlap_hash_mesh2tomesh1": "Edge (M2 -> M1)",
+            "raytrace_containment_hash_mesh1tomesh2": "Containment (M1-M2)",
+            "raytrace_containment_hash_mesh2tomesh1": "Containment (M2 -> M1)",
+            "compact_hash_table_pairs": "Download results",
+            "download results": "Download results",
+        }
+
+        present_preferred = [k for k in phase_order if k in breakdown_keys]
+        remaining = [k for k in sorted_keys if k not in present_preferred]
+        display_order = present_preferred + remaining
+
         plt.figure(figsize=(12, 7.2))
         bottom = np.zeros(len(x_labels))
         colors = plt.cm.tab10.colors
 
-        for i, key in enumerate(sorted_keys):
+        # Draw in bottom->top order so the first phase is at the bottom.
+        for i, key in enumerate(display_order):
             vals = np.array([dp.get(key, 0.0) for dp in data_points])
-            plt.bar(x_labels, vals, bottom=bottom, label=key, color=colors[i % len(colors)])
+            plt.bar(
+                x_labels,
+                vals,
+                bottom=bottom,
+                label=phase_labels.get(key, key),
+                color=colors[i % len(colors)],
+            )
             bottom += vals
 
         plt.xlabel(x_axis_label)

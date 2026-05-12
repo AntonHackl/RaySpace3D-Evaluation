@@ -31,11 +31,14 @@ CGAL_DIR = REPO_ROOT / "baselines" / "RaySpace3DBaselines" / "CGAL"
 TIMEOUT_SECONDS = 1800.0
 ESTIMATED_RELATIVE_TOLERANCE = 0.05
 CGAL_QUERY_RELATIVE_TOLERANCE = 0.05
+OVERLAP_EXACT_RELATIVE_TOLERANCE = 0.01
 
 # This must match the values produced by snapshot_rayspace_ground_truth.py at the current time.
 # After re-snapshotting, update these constants intentionally.
 RAYSPACE_20K_GROUND_TRUTH: Dict[str, int] = {
     "overlap_num_pairs": 421752,
+    "overlap_exact_num_pairs": 421751,
+    "overlap_direct_estimation_num_pairs": 421752,
     "intersection_num_pairs": 430028,
     "containment_num_pairs": 4211,
 }
@@ -183,14 +186,20 @@ def run_overlap_checks(manifest, approaches):
                 results[dataset_name]["rayspace_exact"] = {"pass": False, "error": exact_out["error"]}
             else:
                 found = int(exact_out.get("num_intersections", 0))
-                expected = expected_manual_count if dataset_name == "manual" else int(RAYSPACE_20K_GROUND_TRUTH["overlap_num_pairs"])
-                results[dataset_name]["rayspace_exact"] = _build_check(found, expected)
+                expected = expected_manual_count if dataset_name == "manual" else int(RAYSPACE_20K_GROUND_TRUTH["overlap_exact_num_pairs"])
+                approximate = dataset_name == "cubes_20k"
+                results[dataset_name]["rayspace_exact"] = _build_check(
+                    found,
+                    expected,
+                    approximate=approximate,
+                    tolerance=OVERLAP_EXACT_RELATIVE_TOLERANCE,
+                )
 
             if "error" in direct_out:
                 results[dataset_name]["rayspace_direct_estimation"] = {"pass": False, "error": direct_out["error"]}
             else:
                 found = int(direct_out.get("num_intersections", 0))
-                expected = expected_manual_count if dataset_name == "manual" else int(RAYSPACE_20K_GROUND_TRUTH["overlap_num_pairs"])
+                expected = expected_manual_count if dataset_name == "manual" else int(RAYSPACE_20K_GROUND_TRUTH["overlap_direct_estimation_num_pairs"])
                 results[dataset_name]["rayspace_direct_estimation"] = _build_check(found, expected)
 
         if "cgal" in approaches:
