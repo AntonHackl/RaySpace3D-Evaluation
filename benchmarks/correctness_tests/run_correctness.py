@@ -32,6 +32,7 @@ TIMEOUT_SECONDS = 1800.0
 ESTIMATED_RELATIVE_TOLERANCE = 0.05
 CGAL_QUERY_RELATIVE_TOLERANCE = 0.05
 OVERLAP_EXACT_RELATIVE_TOLERANCE = 0.01
+GRID_CELL_SIZE = 10
 
 # This must match the values produced by snapshot_rayspace_ground_truth.py at the current time.
 # After re-snapshotting, update these constants intentionally.
@@ -77,8 +78,8 @@ def _parse_count_from_output(output: str):
 
 
 def _run_cgal_style_overlap_with_count(name: str, executable: Path, mesh_a: str, mesh_b: str):
-    p1 = PREPROCESSED_DIR / Path(mesh_a).with_suffix(".pre").name
-    p2 = PREPROCESSED_DIR / Path(mesh_b).with_suffix(".pre").name
+    p1 = _resolve_preprocessed_path(mesh_a)
+    p2 = _resolve_preprocessed_path(mesh_b)
 
     if not executable.exists():
         return {"error": f"Executable not found: {executable}"}
@@ -113,7 +114,7 @@ def _prepare_preprocessed(mesh_a: str, mesh_b: str):
         mode="exact",
         preprocessed_dir=str(PREPROCESSED_DIR),
         timings_dir=str(TIMINGS_DIR),
-        grid_cell_size=10,
+        grid_cell_size=GRID_CELL_SIZE,
         warmup_runs=1,
     )
     overlap_prep.preprocess_from_source(mesh_a, _as_dt_name(mesh_a))
@@ -142,6 +143,19 @@ def _build_check(found: int, expected: int, approximate: bool = False, tolerance
     }
 
 
+def _grid_token(cell_size: float) -> str:
+    return str(cell_size).replace(".", "_")
+
+
+def _resolve_preprocessed_path(mesh_path: str) -> Path:
+    base = Path(mesh_path).stem
+    modern = PREPROCESSED_DIR / f"{base}_g{_grid_token(GRID_CELL_SIZE)}.pre"
+    legacy = PREPROCESSED_DIR / f"{base}.pre"
+    if modern.exists():
+        return modern
+    return legacy
+
+
 def run_overlap_checks(manifest, approaches):
     manual = manifest["manual"]["overlap"]
     cubes = manifest["cubes_20k_sel_0_001"]
@@ -167,7 +181,7 @@ def run_overlap_checks(manifest, approaches):
                 mode="exact",
                 preprocessed_dir=str(PREPROCESSED_DIR),
                 timings_dir=str(TIMINGS_DIR),
-                grid_cell_size=10,
+                grid_cell_size=GRID_CELL_SIZE,
                 warmup_runs=2,
             )
             exact_out = exact_adapter.run_overlap(mesh_a, mesh_b, num_runs=1, timeout=TIMEOUT_SECONDS)
@@ -177,7 +191,7 @@ def run_overlap_checks(manifest, approaches):
                 mode="direct_estimation",
                 preprocessed_dir=str(PREPROCESSED_DIR),
                 timings_dir=str(TIMINGS_DIR),
-                grid_cell_size=10,
+                grid_cell_size=GRID_CELL_SIZE,
                 warmup_runs=2,
             )
             direct_out = direct_adapter.run_overlap(mesh_a, mesh_b, num_runs=1, timeout=TIMEOUT_SECONDS)
@@ -270,7 +284,7 @@ def run_intersection_checks(manifest, approaches):
                 mode="estimated",
                 preprocessed_dir=str(PREPROCESSED_DIR),
                 timings_dir=str(TIMINGS_DIR),
-                grid_cell_size=10,
+                grid_cell_size=GRID_CELL_SIZE,
                 warmup_runs=2,
             )
             estimated_out = estimated_adapter.run_intersection(mesh_a, mesh_b, num_runs=1, timeout=TIMEOUT_SECONDS)
@@ -286,6 +300,7 @@ def run_intersection_checks(manifest, approaches):
             adapter = CGALIntersectionAdapter(
                 str(CGAL_DIR),
                 preprocessed_dir=str(PREPROCESSED_DIR),
+                grid_cell_size=GRID_CELL_SIZE,
             )
             out = adapter.run_intersection(mesh_a, mesh_b, num_runs=1, timeout=TIMEOUT_SECONDS)
             if "error" in out:
@@ -329,7 +344,7 @@ def run_containment_checks(manifest, approaches, use_anyhit_point_in_mesh: bool 
                 str(RAYSPACE_DIR),
                 preprocessed_dir=str(PREPROCESSED_DIR),
                 timings_dir=str(TIMINGS_DIR),
-                grid_cell_size=10,
+                grid_cell_size=GRID_CELL_SIZE,
                 warmup_runs=1,
                 use_anyhit_point_in_mesh=use_anyhit_point_in_mesh,
             )
@@ -345,6 +360,7 @@ def run_containment_checks(manifest, approaches, use_anyhit_point_in_mesh: bool 
             adapter = CGALContainmentAdapter(
                 str(CGAL_DIR),
                 preprocessed_dir=str(PREPROCESSED_DIR),
+                grid_cell_size=GRID_CELL_SIZE,
             )
             out = adapter.run_containment(mesh_a, mesh_b, num_runs=1, timeout=TIMEOUT_SECONDS)
             if "error" in out:

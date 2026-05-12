@@ -8,12 +8,26 @@ from benchmarks.common.adapters.base import IntersectionBenchmarkAdapter, run_co
 
 
 class CGALIntersectionAdapter(IntersectionBenchmarkAdapter):
-    def __init__(self, cgal_dir: str, preprocessed_dir: str = "preprocessed", threads: Optional[int] = None):
+    def __init__(
+        self,
+        cgal_dir: str,
+        preprocessed_dir: str = "preprocessed",
+        threads: Optional[int] = None,
+        grid_cell_size: float = 10.0,
+    ):
         super().__init__("CGAL")
         self.cgal_dir = Path(cgal_dir)
         self.preprocessed_dir = Path(preprocessed_dir)
         self.executable = self.cgal_dir / "build" / "cgal_intersection"
         self.threads = threads
+        self.grid_cell_size = grid_cell_size
+
+    def _get_preprocessed_path(self, file_path: str) -> Path:
+        input_path = Path(file_path)
+        grid_token = str(self.grid_cell_size).replace(".", "_")
+        modern = self.preprocessed_dir / f"{input_path.stem}_g{grid_token}.pre"
+        legacy = self.preprocessed_dir / f"{input_path.stem}.pre"
+        return modern if modern.exists() else legacy
 
     def run_intersection(
         self,
@@ -26,8 +40,8 @@ class CGALIntersectionAdapter(IntersectionBenchmarkAdapter):
         if not self.executable.exists():
             return {"error": f"Executable not found: {self.executable}"}
 
-        p1 = self.preprocessed_dir / Path(file1).with_suffix(".pre").name
-        p2 = self.preprocessed_dir / Path(file2).with_suffix(".pre").name
+        p1 = self._get_preprocessed_path(file1)
+        p2 = self._get_preprocessed_path(file2)
 
         if not p1.exists() or not p2.exists():
             return {"error": f"CGAL requires .pre files. Missing one of: {p1}, {p2}"}
