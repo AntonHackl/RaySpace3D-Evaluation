@@ -165,7 +165,7 @@ if should_test "query"; then
     done
     
     # Check PTX files exist alongside executables  
-    PTX_FILES=("raytracing.ptx" "mesh_overlap.ptx" "mesh_intersection.ptx")
+    PTX_FILES=("raytracing.ptx" "mesh_overlap_edges.ptx" "mesh_intersection.ptx")
     for ptx in "${PTX_FILES[@]}"; do
         if [[ -f "${QUERY_BIN_DIR}/${ptx}" ]]; then
             record_result "PTX: ${ptx}" "PASS"

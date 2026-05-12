@@ -14,13 +14,6 @@ text = re.sub(r'float3\*\s*mesh2_vertices;\s*uint3\*\s*mesh2_indices;', '', text
 text = re.sub(r'int\*\s*first_triangle_index_per_object;', 'float3* first_vertex_per_object;', text)
 f_mi.write_text(text)
 
-# Update mesh_overlap.h
-f_mo = dir_cuda / 'mesh_overlap.h'
-text = f_mo.read_text()
-text = re.sub(r'float3\*\s*mesh1_vertices;\s*uint3\*\s*mesh1_indices;\s*int\*\s*mesh1_triangle_to_object;\s*int\s*mesh1_num_triangles;', '', text)
-text = re.sub(r'float3\*\s*mesh2_vertices;\s*uint3\*\s*mesh2_indices;', '', text)
-f_mo.write_text(text)
-
 # Update MeshOverlapEdgesLauncher.h
 f_moel = dir_raytracing / 'MeshOverlapEdgesLauncher.h'
 text = f_moel.read_text()
