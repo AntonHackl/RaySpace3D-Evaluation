@@ -4,38 +4,106 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
 
-APPROACH_STYLES = {
-    "exact": {"label": "Pierce (Two Pass)", "color": "#1f77b4", "marker": "o"},
-    "direct_estimation": {"label": "Pierce", "color": "#1f77b4", "marker": "s"},
-    "estimated": {"label": "Pierce", "color": "#1f77b4", "marker": "s"},
-    "estimated_mem10": {"label": "Pierce (Selectivity Estimation, 10 GiB Hash Table)", "color": "#1f77b4", "marker": "v"},
-    "cgal": {"label": "CGAL", "color": "#ff7f0e", "marker": "D"},
-    "touch": {"label": "TOUCH", "color": "#2ca02c", "marker": "^"},
-    "tdbase": {"label": "TDBase", "color": "#d62728", "marker": "X"},
+PAPER_FIGSIZE = (10.0, 7.2)
+PAPER_WIDE_FIGSIZE = PAPER_FIGSIZE
+
+APPROACH_PALETTE = [
+    "#edf8fb",
+    "#4c78a8",
+    "#8c96c6",
+    "#88419d",
+]
+
+QUERY_PALETTE = {
+    "overlap": "#e0ecf4",
+    "intersection": "#9ebcda",
+    "containment": "#8856a7",
 }
+
+APPROACH_STYLES = {
+    "pierce": {"label": "Pierce", "color": APPROACH_PALETTE[1], "marker": None, "hatch": "\\", "linestyle": "-"},
+    "exact": {"label": "Pierce (Two Pass)", "color": APPROACH_PALETTE[1], "marker": None, "hatch": "/", "linestyle": "-"},
+    "direct_estimation": {"label": "Pierce (Estimation Only)", "color": APPROACH_PALETTE[1], "marker": None, "hatch": "\\", "linestyle": "--"},
+    "estimated": {"label": "Pierce (Estimated)", "color": APPROACH_PALETTE[1], "marker": None, "hatch": "\\", "linestyle": ":"},
+    "estimated_mem10": {"label": "Pierce (10 GB fixed)", "color": APPROACH_PALETTE[1], "marker": None, "hatch": "x", "linestyle": "-."},
+    "cgal": {"label": "Face", "color": APPROACH_PALETTE[2], "marker": None, "hatch": "-", "linestyle": "-"},
+    "touch": {"label": "TOUCH", "color": APPROACH_PALETTE[0], "marker": None, "hatch": "+", "linestyle": "-"},
+    "tdbase": {"label": "TDBase", "color": APPROACH_PALETTE[3], "marker": None, "hatch": ".", "linestyle": "-."},
+}
+
+HATCH_PATTERNS = ["/", "\\", "x", "-", "+", ".", "o", "*"]
 
 
 def apply_paper_style():
     plt.rcParams.update({
-        "font.size": 13,
-        "axes.labelsize": 16,
-        "axes.titlesize": 16,
+        "font.weight": "bold",
+        "font.size": 16,
+        "axes.labelsize": 17,
+        "axes.titlesize": 17,
+        "axes.labelweight": "bold",
+        "axes.titleweight": "bold",
         "axes.linewidth": 1.6,
-        "xtick.labelsize": 14,
-        "ytick.labelsize": 14,
-        "legend.fontsize": 13,
+        "xtick.labelsize": 15,
+        "ytick.labelsize": 15,
+        "legend.fontsize": 14,
+        "legend.title_fontsize": 14,
         "lines.linewidth": 2.8,
         "lines.markersize": 9,
+        "axes.grid": False,
     })
+
+def make_legend_bold(ax, *args, **kwargs):
+    legend = ax.legend(*args, **kwargs)
+    if legend is None:
+        return None
+    for text in legend.get_texts():
+        text.set_fontweight("bold")
+    title = legend.get_title()
+    if title is not None:
+        title.set_fontweight("bold")
+    return legend
 
 
 def style_for(approach: str):
-    return APPROACH_STYLES.get(approach, {"label": approach, "color": "#444444", "marker": "o"})
+    return APPROACH_STYLES.get(approach, {"label": approach, "color": "#444444", "marker": "o", "hatch": "oo"})
+
+
+def query_style_for(query: str):
+    styles = {
+        "overlap": {"label": "Overlap", "color": QUERY_PALETTE["overlap"], "hatch": "/"},
+        "intersection": {"label": "Intersection", "color": QUERY_PALETTE["intersection"], "hatch": "\\"},
+        "containment": {"label": "Containment", "color": QUERY_PALETTE["containment"], "hatch": "x"},
+    }
+    return styles.get(query, {"label": query.capitalize(), "color": "#444444", "hatch": "oo"})
+
+
+def hatch_for_index(idx: int) -> str:
+    return HATCH_PATTERNS[idx % len(HATCH_PATTERNS)]
 
 
 def plot_mean_series(ax, xs, ys, approach: str):
     st = style_for(approach)
-    ax.plot(xs, ys, linestyle="-", marker=st["marker"], color=st["color"], label=st["label"])
+    ax.plot(xs, ys, linestyle=st.get("linestyle", "-"), marker=st["marker"], color=st["color"], label=st["label"])
+
+def set_log_timing_axis_limits(ax, values, *, floor: float = 1.0, padding_factor: float = 0.8):
+    """Set a readable lower bound for log-scale timing axes.
+
+    Lower bound rule: start at 10^0 ms or slightly below the observed minimum,
+    whichever is lower.
+    """
+    positive = [
+        float(v)
+        for v in values
+        if isinstance(v, (int, float)) and np.isfinite(v) and float(v) > 0.0
+    ]
+    if not positive:
+        return
+
+    observed_min = min(positive)
+    lower_bound = min(float(floor), observed_min * float(padding_factor))
+    if lower_bound <= 0.0:
+        lower_bound = min(float(floor), observed_min)
+    ax.set_ylim(bottom=lower_bound)
 
 
 def generate_scalability_figure(results, approaches, figures_dir: Path, timestamp: str,
@@ -45,9 +113,10 @@ def generate_scalability_figure(results, approaches, figures_dir: Path, timestam
     figures_dir.mkdir(parents=True, exist_ok=True)
     apply_paper_style()
 
-    plt.figure(figsize=(10, 6.8))
+    plt.figure(figsize=PAPER_FIGSIZE)
     has_any_series = False
 
+    all_y_vals = []
     for approach in approaches:
         x_vals = []
         y_vals = []
@@ -68,6 +137,7 @@ def generate_scalability_figure(results, approaches, figures_dir: Path, timestam
         sorted_points = sorted(zip(x_vals, y_vals), key=lambda t: (t[0] if t[0] is not None else 0))
         xs = [p[0] for p in sorted_points]
         ys = [p[1] for p in sorted_points]
+        all_y_vals.extend(ys)
         plot_mean_series(plt.gca(), xs, ys, approach)
 
     if not has_any_series:
@@ -76,10 +146,11 @@ def generate_scalability_figure(results, approaches, figures_dir: Path, timestam
         return
 
     plt.yscale("log")
+    set_log_timing_axis_limits(plt.gca(), all_y_vals)
     plt.xlabel(x_axis_label)
     plt.ylabel(y_axis_label)
-    plt.grid(True, which="both", linestyle="-", alpha=0.2)
-    plt.legend()
+    plt.grid(False)
+    make_legend_bold(plt.gca())
     plt.tight_layout()
 
     output_base = figures_dir / f"{scenario_name}_scalability_{timestamp}"
@@ -138,7 +209,7 @@ def generate_breakdown_figure(results, approaches, figures_dir: Path, timestamp:
         remaining = [k for k in sorted_keys if k not in present_preferred]
         display_order = present_preferred + remaining
 
-        plt.figure(figsize=(12, 7.2))
+        plt.figure(figsize=PAPER_WIDE_FIGSIZE)
         bottom = np.zeros(len(x_labels))
         colors = plt.cm.tab10.colors
 
@@ -151,13 +222,16 @@ def generate_breakdown_figure(results, approaches, figures_dir: Path, timestamp:
                 bottom=bottom,
                 label=phase_labels.get(key, key),
                 color=colors[i % len(colors)],
+                hatch=hatch_for_index(i),
+                edgecolor="black",
+                linewidth=0.5,
             )
             bottom += vals
 
         plt.xlabel(x_axis_label)
         plt.ylabel(y_axis_label)
-        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-        plt.grid(axis='y', linestyle='-', alpha=0.3)
+        make_legend_bold(plt.gca(), bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.grid(False)
         plt.tight_layout()
 
         output_base = figures_dir / f"{scenario_name}_breakdown_{approach}_{timestamp}"

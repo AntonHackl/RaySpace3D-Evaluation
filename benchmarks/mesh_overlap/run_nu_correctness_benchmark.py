@@ -15,6 +15,7 @@ REPO_ROOT = SCRIPT_DIR.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
+from benchmarks.common.viz_utils import style_for
 
 sys.path.append(str(SCRIPT_DIR))
 from adapters.raytracer_adapter import RaytracerAdapter
@@ -286,17 +287,17 @@ def plot_runtime_lines(results: Dict[str, object], output_path: Path) -> None:
         es = [stds[i] for i in valid_idx]
         plt.errorbar(xs, ys, yerr=es, fmt=style, color=color, label=label, capsize=5)
 
-    plot_series("exact", "RaySpace Exact (two-pass)", "-o", "#1f77b4")
-    plot_series("direct_estimation", "RaySpace Direct Estimation", "--s", "#2ca02c")
-    plot_series("estimated", "RaySpace Intersection Estimated", "-.^", "#ff7f0e")
-    plot_series("tdbase_intersect", "TDBase Intersect", "-.x", "#d62728")
+    plot_series("exact", "RaySpace Exact (two-pass)", "-o", style_for("exact")["color"])
+    plot_series("direct_estimation", "RaySpace Direct Estimation", "--s", style_for("direct_estimation")["color"])
+    plot_series("estimated", "RaySpace Intersection Estimated", "-.^", style_for("estimated")["color"])
+    plot_series("tdbase_intersect", "TDBase Intersect", "-.x", style_for("tdbase")["color"])
     plot_series("tdbase_within0", "TDBase Within(w=0)", ":d", "#9467bd")
 
     plt.xlabel("Nu")
     plt.ylabel("Query Time (ms)")
     plt.yscale("log")
     plt.title("Nu Correctness Benchmark: Runtime")
-    plt.grid(True, which="both", alpha=0.2)
+    plt.grid(False)
     plt.legend()
     plt.xticks(counts)
     plt.tight_layout()

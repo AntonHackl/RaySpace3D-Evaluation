@@ -174,9 +174,8 @@ def plot_selectivity_for_point_count(runtimes, point_count, output_file):
     ax.set_yscale('log')
     
     # Grid
-    ax.grid(True, which='both', alpha=0.3, linestyle='--', linewidth=0.7)
-    ax.grid(True, which='minor', alpha=0.15, linestyle=':', linewidth=0.5)
-    
+    ax.grid(False)
+    ax.grid(False)    
     # Legend
     ax.legend(loc='best', fontsize=13, framealpha=0.95, shadow=True)
     

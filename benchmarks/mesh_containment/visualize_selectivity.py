@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
 
+from benchmarks.common.viz_utils import APPROACH_STYLES
+
 def load_results(json_file):
     """Load results from JSON file."""
     with open(json_file, 'r') as f:
@@ -45,8 +47,11 @@ def visualize_selectivity(json_file, output_dir=None):
         if any(app in r for r in valid_results):
             approaches.append(app)
     
-    colors = {"raytracer": "#1f77b4", "cgal": "#ff7f0e"}
-    labels = {"raytracer": "RaySpace3D (OptiX)", "cgal": "CGAL (AABB Tree)"}
+    colors = {
+        "raytracer": APPROACH_STYLES["exact"]["color"],
+        "cgal": APPROACH_STYLES["cgal"]["color"],
+    }
+    labels = {"raytracer": "RaySpace3D (OptiX)", "cgal": "Face (AABB Tree)"}
     markers = {"raytracer": "o", "cgal": "s"}
     
     for app in approaches:
@@ -60,7 +65,7 @@ def visualize_selectivity(json_file, output_dir=None):
     plt.xlabel('Selectivity (Fraction of Overlapping Pairs)', fontsize=12, fontweight='bold')
     plt.ylabel('Runtime (ms)', fontsize=12, fontweight='bold')
     plt.title('Mesh Containment Performance: Runtime vs Selectivity\n(Log-Log Scale)', fontsize=14, fontweight='bold')
-    plt.grid(True, which="both", ls="-", alpha=0.2)
+    plt.grid(False)
     plt.legend()
     
     # Determine output path

@@ -265,8 +265,7 @@ def plot_results(results: Dict[str, List[Dict]], output_dir: str, metric: str = 
     ax.set_xticks(x)
     ax.set_xticklabels(approach_stats.keys())
     ax.set_yscale('log')
-    ax.grid(axis='y', alpha=0.3, which='both')
-    
+    ax.grid(False)    
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, 'approach_comparison.png'), dpi=300, bbox_inches='tight')
     plt.close()

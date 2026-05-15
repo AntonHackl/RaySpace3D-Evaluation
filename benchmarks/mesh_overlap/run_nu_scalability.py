@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import numpy as np
 import argparse
 import sys
@@ -15,7 +16,14 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
-from benchmarks.common.viz_utils import apply_paper_style, plot_mean_series, style_for
+from benchmarks.common.viz_utils import (
+    PAPER_FIGSIZE,
+    PAPER_WIDE_FIGSIZE,
+    apply_paper_style,
+    make_legend_bold,
+    set_log_timing_axis_limits,
+    style_for,
+)
 from benchmarks.common.scenario_utils import (
     canonical_nn_pair_paths,
     canonical_nu_pair_paths,
@@ -186,7 +194,7 @@ def run_experiment(
         
         print(f"\nProcessing nu={nu}: {f_v_path.name} vs {f_n_path.name}")
 
-        # Check/Run Preprocessing for Raytracer (also used by CGAL/TOUCH adapters)
+        # Check/Run Preprocessing for Raytracer (also used by Face/TOUCH adapters)
         needs_preprocessing = any(a in approaches for a in ["exact", "direct_estimation", "cgal", "touch"])
         if needs_preprocessing:
             print("Checking preprocessing...")
@@ -223,10 +231,10 @@ def run_experiment(
                 print(f"Error in selectivity estimation run: {res_direct['error']}")
                 res_direct = {"mean": None, "std": None, "breakdown": {}}
 
-        # Run CGAL Benchmark
+        # Run Face Benchmark
         res_cgal = {"mean": None, "std": None}
         if "cgal" in approaches:
-            print(f"Running CGAL Mode ({runs} runs)...")
+            print(f"Running Face Mode ({runs} runs)...")
             res_cgal = cgal_adapter.run_overlap(
                 str(f_v_path), 
                 str(f_n_path), 
@@ -235,7 +243,7 @@ def run_experiment(
                 timeout=timeout
             )
             if "error" in res_cgal:
-                print(f"Error in CGAL run: {res_cgal['error']}")
+                print(f"Error in Face run: {res_cgal['error']}")
                 res_cgal = {"mean": None, "std": None}
 
         # Run TOUCH Benchmark
@@ -291,6 +299,7 @@ def run_experiment(
         if "num_obj1" not in results:
              results["num_obj1"] = []
              results["num_obj2"] = []
+             results["num_intersections"] = []
              results["size_bytes1"] = []
              results["size_bytes2"] = []
              results["universe_extents1"] = []
@@ -302,6 +311,7 @@ def run_experiment(
             if "num_obj1" in res and res["num_obj1"] > 0:
                 results["num_obj1"].append(int(res["num_obj1"]))
                 results["num_obj2"].append(int(res["num_obj2"]))
+                results["num_intersections"].append(int(res.get("num_intersections", 0)))
                 results["universe_extents1"].append(res.get("universe_extents1", [0.0, 0.0, 0.0]))
                 results["universe_extents2"].append(res.get("universe_extents2", [0.0, 0.0, 0.0]))
                 found_counts = True
@@ -310,6 +320,7 @@ def run_experiment(
         if not found_counts:
             results["num_obj1"].append(0)
             results["num_obj2"].append(0)
+            results["num_intersections"].append(0)
             results["universe_extents1"].append([0.0, 0.0, 0.0])
             results["universe_extents2"].append([0.0, 0.0, 0.0])
 
@@ -321,7 +332,7 @@ def run_experiment(
         cgal_str = f"{res_cgal['mean']:.2f}ms" if res_cgal['mean'] is not None else "N/A"
         touch_str = f"{res_touch['mean']:.2f}ms" if res_touch['mean'] is not None else "N/A"
         td_str = f"{res_td['mean']:.2f}ms" if res_td['mean'] is not None else "N/A"
-        print(f"Done nu={nu}: Exact={exact_str}, Selectivity Estimation={direct_str}, CGAL={cgal_str}, TOUCH={touch_str}, TDBase={td_str}")
+        print(f"Done nu={nu}: Exact={exact_str}, Selectivity Estimation={direct_str}, Face={cgal_str}, TOUCH={touch_str}, TDBase={td_str}")
 
     return results
 
@@ -337,103 +348,171 @@ def plot_results(results, figures_dir):
     # --- Plot 1: Line Chart (Scaling) ---
     def generate_scaling_plot(ax, results, counts):
         enabled = set(results.get("enabled_approaches", ["exact", "direct_estimation", "cgal", "touch", "tdbase"]))
+        all_y_vals = []
+        
+        x_vals = []
+        for i, nu in enumerate(counts):
+            obj2 = results.get("num_obj2", [])[i] if "num_obj2" in results else 0
+            if obj2 == 0:
+                obj2 = nu * 729
+            x_vals.append(obj2)
+
+        x_sel_labels = []
+        for i, val in enumerate(x_vals):
+            if "num_intersections" in results and i < len(results["num_intersections"]) and results.get("num_obj1", [])[i] > 0 and results.get("num_obj2", [])[i] > 0:
+                sel = results["num_intersections"][i] / (results["num_obj1"][i] * results["num_obj2"][i])
+                x_sel_labels.append(f"{sel*100:.1e}%")
+            else:
+                x_sel_labels.append("")
+
+        def get_clean_style(approach):
+            st = style_for(approach).copy()
+            st["label"] = st["label"].replace(" (Estimation Only)", "")
+            st["linestyle"] = "-"
+            if st.get("marker") is None:
+                markers = {"exact": "o", "direct_estimation": "s", "cgal": "D", "touch": "^", "tdbase": "v"}
+                st["marker"] = markers.get(approach, "o")
+            return st
 
         if "exact" in enabled:
             exact_valid_indices = [i for i, m in enumerate(results["exact"]["mean"]) if m is not None]
             if exact_valid_indices:
-                exact_counts = [counts[i] for i in exact_valid_indices]
+                exact_x = [x_vals[i] for i in exact_valid_indices]
                 exact_means = [results["exact"]["mean"][i] for i in exact_valid_indices]
                 exact_stds = [results["exact"]["std"][i] for i in exact_valid_indices]
-                st = style_for("exact")
+                all_y_vals.extend(exact_means)
+                st = get_clean_style("exact")
                 ax.errorbar(
-                    exact_counts,
+                    exact_x,
                     exact_means,
                     yerr=exact_stds,
-                    fmt=f"-{st['marker']}",
-                    label=st["label"],
+                    linestyle=st.get("linestyle", "-"),
+                    marker=st.get("marker"),
                     capsize=5,
                     color=st["color"],
+                    label=None
                 )
+                ax.plot([], [], linestyle=st.get("linestyle", "-"), marker=st.get("marker"), label=st["label"], color=st["color"])
 
         if "direct_estimation" in enabled:
             direct_valid_indices = [i for i, m in enumerate(results["direct_estimation"]["mean"]) if m is not None]
             if direct_valid_indices:
-                direct_counts = [counts[i] for i in direct_valid_indices]
+                direct_x = [x_vals[i] for i in direct_valid_indices]
                 direct_means = [results["direct_estimation"]["mean"][i] for i in direct_valid_indices]
                 direct_stds = [results["direct_estimation"]["std"][i] for i in direct_valid_indices]
-                st = style_for("direct_estimation")
+                all_y_vals.extend(direct_means)
+                st = get_clean_style("direct_estimation")
                 ax.errorbar(
-                    direct_counts,
+                    direct_x,
                     direct_means,
                     yerr=direct_stds,
-                    fmt=f"-{st['marker']}",
-                    label=st["label"],
+                    linestyle=st.get("linestyle", "-"),
+                    marker=st.get("marker"),
                     capsize=5,
                     color=st["color"],
+                    label=None
                 )
-        
-        # Filter valid CGAL points
+                ax.plot([], [], linestyle=st.get("linestyle", "-"), marker=st.get("marker"), label=st["label"], color=st["color"])
+
+        # Filter valid Face points
         cgal_valid_indices = [i for i, m in enumerate(results["cgal"]["mean"]) if m is not None] if "cgal" in enabled else []
         if cgal_valid_indices:
-            cgal_counts = [counts[i] for i in cgal_valid_indices]
+            cgal_x = [x_vals[i] for i in cgal_valid_indices]
             cgal_means = [results["cgal"]["mean"][i] for i in cgal_valid_indices]
             cgal_stds = [results["cgal"]["std"][i] for i in cgal_valid_indices]
-            st = style_for("cgal")
+            all_y_vals.extend(cgal_means)
+            st = get_clean_style("cgal")
             ax.errorbar(
-                cgal_counts,
+                cgal_x,
                 cgal_means,
                 yerr=cgal_stds,
-                fmt=f"-{st['marker']}",
-                label=st["label"],
+                linestyle=st.get("linestyle", "-"),
+                marker=st.get("marker"),
                 capsize=5,
                 color=st["color"],
+                label=None
             )
+            ax.plot([], [], linestyle=st.get("linestyle", "-"), marker=st.get("marker"), label=st["label"], color=st["color"])
 
         # Filter valid TOUCH points
         touch_valid_indices = [i for i, m in enumerate(results["touch"]["mean"]) if m is not None] if "touch" in enabled else []
         if touch_valid_indices:
-            touch_counts = [counts[i] for i in touch_valid_indices]
+            touch_x = [x_vals[i] for i in touch_valid_indices]
             touch_means = [results["touch"]["mean"][i] for i in touch_valid_indices]
             touch_stds = [results["touch"]["std"][i] for i in touch_valid_indices]
-            st = style_for("touch")
+            all_y_vals.extend(touch_means)
+            st = get_clean_style("touch")
             ax.errorbar(
-                touch_counts,
+                touch_x,
                 touch_means,
                 yerr=touch_stds,
-                fmt=f"-{st['marker']}",
-                label=st["label"],
+                linestyle=st.get("linestyle", "-"),
+                marker=st.get("marker"),
                 capsize=5,
                 color=st["color"],
+                label=None
             )
+            ax.plot([], [], linestyle=st.get("linestyle", "-"), marker=st.get("marker"), label=st["label"], color=st["color"])
 
         # Filter valid TDBase points
         td_valid_indices = [i for i, m in enumerate(results["tdbase"]["mean"]) if m is not None] if "tdbase" in enabled else []
         if td_valid_indices:
-            td_counts = [counts[i] for i in td_valid_indices]
+            td_x = [x_vals[i] for i in td_valid_indices]
             td_means = [results["tdbase"]["mean"][i] for i in td_valid_indices]
             td_stds = [results["tdbase"]["std"][i] for i in td_valid_indices]
-            st = style_for("tdbase")
+            all_y_vals.extend(td_means)
+            st = get_clean_style("tdbase")
             ax.errorbar(
-                td_counts,
+                td_x,
                 td_means,
                 yerr=td_stds,
-                fmt=f"-{st['marker']}",
-                label=st["label"],
+                linestyle=st.get("linestyle", "-"),
+                marker=st.get("marker"),
                 capsize=5,
                 color=st["color"],
+                label=None
             )
+            ax.plot([], [], linestyle=st.get("linestyle", "-"), marker=st.get("marker"), label=st["label"], color=st["color"])
 
-        ax.set_xlabel('Nuclei per Vessel (Total objects ≃ Nu * 300)')
+        ax.set_xlabel('Number of Nuclei')
         ax.set_ylabel('Execution Time (ms) [Log Scale]')
         ax.set_yscale('log')
-        ax.legend(fontsize=12)
-        ax.grid(True, which="both", ls="-", alpha=0.2)
-        ax.set_xticks(counts)
+        
+        # Format X-axis with 'k' for thousands
+        ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: f'{x/1e3:g}k' if x >= 1e3 else f'{x:g}'))
+        
+        # Add secondary axis for selectivity
+        if any(x_sel_labels):
+            secax = ax.secondary_xaxis('top')
+            secax.set_xticks(x_vals)
+            secax.set_xticklabels(x_sel_labels, rotation=45, ha='left', fontsize=12)
+            secax.set_xlabel('Selectivity', fontsize=13, fontweight='bold', labelpad=10)
+
+        set_log_timing_axis_limits(ax, all_y_vals)
+        make_legend_bold(ax)
+        ax.grid(False)
 
     # --- Plot 2: Breakdown Bar Chart ---
     def generate_breakdown_plot(ax, results, counts):
         enabled = set(results.get("enabled_approaches", ["exact", "direct_estimation", "cgal", "touch", "tdbase"]))
         
+        x_vals = []
+        for i, nu in enumerate(counts):
+            obj2 = results.get("num_obj2", [])[i] if "num_obj2" in results else 0
+            if obj2 == 0:
+                obj2 = nu * 729
+            x_vals.append(obj2)
+
+        x_labels = []
+        x_selectivities = []
+        for i, val in enumerate(x_vals):
+            x_labels.append(f"{val/1e3:g}k")
+            if "num_intersections" in results and i < len(results["num_intersections"]) and results.get("num_obj1", [])[i] > 0 and results.get("num_obj2", [])[i] > 0:
+                sel = results["num_intersections"][i] / (results["num_obj1"][i] * results["num_obj2"][i])
+                x_selectivities.append(sel)
+            else:
+                x_selectivities.append(None)
+
         def normalize_phase_key(phase: str) -> str:
             key = re.sub(r"_\d+$", "", phase.lower())
             key = re.sub(r"_+$", "", key)
@@ -533,16 +612,21 @@ def plot_results(results, figures_dir):
                     for phase in active_phases_ordered:
                         val = breakdown.get(phase, 0.0)
                         if val > 0:
-                            ax.bar(x_pos, val, mode_width, bottom=bottom, 
+                            rects = ax.bar(x_pos, val, mode_width, bottom=bottom, 
                                              color=phase_colors.get(phase, "#cccccc"), edgecolor='white')
                             bottom += val
+                            
+                            # Add selectivity text once per group (on top of the last bar of the last approach)
+                            if j == len(modes_to_plot) - 1 and phase == active_phases_ordered[-1]:
+                                sel = x_selectivities[i]
+                                if sel is not None:
+                                    ax.text(i, bottom + 5, f"sel={sel*100:.1e}%", ha='center', va='bottom', fontsize=11, fontweight='bold', rotation=90)
 
         ax.set_xticks(x_indices)
-        ax.set_xticklabels([str(c) for c in counts])
-        ax.set_xlabel('Nuclei per Vessel')
+        ax.set_xticklabels(x_labels)
+        ax.set_xlabel('Number of Nuclei')
         ax.set_ylabel('Query Time (ms)')
-        ax.grid(True, axis='y', which='both', ls='-', alpha=0.1)
-
+        ax.grid(False)
         for j, mode in enumerate(modes_to_plot):
             x_annot = 0 - group_width/2 + (j + 0.5) * mode_width
             ax.text(
@@ -552,25 +636,27 @@ def plot_results(results, figures_dir):
                 ha='center',
                 va='top',
                 transform=ax.get_xaxis_transform(),
-                fontsize=10,
+                fontsize=13,
+                fontweight='bold',
                 color="#444444",
             )
         
         # Legend
         if legend_handles:
-            ax.legend(
+            make_legend_bold(
+                ax,
                 legend_handles,
                 legend_labels,
                 bbox_to_anchor=(1.02, 1),
                 loc='upper left',
-                fontsize=9,
+                fontsize=12,
                 ncol=1,
                 frameon=True,
             )
 
     # 1. Generate Combined Figure
     apply_paper_style()
-    fig, (ax_main, ax_breakdown) = plt.subplots(1, 2, figsize=(20, 7.2))
+    fig, (ax_main, ax_breakdown) = plt.subplots(1, 2, figsize=PAPER_FIGSIZE)
     generate_scaling_plot(ax_main, results, counts)
     generate_breakdown_plot(ax_breakdown, results, counts)
     plt.tight_layout()
@@ -582,7 +668,7 @@ def plot_results(results, figures_dir):
 
     # 2. Generate Separate Scaling Figure
     apply_paper_style()
-    fig_scaling, ax_scaling = plt.subplots(figsize=(10, 7.2))
+    fig_scaling, ax_scaling = plt.subplots(figsize=PAPER_FIGSIZE)
     generate_scaling_plot(ax_scaling, results, counts)
     plt.tight_layout()
     scaling_path = figures_dir / "mesh_overlap_nu_scalability_scaling.png"
@@ -593,7 +679,7 @@ def plot_results(results, figures_dir):
 
     # 3. Generate Separate Breakdown Figure
     apply_paper_style()
-    fig_breakdown, ax_breakdown_sep = plt.subplots(figsize=(12, 7.2))
+    fig_breakdown, ax_breakdown_sep = plt.subplots(figsize=PAPER_WIDE_FIGSIZE)
     generate_breakdown_plot(ax_breakdown_sep, results, counts)
     plt.tight_layout()
     breakdown_path = figures_dir / "mesh_overlap_nu_scalability_breakdown.png"
@@ -647,7 +733,7 @@ def main():
     
     if results and results["counts"]:
         print("\nResults Summary:")
-        header = f"{'Nu':<10} {'Exact (ms)':<15} {'Selectivity Estimation (ms)':<15} {'CGAL (ms)':<15} {'TOUCH (ms)':<15} {'TDBase (ms)':<15}"
+        header = f"{'Nu':<10} {'Exact (ms)':<15} {'Selectivity Estimation (ms)':<15} {'Face (ms)':<15} {'TOUCH (ms)':<15} {'TDBase (ms)':<15}"
         print(header)
         print("-" * len(header))
         for i, n in enumerate(results["counts"]):

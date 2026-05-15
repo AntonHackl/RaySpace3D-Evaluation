@@ -110,7 +110,7 @@ def main():
     ax1.set_ylabel("Query time (ms, log-scale)", fontsize=9)
     ax1.set_yscale("log")
     ax1.set_title("1. Query Time (log scale)", fontsize=10)
-    ax1.grid(True, which="both", linestyle="--", alpha=0.5)
+    ax1.grid(False)
     ax1.legend(fontsize=8)
 
     # ---- Panel 2: Hash accesses and contentions ---------------------- #
@@ -127,7 +127,7 @@ def main():
     ax2.yaxis.set_major_formatter(mticker.FuncFormatter(
         lambda val, _: f"{int(val):,}" if val == int(val) else f"{val:,.0f}"
     ))
-    ax2.grid(axis="y", linestyle="--", alpha=0.5)
+    ax2.grid(False)
     ax2.legend(fontsize=8)
 
     # Panel 2b: contention percentage on secondary y-axis
@@ -158,7 +158,7 @@ def main():
     ax3.yaxis.set_major_formatter(mticker.FuncFormatter(
         lambda val, _: f"{int(val):,}" if val == int(val) else f"{val:,.0f}"
     ))
-    ax3.grid(axis="y", linestyle="--", alpha=0.5)
+    ax3.grid(False)
     ax3.legend(fontsize=8)
 
     plt.tight_layout()

@@ -384,8 +384,6 @@ class RaytracerAdapter(OverlapBenchmarkAdapter):
                 found = query_time > 0.0
 
                 for normalized_key, duration in phase_values.items():
-                    if not any(normalized_key.startswith(prefix) for prefix in expected_prefixes):
-                        continue
                     if has_detailed_raytrace and normalized_key in ("query", "execute hash query"):
                         continue
                     if normalized_key not in breakdown_accum:

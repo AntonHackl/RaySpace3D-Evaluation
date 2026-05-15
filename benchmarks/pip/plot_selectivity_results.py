@@ -155,8 +155,7 @@ def plot_selectivity_runtimes(runtimes, output_file):
     ax.set_yscale('log')
     
     # Grid
-    ax.grid(True, which='both', alpha=0.3, linestyle='--')
-    
+    ax.grid(False)    
     # Legend
     ax.legend(loc='best', fontsize=10, framealpha=0.9)
     

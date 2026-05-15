@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Sequence
 
 import matplotlib.pyplot as plt
-from benchmarks.common.viz_utils import apply_paper_style
+from benchmarks.common.viz_utils import PAPER_FIGSIZE, PAPER_WIDE_FIGSIZE, apply_paper_style, hatch_for_index, make_legend_bold, query_style_for
 import numpy as np
 
 from benchmarks.mesh_containment.adapters.raytracer_adapter import RaytracerContainmentAdapter
@@ -274,22 +274,32 @@ def generate_query_comparison_figures(
     # Figure 1: Total query time comparison across all selected query types.
     width = 0.8 / max(1, len(queries))
     apply_paper_style()
-    fig, ax = plt.subplots(figsize=(max(10, 2.5 * len(case_labels)), 6.8))
+    fig, ax = plt.subplots(figsize=PAPER_FIGSIZE)
     for idx, query in enumerate(queries):
+        q_style = query_style_for(query)
         means = []
         for row in results_rows:
             item = row.get(query, {})
             mean = item.get("mean") if isinstance(item, dict) else None
             means.append(float(mean) if isinstance(mean, (int, float)) else np.nan)
         offsets = x - (0.4 - width / 2.0) + idx * width
-        ax.bar(offsets, means, width=width, label=query)
+        ax.bar(
+            offsets,
+            means,
+            width=width,
+            label=q_style["label"],
+            color=q_style["color"],
+            hatch=q_style["hatch"],
+            edgecolor="black",
+            linewidth=0.6,
+        )
 
         ax.set_xlabel(x_axis_label)
     ax.set_ylabel("Query time (ms)")
     ax.set_xticks(x)
     ax.set_xticklabels(case_labels, rotation=20, ha="right")
-    ax.grid(True, axis="y", linestyle="-", alpha=0.3)
-    ax.legend()
+    ax.grid(False)
+    make_legend_bold(ax)
     fig.tight_layout()
     fig.savefig(figures_dir / "query_time_comparison.png", dpi=180)
     fig.savefig(figures_dir / "query_time_comparison.pdf")
@@ -299,16 +309,15 @@ def generate_query_comparison_figures(
     # This chart shows one "set of bars" per dataset, where each set compares query types.
     width = 0.8 / max(1, len(queries))
     apply_paper_style()
-    fig, ax = plt.subplots(figsize=(max(12, 3.0 * len(case_labels)), 7.2))
+    fig, ax = plt.subplots(figsize=PAPER_WIDE_FIGSIZE)
     bottoms = np.zeros((len(case_labels), len(queries)))
 
     active_components_added = set()
 
     for group_name, aliases in GROUPED_BREAKDOWN_COMPONENTS:
         color = GROUP_COLORS.get(group_name, "#9D9D9D")
-        label_added_for_this_group = False
-
         for q_idx, query in enumerate(queries):
+            q_style = query_style_for(query)
             vals = []
             for row in results_rows:
                 item = row.get(query, {})
@@ -331,6 +340,7 @@ def generate_query_comparison_figures(
                     bottom=bottoms[:, q_idx],
                     label=label,
                     color=color,
+                    hatch=q_style["hatch"],
                     edgecolor="black",
                     linewidth=0.5,
                 )
@@ -340,13 +350,13 @@ def generate_query_comparison_figures(
     ax.set_ylabel("Breakdown time (ms)")
     ax.set_xticks(x)
     ax.set_xticklabels(case_labels, rotation=20, ha="right")
-    ax.grid(True, axis="y", linestyle="-", alpha=0.3)
-    ax.legend(loc="upper right", fontsize=9, title="Phases")
+    ax.grid(False)
+    make_legend_bold(ax, loc="upper right", fontsize=12, title="Phases")
 
     # Add annotation for query order
     query_order_str = " | ".join([f"{q[0].upper()}: {q}" for q in queries])
     ax.text(0.5, -0.22, f"Queries in each group: {query_order_str}",
-            transform=ax.transAxes, ha='center', fontsize=10, fontweight='bold')
+            transform=ax.transAxes, ha='center', fontsize=13, fontweight='bold')
 
     fig.tight_layout()
     fig.savefig(figures_dir / "query_time_breakdown_comparison.png", dpi=180)
@@ -366,16 +376,19 @@ def generate_query_comparison_figures(
             continue
 
         apply_paper_style()
-        fig, ax = plt.subplots(figsize=(max(10, 2.5 * len(case_labels)), 6.8))
+        fig, ax = plt.subplots(figsize=PAPER_FIGSIZE)
         bottoms = np.zeros(len(case_labels), dtype=float)
 
-        for group_name, vals in zip(group_names, group_values):
+        for group_idx, (group_name, vals) in enumerate(zip(group_names, group_values)):
             ax.bar(
                 x,
                 vals,
                 bottom=bottoms,
                 label=group_name,
                 color=GROUP_COLORS.get(group_name, "#9D9D9D"),
+                hatch=hatch_for_index(group_idx),
+                edgecolor="black",
+                linewidth=0.5,
             )
             bottoms += vals
 
@@ -383,8 +396,8 @@ def generate_query_comparison_figures(
         ax.set_ylabel("Time (ms)")
         ax.set_xticks(x)
         ax.set_xticklabels(case_labels, rotation=20, ha="right")
-        ax.grid(True, axis="y", linestyle="-", alpha=0.3)
-        ax.legend(loc="upper right", fontsize=9)
+        ax.grid(False)
+        make_legend_bold(ax, loc="upper right", fontsize=12)
         fig.tight_layout()
         safe_query = sanitize_case_token(query)
         fig.savefig(figures_dir / f"breakdown_{safe_query}.png", dpi=180)

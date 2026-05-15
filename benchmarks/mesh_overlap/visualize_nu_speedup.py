@@ -5,6 +5,8 @@ import json
 import sys
 from pathlib import Path
 
+from benchmarks.common.viz_utils import APPROACH_STYLES
+
 def visualize_speedup(json_path, output_dir):
     with open(json_path, 'r') as f:
         data = json.load(f)
@@ -32,8 +34,8 @@ def visualize_speedup(json_path, output_dir):
     x = np.arange(len(counts))
     width = 0.35
     
-    plt.bar(x - width/2, exact_speedup, width, label='RaySpace Exact Speedup', color='#1f77b4', alpha=0.8)
-    plt.bar(x + width/2, estimated_speedup, width, label='RaySpace Estimated Speedup', color='#2ca02c', alpha=0.8)
+    plt.bar(x - width/2, exact_speedup, width, label='RaySpace Exact Speedup', color=APPROACH_STYLES["exact"]["color"], alpha=0.8)
+    plt.bar(x + width/2, estimated_speedup, width, label='RaySpace Estimated Speedup', color=APPROACH_STYLES["estimated"]["color"], alpha=0.8)
     
     # Add labels on top of bars
     for i, (ex, est) in enumerate(zip(exact_speedup, estimated_speedup)):
@@ -45,8 +47,7 @@ def visualize_speedup(json_path, output_dir):
     plt.title('RaySpace3D Speedup relative to TDBase', fontsize=14, fontweight='bold')
     plt.xticks(x, [str(c) for c in counts])
     plt.legend()
-    plt.grid(True, axis='y', linestyle='--', alpha=0.7)
-    
+    plt.grid(False)    
     plt.tight_layout()
     
     output_path = Path(output_dir) / "mesh_overlap_nu_speedup.png"

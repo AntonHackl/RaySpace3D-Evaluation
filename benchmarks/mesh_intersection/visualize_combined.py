@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
 
+HATCH_PATTERNS = ["/", "\\", "x", "-", "+", ".", "o", "*"]
+
 def load_results(json_file):
     with open(json_file, 'r') as f:
         data = json.load(f)
@@ -44,8 +46,9 @@ def visualize_combined(json_file, output_dir=None):
     ax1.set_ylabel('Query Time (ms)', fontsize=12)
     ax1.set_title(f'Log-Log Runtime Comparison\n{dataset} ({num_runs} run)', fontsize=14, fontweight='bold')
     ax1.set_yscale('log')
+    ax1.set_ylim(bottom=1.0)
     ax1.set_xscale('linear')
-    ax1.grid(axis='y', which='both', alpha=0.3)
+    ax1.grid(False)
     for i, mean in enumerate(means):
         ax1.text(x_pos[i], mean * 1.05, f'{mean:.2f} ms', ha='center', va='bottom', fontsize=9)
 
@@ -61,14 +64,24 @@ def visualize_combined(json_file, output_dir=None):
     bottoms = np.zeros(len(adapters))
     for i, key in enumerate(breakdown_keys):
         vals = [b.get(key, 0.0) for b in breakdowns]
-        ax2.bar(x_pos, vals, width, bottom=bottoms, color=color_map[key], label=key)
+        ax2.bar(
+            x_pos,
+            vals,
+            width,
+            bottom=bottoms,
+            color=color_map[key],
+            label=key,
+            hatch=HATCH_PATTERNS[i % len(HATCH_PATTERNS)],
+            edgecolor="black",
+            linewidth=0.5,
+        )
         bottoms += np.array(vals)
     ax2.set_xticks(x_pos)
     ax2.set_xticklabels(adapters, rotation=15, ha='right')
     ax2.set_xlabel('Adapter', fontsize=12)
     ax2.set_ylabel('Query Time (ms)', fontsize=12)
     ax2.set_title(f'Runtime Breakdown per Adapter\n{dataset} ({num_runs} run)', fontsize=14, fontweight='bold')
-    ax2.grid(axis='y', which='both', alpha=0.3)
+    ax2.grid(False)
     ax2.legend(loc='best')
 
     plt.tight_layout()

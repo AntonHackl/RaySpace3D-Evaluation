@@ -10,6 +10,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
 
+from benchmarks.common.viz_utils import APPROACH_PALETTE
+
+HATCH_PATTERNS = ["/", "\\", "x", "-", "+", ".", "o", "*"]
+
 
 def _runtime_or_nan(entry):
     """Return runtime mean or NaN when an approach failed for a data point."""
@@ -69,7 +73,8 @@ def visualize_results(json_file, output_dir=None):
         )
         ax.set_xscale('linear')
         ax.set_yscale('log')
-        ax.grid(axis='both', which='both', alpha=0.3)
+        ax.set_ylim(bottom=1.0)
+        ax.grid(False)
         ax.legend(loc='best')
         plt.tight_layout()
 
@@ -120,22 +125,31 @@ def visualize_results(json_file, output_dir=None):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
     
     # Color palette
-    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
-    plot_colors = [colors[i % len(colors)] for i in range(len(adapters))]
+    plot_colors = [APPROACH_PALETTE[i % len(APPROACH_PALETTE)] for i in range(len(adapters))]
     
     # Plot 1: Bar chart with error bars (showing std dev)
     x_pos = np.arange(len(adapters))
-    bars = ax1.bar(x_pos, means, yerr=stds, capsize=5, alpha=0.7, 
-                   color=plot_colors)
+    bars = ax1.bar(
+        x_pos,
+        means,
+        yerr=stds,
+        capsize=5,
+        alpha=0.7,
+        color=plot_colors,
+        edgecolor="black",
+        linewidth=0.6,
+    )
+    for i, bar in enumerate(bars):
+        bar.set_hatch(HATCH_PATTERNS[i % len(HATCH_PATTERNS)])
     
     ax1.set_xlabel('Adapter', fontsize=12)
     ax1.set_ylabel('Query Time (ms) [Log Scale]', fontsize=12)
     ax1.set_title(f'Mean Query Time with Std Dev\n{dataset} ({num_runs} runs)', fontsize=14, fontweight='bold')
     ax1.set_yscale('log')
+    ax1.set_ylim(bottom=1.0)
     ax1.set_xticks(x_pos)
     ax1.set_xticklabels(adapters, rotation=15, ha='right')
-    ax1.grid(axis='y', which='both', alpha=0.3)
-    
+    ax1.grid(False)    
     # Add value labels on bars
     for i, (bar, mean, std) in enumerate(zip(bars, means, stds)):
         height = bar.get_height()
@@ -163,9 +177,10 @@ def visualize_results(json_file, output_dir=None):
     ax2.set_ylabel('Query Time (ms) [Log Scale]', fontsize=12)
     ax2.set_title(f'Min/Max/Mean Comparison\n{dataset} ({num_runs} runs)', fontsize=14, fontweight='bold')
     ax2.set_yscale('log')
+    ax2.set_ylim(bottom=1.0)
     ax2.set_xticks(range(len(adapters)))
     ax2.set_xticklabels(adapters, rotation=15, ha='right')
-    ax2.grid(axis='y', which='both', alpha=0.3)
+    ax2.grid(False)
     ax2.legend(loc='best')
     
     plt.tight_layout()

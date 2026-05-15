@@ -42,7 +42,7 @@ def plot_directionality(data, rows, output_path: Path):
     ax_time.set_title('Direct Estimation Query Time')
     ax_time.set_xlabel('Nu')
     ax_time.set_ylabel('Query Time (ms)')
-    ax_time.grid(True, alpha=0.2)
+    ax_time.grid(False)
     ax_time.legend()
     ax_time.set_xticks(nu)
 
@@ -59,7 +59,7 @@ def plot_directionality(data, rows, output_path: Path):
     ax_metrics.set_xlabel('Nu')
     ax_metrics.set_ylabel('Score')
     ax_metrics.set_ylim(0.88, 1.01)
-    ax_metrics.grid(True, alpha=0.2)
+    ax_metrics.grid(False)
     ax_metrics.legend(ncol=2, fontsize=9)
     ax_metrics.set_xticks(nu)
 

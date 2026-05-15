@@ -47,23 +47,26 @@ class TDBaseAdapter(OverlapBenchmarkAdapter):
         dt_path = Path(dt_file)
 
         if self.preprocessed_dir:
-            output_dt = self.preprocessed_dir / dt_path.name
+            output_dt = self.preprocessed_dir / dt_path.with_suffix(".dt").name
         else:
-            output_dt = dt_path
+            output_dt = dt_path.with_suffix(".dt")
             
         # Ensure output directory exists (if not using preprocessed_dir, or if it was just created)
         output_dt.parent.mkdir(parents=True, exist_ok=True)
+        
+        # If it's already a .dt file, just copy it to the preprocessed dir if needed
+        if source_path.suffix == '.dt':
+            if source_path.resolve() != output_dt.resolve():
+                import shutil
+                print(f"[{self.name}] Copying {source_path.name} to {output_dt.name}...")
+                shutil.copyfile(source_path, output_dt)
+            return
 
         if not self.obj_to_dt_exec.exists():
             print(f"[{self.name}] Error: obj_to_dt tool not found at {self.obj_to_dt_exec}")
             return
 
-        cmd = [
-            str(self.obj_to_dt_exec),
-            "--obj", str(source_path),
-            "--output", str(output_dt.parent),
-            "--output-name", str(output_dt.stem)
-        ]
+        cmd = [str(self.obj_to_dt_exec), str(source_path), str(output_dt)]
 
         print(f"[{self.name}] Converting {source_path.name} to {output_dt.name}...")
         
@@ -134,24 +137,72 @@ class TDBaseAdapter(OverlapBenchmarkAdapter):
                     prefix=f"[{self.name}]",
                 )
                 output = stdout_text + stderr_text
-                # Parse: "compute:        1.48621 s(8.46801%)" or "compute:        50.123 ms(..."
+                # Parse either the legacy summary line with units or the newer plain numeric stats.
                 match = re.search(r"compute:\s+([\d.]+)\s+(s|ms)", output)
+                comp_time = 0.0
                 if match:
                     val = float(match.group(1))
                     unit = match.group(2)
                     if unit == 's':
                         val *= 1000.0
-                    runtimes.append(val)
+                    comp_time = val
                 else:
-                    # Fallback to the individual computation lines if summary is missing?
-                    # "computation for checking intersection takes 813.053000 ms"
-                    comp_matches = re.finditer(r"computation for checking intersection takes ([\d.]+) ms", output)
-                    comp_times = [float(m.group(1)) for m in comp_matches]
-                    if comp_times:
-                        runtimes.append(sum(comp_times))
+                    computation_match = re.search(r"computation:\s*([\d.]+)", output)
+                    if computation_match:
+                        comp_time = float(computation_match.group(1))
                     else:
-                        print(f"[{self.name}] Error: Could not find computation timing in output. Result:\n{output}")
-                        return {"error": "Computation timing not found"}
+                        comp_matches = re.finditer(r"computation for checking intersection takes ([\d.]+) ms", output)
+                        comp_times = [float(m.group(1)) for m in comp_matches]
+                        if comp_times:
+                            comp_time = sum(comp_times)
+                            
+                total_match = re.search(r"total:\s*([\d.]+)\s+(s|ms)?", output)
+                total_time = 0.0
+                if total_match:
+                    val = float(total_match.group(1))
+                    if total_match.group(2) == 's':
+                        val *= 1000.0
+                    # TDBase sometimes logs total without unit assuming seconds
+                    elif total_match.group(2) is None and val < 1000:
+                         val *= 1000.0
+                    total_time = val
+                    
+                if comp_time > 0:
+                    runtimes.append(comp_time)
+                    # Hack: store the PREPROCESSING time as a property on self, or append it to a list
+                    if not hasattr(self, 'preprocessing_times'):
+                        self.preprocessing_times = []
+                    
+                    prep_time = 0.0
+                    decode_m = re.search(r"decode:\s+([\d.]+)\s+(s|ms)", output)
+                    if decode_m:
+                        v = float(decode_m.group(1))
+                        if decode_m.group(2) == 's': v *= 1000.0
+                        prep_time += v
+                    
+                    index_m = re.search(r"index:\s+([\d.]+)\s+(s|ms)", output)
+                    if index_m:
+                        v = float(index_m.group(1))
+                        if index_m.group(2) == 's': v *= 1000.0
+                        prep_time += v
+                        
+                    prepare_m = re.search(r"prepare:\s+([\d.]+)\s+(s|ms)", output)
+                    if prepare_m:
+                        v = float(prepare_m.group(1))
+                        if prepare_m.group(2) == 's': v *= 1000.0
+                        prep_time += v
+                        
+                    # Also load tiles counts as query setup in TDBase since it's inside the join execution
+                    load_m = re.search(r"load tiles takes\s+([\d.]+)\s+(s|ms)", output)
+                    if load_m:
+                        v = float(load_m.group(1))
+                        if load_m.group(2) == 's': v *= 1000.0
+                        prep_time += v
+
+                    self.preprocessing_times.append(prep_time)
+                else:
+                    print(f"[{self.name}] Error: Could not find computation timing in output. Result:\n{output}")
+                    return {"error": "Computation timing not found"}
             except subprocess.TimeoutExpired:
                 print(f"[{self.name}] Timeout reached ({timeout}s)")
                 return {"error": f"Timeout reached ({timeout}s)"}
@@ -162,12 +213,14 @@ class TDBaseAdapter(OverlapBenchmarkAdapter):
             return {"error": "No computation timing results collected for TDBase"}
 
         # Return aggregate stats over the runs (each run processed all LODs)
+        mean_prep = np.mean(self.preprocessing_times) if hasattr(self, 'preprocessing_times') and self.preprocessing_times else 0.0
         return {
             "mean": float(np.mean(runtimes)),
             "min": float(np.min(runtimes)),
             "max": float(np.max(runtimes)),
             "std": float(np.std(runtimes)),
             "raw_times": [float(x) for x in runtimes],
+            "mean_preprocessing": float(mean_prep),
             "lods": lods,
             "gpu": True
         }

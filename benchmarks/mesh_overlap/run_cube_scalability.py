@@ -14,7 +14,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
-from benchmarks.common.viz_utils import apply_paper_style, plot_mean_series
+from benchmarks.common.viz_utils import apply_paper_style, make_legend_bold, PAPER_FIGSIZE, set_log_timing_axis_limits, style_for
 from benchmarks.common.scenario_utils import (
     canonical_cube_pair_paths,
     ensure_cube_pair_dataset,
@@ -120,7 +120,7 @@ def run_experiment(runs, grid_cell_size, run_log_dir, approaches=None, timeout=1
         
         print(f"\nProcessing: {f1_path.name} vs {f2_path.name}")
 
-        # Check/Run Preprocessing (Exact/Estimated/CGAL/TOUCH share preprocessed files)
+        # Check/Run Preprocessing (Exact/Estimated/Face/TOUCH share preprocessed files)
         if any(a in approaches for a in ["exact", "estimated", "cgal", "touch"]):
             print("Checking preprocessing (Raytracer)...")
             # Force preprocessing if not exists or ensure it's up to date
@@ -159,10 +159,10 @@ def run_experiment(runs, grid_cell_size, run_log_dir, approaches=None, timeout=1
                 # We continue even if estimated fails? Let's say yes for robustness
                 res_est = {"mean": 0, "std": 0, "breakdown": {}}
 
-        # Run CGAL Benchmark
+        # Run Face Benchmark
         res_cgal = {"mean": None, "std": None}
         if "cgal" in approaches:
-            print(f"Running CGAL Mode ({runs} runs)...")
+            print(f"Running Face Mode ({runs} runs)...")
             res_cgal = cgal_adapter.run_overlap(
                 str(f1_path), 
                 str(f2_path), 
@@ -171,8 +171,8 @@ def run_experiment(runs, grid_cell_size, run_log_dir, approaches=None, timeout=1
                 timeout=timeout
             )
             if "error" in res_cgal:
-                print(f"Error in CGAL run: {res_cgal['error']}")
-                # Allow CGAL to fail (e.g. timeout)
+                print(f"Error in Face run: {res_cgal['error']}")
+                # Allow Face to fail (e.g. timeout)
                 res_cgal = {"mean": None, "std": None}
 
         # Run TOUCH Benchmark
@@ -224,7 +224,7 @@ def run_experiment(runs, grid_cell_size, run_log_dir, approaches=None, timeout=1
         
         cgal_str = f"{res_cgal['mean']:.2f}ms" if res_cgal['mean'] else "TIMEOUT/ERR"
         touch_str = f"{res_touch['mean']:.2f}ms" if res_touch['mean'] else "TIMEOUT/ERR"
-        print(f"Done {count}: Exact={res_exact['mean']:.2f}ms, Est={res_est['mean']:.2f}ms, CGAL={cgal_str}, TOUCH={touch_str}")
+        print(f"Done {count}: Exact={res_exact['mean']:.2f}ms, Est={res_est['mean']:.2f}ms, Face={cgal_str}, TOUCH={touch_str}")
 
     return results
 
@@ -238,22 +238,26 @@ def plot_results(results, figures_dir):
         return
 
     apply_paper_style()
-    fig, (ax_main, ax_breakdown) = plt.subplots(1, 2, figsize=(18, 7.2))
+    fig, (ax_main, ax_breakdown) = plt.subplots(1, 2, figsize=PAPER_FIGSIZE)
+    all_y_vals = []
 
     # --- Plot 1: Line Chart (Scaling) ---
     ax_main.errorbar(counts, results["exact"]["mean"], 
-                     fmt='-o', label='Pierce (Two Pass)', capsize=5, color='#1f77b4')
+                     fmt='-o', label='Pierce (Two Pass)', capsize=5, color=style_for("exact")["color"])
+    all_y_vals.extend([v for v in results["exact"]["mean"] if isinstance(v, (int, float)) and v > 0])
     ax_main.errorbar(counts, results["estimated"]["mean"], 
-                     fmt='-s', label='Pierce (Selectivity Estimation)', capsize=5, color='#2ca02c')
+                     fmt='-s', label='Pierce (Selectivity Estimation)', capsize=5, color=style_for("estimated")["color"])
+    all_y_vals.extend([v for v in results["estimated"]["mean"] if isinstance(v, (int, float)) and v > 0])
     
-    # Filter valid CGAL points
+    # Filter valid Face points
     cgal_valid_indices = [i for i, m in enumerate(results["cgal"]["mean"]) if m is not None]
     if cgal_valid_indices:
         cgal_counts = [counts[i] for i in cgal_valid_indices]
         cgal_means = [results["cgal"]["mean"][i] for i in cgal_valid_indices]
         cgal_stds = [results["cgal"]["std"][i] for i in cgal_valid_indices]
+        all_y_vals.extend(cgal_means)
         ax_main.errorbar(cgal_counts, cgal_means, 
-                         fmt='-D', label='CGAL', capsize=5, color='#9467bd')
+                         fmt='-D', label='Face', capsize=5, color=style_for("cgal")["color"])
 
     # Filter valid TOUCH points
     touch_valid_indices = [i for i, m in enumerate(results["touch"]["mean"]) if m is not None]
@@ -261,14 +265,16 @@ def plot_results(results, figures_dir):
         touch_counts = [counts[i] for i in touch_valid_indices]
         touch_means = [results["touch"]["mean"][i] for i in touch_valid_indices]
         touch_stds = [results["touch"]["std"][i] for i in touch_valid_indices]
+        all_y_vals.extend(touch_means)
         ax_main.errorbar(touch_counts, touch_means, 
-                         fmt='-^', label='TOUCH', capsize=5, color='#8c564b')
+                         fmt='-^', label='TOUCH', capsize=5, color=style_for("touch")["color"])
 
     ax_main.set_xlabel('Number of Cubes in Dataset B (A=200k)')
     ax_main.set_ylabel('Execution Time (ms) [Log Scale]')
     ax_main.set_yscale('log')
-    ax_main.legend(fontsize=12)
-    ax_main.grid(True, which="both", ls="-", alpha=0.2)
+    set_log_timing_axis_limits(ax_main, all_y_vals)
+    make_legend_bold(ax_main)
+    ax_main.grid(False)
     ax_main.set_xticks(counts)
 
     # --- Plot 2: Breakdown Bar Chart (Exact & Estimated ONLY) ---
@@ -345,11 +351,16 @@ def plot_results(results, figures_dir):
     ax_breakdown.set_xticklabels([f"{c//1000}k" for c in counts])
     ax_breakdown.set_xlabel('Dataset Size (Cubes)')
     ax_breakdown.set_ylabel('Query Time (ms)')
-    ax_breakdown.grid(True, axis='y', which='both', ls='-', alpha=0.1)
-    
+    ax_breakdown.grid(False)    
     # Legend
-    ax_breakdown.legend(legend_handles, legend_labels, 
-                       bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
+    make_legend_bold(
+        ax_breakdown,
+        legend_handles,
+        legend_labels,
+        bbox_to_anchor=(1.05, 1),
+        loc='upper left',
+        fontsize=10,
+    )
 
     plt.tight_layout()
     output_path = figures_dir / "mesh_overlap_cube_scalability.png"
@@ -377,7 +388,7 @@ def main():
     
     if results and results["counts"]:
         print("\nResults Summary:")
-        print(f"{'Count':<10} {'Exact (ms)':<15} {'Estimated (ms)':<15} {'CGAL (ms)':<15} {'TOUCH (ms)':<15}")
+        print(f"{'Count':<10} {'Exact (ms)':<15} {'Estimated (ms)':<15} {'Face (ms)':<15} {'TOUCH (ms)':<15}")
         for i, n in enumerate(results["counts"]):
             ex = results['exact']['mean'][i]
             est = results['estimated']['mean'][i]

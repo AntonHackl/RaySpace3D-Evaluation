@@ -32,7 +32,7 @@ CGAL_DIR = REPO_ROOT / "baselines/RaySpace3DBaselines/CGAL"
 
 
 def main():
-    parser = argparse.ArgumentParser(description="MICrONS subset benchmark for mesh overlap (Direct Estimation, CGAL, TOUCH)")
+    parser = argparse.ArgumentParser(description="MICrONS subset benchmark for mesh overlap (Direct Estimation, Face, TOUCH)")
     parser.add_argument("--sizes", type=int, nargs="+", default=[4, 8],
                         help="MICrONS subset sizes in GB to benchmark")
     parser.add_argument("--source-root", type=str, 
@@ -111,7 +111,7 @@ def main():
                     log_dir=str(run_log_dir)
                 )
             else:
-                # CGAL/TOUCH
+                # Face/TOUCH
                 res = adapter.run_overlap(
                     str(agg_a), str(agg_b), args.runs, timeout=args.timeout,
                     log_dir=str(run_log_dir)

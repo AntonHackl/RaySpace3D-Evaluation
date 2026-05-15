@@ -8,7 +8,7 @@ import json
 import argparse
 import re
 import matplotlib.pyplot as plt
-from benchmarks.common.viz_utils import apply_paper_style, plot_mean_series
+from benchmarks.common.viz_utils import PAPER_FIGSIZE, PAPER_WIDE_FIGSIZE, apply_paper_style, make_legend_bold, plot_mean_series, style_for
 import numpy as np
 from pathlib import Path
 
@@ -66,6 +66,7 @@ def visualize_selectivity(summary_file, output_path=None):
     mem10_stds = []
     direct_est_mem_gib = []
     mem10_mem_gib = []
+    exact_mem_gib = []
 
     # Filter data
     valid_selectivities = []
@@ -77,6 +78,8 @@ def visualize_selectivity(summary_file, output_path=None):
         valid_selectivities.append(d["selectivity"])
         exact_means.append(d["exact"]["mean_ms"])
         exact_stds.append(d["exact"]["std_ms"])
+        exact_mem_bytes = d["exact"].get("memory", {}).get("total_allocated_bytes", 0)
+        exact_mem_gib.append(exact_mem_bytes / float(1024 ** 3) if exact_mem_bytes else None)
         
         if "estimated" in d and "error" not in d["estimated"]:
             est_means.append(d["estimated"]["mean_ms"])
@@ -146,7 +149,7 @@ def visualize_selectivity(summary_file, output_path=None):
 
     # --- Plot 1: Scaling Line Plot ---
     apply_paper_style()
-    fig_main, ax_main = plt.subplots(figsize=(10, 7.2))
+    fig_main, ax_main = plt.subplots(figsize=PAPER_FIGSIZE)
     ax_mem = ax_main.twinx()
     plot_mean_series(ax_main, valid_selectivities, exact_means, "exact")
     
@@ -164,8 +167,9 @@ def visualize_selectivity(summary_file, output_path=None):
         td_means = [m for m in tdbase_means if m is not None]
         td_stds = [s for s, m in zip(tdbase_stds, tdbase_means) if m is not None]
         
-        ax_main.errorbar(td_sel, td_means, label='TDBase',
-                    marker='^', capsize=5, linestyle='-.', color='#d62728')
+        st_td = style_for("tdbase")
+        ax_main.errorbar(td_sel, td_means, label=st_td["label"],
+                    marker=st_td["marker"], capsize=5, linestyle=st_td.get("linestyle", "-."), color=st_td["color"])
 
     if any(x is not None for x in cgal_means):
         cgal_sel = [s for s, m in zip(valid_selectivities, cgal_means) if m is not None]
@@ -187,26 +191,36 @@ def visualize_selectivity(summary_file, output_path=None):
     ax_main.set_ylabel('Query Time (ms) [Log Scale]')
 
     mem_plotted = False
+    memory_color = "#ff7f0e" # Distinct orange for all memory lines
+    if any(v is not None for v in exact_mem_gib):
+        x = [s for s, v in zip(valid_selectivities, exact_mem_gib) if v is not None]
+        y = [v for v in exact_mem_gib if v is not None]
+        st = style_for("exact")
+        ax_mem.plot(x, y, linestyle=st.get("linestyle", "--"), marker=None, color=memory_color, label='Exact Memory')
+        mem_plotted = True
+
     if any(v is not None for v in direct_est_mem_gib):
         x = [s for s, v in zip(valid_selectivities, direct_est_mem_gib) if v is not None]
         y = [v for v in direct_est_mem_gib if v is not None]
-        ax_mem.plot(x, y, linestyle='--', marker='o', color='#9467bd', label='SE Memory (GiB)')
-        mem_plotted = True
-
-    if any(v is not None for v in mem10_mem_gib):
-        x = [s for s, v in zip(valid_selectivities, mem10_mem_gib) if v is not None]
-        y = [v for v in mem10_mem_gib if v is not None]
-        ax_mem.plot(x, y, linestyle='--', marker='s', color='#8c564b', label='10G Memory (GiB)')
+        st = style_for("direct_estimation")
+        ax_mem.plot(x, y, linestyle=st.get("linestyle", "--"), marker=None, color=memory_color, label='Selectivity Estimation Memory')
         mem_plotted = True
 
     if mem_plotted:
         ax_mem.set_yscale('log')
         ax_mem.set_ylabel('Allocated Memory (GiB) [Log Scale]')
 
-    ax_main.grid(True, which="both", ls="-", alpha=0.2)
+    ax_main.grid(False, which="both")
+    ax_mem.grid(False, which="both")
+    ax_main.xaxis.grid(False, which="both")
+    ax_main.yaxis.grid(False, which="both")
+    ax_mem.xaxis.grid(False, which="both")
+    ax_mem.yaxis.grid(False, which="both")
     h1, l1 = ax_main.get_legend_handles_labels()
     h2, l2 = ax_mem.get_legend_handles_labels()
-    ax_main.legend(h1 + h2, l1 + l2, fontsize=12)
+    legend = ax_main.legend(h1 + h2, l1 + l2, fontsize=14)
+    for text in legend.get_texts():
+        text.set_fontweight("bold")
 
     # Annotate improvement factor
     for sl, ex, est in zip(valid_selectivities, exact_means, est_means):
@@ -215,7 +229,7 @@ def visualize_selectivity(summary_file, output_path=None):
             ax_main.annotate(f"{speedup:.1f}x", 
                         xy=(sl, est), 
                         xytext=(0, -15), textcoords="offset points",
-                        ha='center', fontsize=9, color='#2ca02c')
+                        ha='center', fontsize=12, color='#2ca02c')
 
     scaling_output = output_dir / "selectivity_scaling.png"
     plt.tight_layout()
@@ -225,7 +239,7 @@ def visualize_selectivity(summary_file, output_path=None):
     plt.close(fig_main)
 
     # --- Plot 2: Breakdown Chart ---
-    fig_breakdown, ax_breakdown = plt.subplots(figsize=(12, 8))
+    fig_breakdown, ax_breakdown = plt.subplots(figsize=PAPER_WIDE_FIGSIZE)
     # Prepare data for breakdown
     modes_in_data = ["exact", "estimated", "direct_estimation", "estimated_mem10", "tdbase", "cgal", "touch"]
     ordered_phases_raw = [
@@ -318,17 +332,22 @@ def visualize_selectivity(summary_file, output_path=None):
             
             # Add short label for mode
             short_name = mode_short_names.get(mode, mode[:3])
-            ax_breakdown.text(x_pos, -2, short_name, ha='center', va='top', fontsize=8, rotation=45)
+            ax_breakdown.text(x_pos, -2, short_name, ha='center', va='top', fontsize=8, rotation=45, fontweight='bold')
 
     ax_breakdown.set_xticks(range(num_selectivities))
     ax_breakdown.set_xticklabels([f"{s}" for s in valid_selectivities])
     ax_breakdown.set_xlabel('Selectivity (Grouped by Approach: 2P, SE, 10%, ...)', fontsize=12)
     ax_breakdown.set_ylabel('Query Time (ms)', fontsize=12)
-    ax_breakdown.grid(True, axis='y', which='both', ls='-', alpha=0.1)
-
+    ax_breakdown.grid(False)
     # Add legend
-    ax_breakdown.legend(legend_handles, legend_labels, 
-                       bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
+    make_legend_bold(
+        ax_breakdown,
+        legend_handles,
+        legend_labels,
+        bbox_to_anchor=(1.05, 1),
+        loc='upper left',
+        fontsize=10,
+    )
 
     breakdown_output = output_dir / "selectivity_breakdown.png"
     plt.tight_layout()

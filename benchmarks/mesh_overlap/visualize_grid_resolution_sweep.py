@@ -156,7 +156,7 @@ def main():
     ax1.set_xlabel("Grid resolution")
     ax1.set_ylabel("Query time (ms)")
     ax1.set_title("1. Performance")
-    ax1.grid(True, linestyle="--", alpha=0.45)
+    ax1.grid(False)
     ax1.legend(fontsize=8, loc="best")
 
     # Panel 2: pair counts vs grid resolution, with factors vs ground truth.
@@ -183,7 +183,7 @@ def main():
     ax2.set_ylabel("Pairs")
     ax2.set_title("2. Pair Estimates vs Ground Truth")
     ax2.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"{int(v):,}"))
-    ax2.grid(True, linestyle="--", alpha=0.45)
+    ax2.grid(False)
     ax2.legend(fontsize=8, loc="best")
 
     # Panel 3: hash size vs grid resolution (space pressure proxy)
@@ -193,7 +193,7 @@ def main():
     ax3.set_ylabel("Hash table size (slots)")
     ax3.set_title("3. Hash Size Impact")
     ax3.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"{int(v):,}"))
-    ax3.grid(True, linestyle="--", alpha=0.45)
+    ax3.grid(False)
     ax3.legend(fontsize=8, loc="best")
 
     plt.tight_layout()

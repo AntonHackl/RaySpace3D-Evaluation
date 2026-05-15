@@ -152,8 +152,7 @@ def _plot_pair_bbox_projections(
         ax.add_patch(rect_b)
         ax.set_title(title)
         ax.set_aspect("equal", adjustable="box")
-        ax.grid(True, alpha=0.3)
-
+        ax.grid(False)
         xs = [a_xy[0], a_xy[0] + a_w, b_xy[0], b_xy[0] + b_w]
         ys = [a_xy[1], a_xy[1] + a_h, b_xy[1], b_xy[1] + b_h]
         x_pad = (max(xs) - min(xs)) * 0.1 + 1e-6

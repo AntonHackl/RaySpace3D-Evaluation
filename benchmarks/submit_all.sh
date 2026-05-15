@@ -9,8 +9,8 @@ sbatch benchmarks/slurm_overlap_breakdown.sh
 sbatch benchmarks/slurm_overlap_cube_scalability.sh
 sbatch benchmarks/slurm_overlap_mesh_complexity.sh
 sbatch benchmarks/slurm_overlap_microns.sh
-sbatch benchmarks/slurm_overlap_large_nu_v_scalability.sh
-sbatch benchmarks/slurm_overlap_large_nu_nn_scalability.sh
+sbatch benchmarks/slurm_overlap_large_nu_combined_scalability.sh
+
 sbatch benchmarks/slurm_overlap_nn_scalability.sh
 sbatch benchmarks/slurm_overlap_nu_scalability.sh
 sbatch benchmarks/slurm_overlap_selectivity.sh

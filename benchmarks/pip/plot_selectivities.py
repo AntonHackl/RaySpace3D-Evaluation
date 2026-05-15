@@ -169,7 +169,7 @@ def main():
     plt.ylabel('Average Selectivity', fontsize=12)
     plt.title(f'Average Selectivity vs {experiment_name.capitalize()} Extent\n(10 million points dataset)', fontsize=14)
     plt.ylim(0, 1)
-    plt.grid(True, alpha=0.3)
+    plt.grid(False)
     plt.tight_layout()
     
     output_path = results_dir / f'{experiment_name}_selectivities.png'

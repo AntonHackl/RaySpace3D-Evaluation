@@ -138,8 +138,7 @@ def plot_approach_comparison(benchmarks: List[Dict[str, Any]], output_dir: Path,
     ax.set_xticks(x)
     ax.set_xticklabels(all_approaches, rotation=15, ha='right')
     ax.legend(title='Benchmark Run')
-    ax.grid(axis='y', alpha=0.3)
-    
+    ax.grid(False)    
     plt.tight_layout()
     plt.savefig(output_dir / 'mean_comparison.png', dpi=300, bbox_inches='tight')
     print(f"Saved: {output_dir / 'mean_comparison.png'}")
@@ -169,8 +168,7 @@ def plot_approach_comparison(benchmarks: List[Dict[str, Any]], output_dir: Path,
     ax.set_xticks(x)
     ax.set_xticklabels(all_approaches, rotation=15, ha='right')
     ax.legend(title='Benchmark Run')
-    ax.grid(axis='y', alpha=0.3)
-    
+    ax.grid(False)    
     plt.tight_layout()
     plt.savefig(output_dir / 'median_comparison.png', dpi=300, bbox_inches='tight')
     print(f"Saved: {output_dir / 'median_comparison.png'}")
@@ -201,8 +199,7 @@ def plot_approach_comparison(benchmarks: List[Dict[str, Any]], output_dir: Path,
         ax1.set_title('Mean Query Times (Latest Benchmark)', fontsize=13, fontweight='bold')
         ax1.set_xticks(x_pos)
         ax1.set_xticklabels(approaches, rotation=15, ha='right')
-        ax1.grid(axis='y', alpha=0.3)
-        
+        ax1.grid(False)        
         # Add value labels on bars
         for bar in bars1:
             height = bar.get_height()
@@ -217,8 +214,7 @@ def plot_approach_comparison(benchmarks: List[Dict[str, Any]], output_dir: Path,
         ax2.set_title('Median Query Times (Latest Benchmark)', fontsize=13, fontweight='bold')
         ax2.set_xticks(x_pos)
         ax2.set_xticklabels(approaches, rotation=15, ha='right')
-        ax2.grid(axis='y', alpha=0.3)
-        
+        ax2.grid(False)        
         # Add value labels on bars
         for bar in bars2:
             height = bar.get_height()

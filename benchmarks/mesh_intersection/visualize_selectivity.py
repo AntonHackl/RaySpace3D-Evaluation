@@ -12,6 +12,8 @@ from matplotlib.lines import Line2D
 import numpy as np
 from pathlib import Path
 
+from benchmarks.common.viz_utils import APPROACH_STYLES
+
 def load_results(json_file):
     """Load summary results from JSON file."""
     with open(json_file, 'r') as f:
@@ -44,8 +46,12 @@ def visualize_selectivity(json_file, output_dir=None):
         print("No valid approaches to visualize")
         return
     
-    colors = {"estimated": "#2ca02c", "estimate_only": "#17becf", "cgal": "#ff7f0e"}
-    labels = {"estimated": "Estimated Query", "estimate_only": "Estimate Only", "cgal": "CGAL"}
+    colors = {
+        "estimated": APPROACH_STYLES["estimated"]["color"],
+        "estimate_only": APPROACH_STYLES["direct_estimation"]["color"],
+        "cgal": APPROACH_STYLES["cgal"]["color"],
+    }
+    labels = {"estimated": "Estimated Query", "estimate_only": "Estimate Only", "cgal": "Face"}
     markers = {"estimated": "s", "estimate_only": "^", "cgal": "o"}
     
     for app in approaches:
@@ -63,7 +69,7 @@ def visualize_selectivity(json_file, output_dir=None):
     plt.xlabel('Selectivity (Fraction of Intersecting Pairs)', fontsize=12, fontweight='bold')
     plt.ylabel('Runtime (ms)', fontsize=12, fontweight='bold')
     plt.title('Mesh Intersection Performance: Runtime vs Selectivity\n(Log-Log Scale)', fontsize=14, fontweight='bold')
-    plt.grid(True, which="both", ls="-", alpha=0.2)
+    plt.grid(False)
     plt.legend()
     
     # Determine output path
@@ -146,8 +152,7 @@ def visualize_selectivity(json_file, output_dir=None):
         legend_elements.append(Line2D([0], [0], color=color_map[key], lw=6, label=key))
     
     ax.legend(handles=legend_elements, loc='best')
-    ax.grid(axis='y', linestyle='--', alpha=0.3)
-    
+    ax.grid(False)    
     plt.tight_layout()
     breakdown_chart_path = output_dir / "selectivity_breakdown_bars.png"
     plt.savefig(breakdown_chart_path, dpi=300, bbox_inches='tight')

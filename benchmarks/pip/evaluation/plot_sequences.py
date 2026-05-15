@@ -173,7 +173,7 @@ def plot_selectivity_comparison(extents_a: List[int], mapping_a: Dict[int, Path]
     plt.ylabel('Average Selectivity')
     plt.title(f'Selectivity Comparison: {base_a} vs {base_b} (scaled to 1.0)')
     plt.ylim(0, 1.0)
-    plt.grid(alpha=0.3)
+    plt.grid(False)
     plt.legend()
     plt.tight_layout()
 
@@ -215,7 +215,7 @@ def plot_approach_times(extents: List[int], mapping: Dict[int, Path], output_dir
     plt.yscale('log')
     plt.title(f'Approach Timing Across {base_name} Experiments (log scale)')
     plt.legend()
-    plt.grid(alpha=0.3, which='both')
+    plt.grid(False)
     plt.tight_layout()
 
     out_path = output_dir / f'{base_name}_approach_times_{metric}.png'
@@ -287,7 +287,7 @@ def main():
     axes[0].set_xlabel('Extent')
     axes[0].set_ylabel(f'Mean {args.metric} (ms)')
     axes[0].set_yscale('log')
-    axes[0].grid(alpha=0.3, which='both')
+    axes[0].grid(False)
     axes[0].legend(fontsize='small')
 
     # Right: approaches for exp_b
@@ -310,7 +310,7 @@ def main():
     axes[1].set_xlabel('Extent')
     axes[1].set_ylabel(f'Mean {args.metric} (ms)')
     axes[1].set_yscale('log')
-    axes[1].grid(alpha=0.3, which='both')
+    axes[1].grid(False)
     axes[1].legend(fontsize='small')
 
     plt.tight_layout()

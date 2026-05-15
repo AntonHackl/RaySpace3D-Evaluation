@@ -15,7 +15,7 @@ class CGALContainmentAdapter(ContainmentBenchmarkAdapter):
         threads: Optional[int] = None,
         grid_cell_size: float = 10.0,
     ):
-        super().__init__("CGAL")
+        super().__init__("Face")
         self.cgal_dir = Path(cgal_dir)
         self.preprocessed_dir = Path(preprocessed_dir)
         self.executable = self.cgal_dir / "build" / "cgal_containment"
@@ -44,7 +44,7 @@ class CGALContainmentAdapter(ContainmentBenchmarkAdapter):
         p2 = self._get_preprocessed_path(file2)
 
         if not p1.exists() or not p2.exists():
-            return {"error": f"CGAL requires .pre files. Missing one of: {p1}, {p2}"}
+            return {"error": f"Face requires .pre files. Missing one of: {p1}, {p2}"}
 
         cmd = [str(self.executable), str(p1), str(p2)]
         if self.threads:
@@ -90,7 +90,7 @@ class CGALContainmentAdapter(ContainmentBenchmarkAdapter):
             except subprocess.TimeoutExpired:
                 return {"error": f"Timeout reached ({timeout}s)"}
             except subprocess.CalledProcessError as e:
-                return {"error": f"CGAL containment failed with exit code {e.returncode}: {e.stderr}"}
+                return {"error": f"Face containment failed with exit code {e.returncode}: {e.stderr}"}
 
         if not runtimes:
             return {"error": "No timing results collected"}

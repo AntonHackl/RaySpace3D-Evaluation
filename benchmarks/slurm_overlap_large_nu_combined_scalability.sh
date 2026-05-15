@@ -1,0 +1,22 @@
+#!/bin/bash
+#SBATCH --account=sci-zacharatou
+#SBATCH --partition=gpu-batch
+#SBATCH --gres=gpu:rtx_pro_6000:1
+#SBATCH --mem=128G
+#SBATCH --time=14:00:00
+#SBATCH --cpus-per-task=20
+#SBATCH --job-name=overlap_large_nu_combined
+#SBATCH --output=/sc/projects/sci-zacharatou/chair/RaySpace/RaySpace3D-Evaluation/benchmarks/slurm_logs/slurm_overlap_large_nu_combined_%j.out
+#SBATCH --error=/sc/projects/sci-zacharatou/chair/RaySpace/RaySpace3D-Evaluation/benchmarks/slurm_logs/slurm_overlap_large_nu_combined_%j.err
+
+# Combined Large Nu Scalability Benchmarks (Vessel and Nuclei joins)
+# These are run sequentially in a single job to avoid race conditions in the shared preprocessed directory.
+
+srun --cpu-bind=none --container-name RaySpace \
+     --container-workdir /sc/projects/sci-zacharatou/chair/RaySpace/RaySpace3D-Evaluation \
+     --container-mounts /sc/home/anton.hackl/:/sc/home/anton.hackl/,/sc/projects/sci-zacharatou/chair/RaySpace/:/sc/projects/sci-zacharatou/chair/RaySpace/ \
+     bash -c "source /sc/home/anton.hackl/conda3/etc/profile.d/conda.sh && conda activate spatial_benchmark && export PYTHONPATH=\$PYTHONPATH:. && \
+     echo '--- Starting Large Nu Vessel Join Benchmark ---' && \
+     python benchmarks/mesh_overlap/run_nu_scalability.py --dataset-profile large_nu_v --nu 200 400 600 800 --approaches direct_estimation cgal tdbase touch --timeout 1200 && \
+     echo '--- Starting Large Nu Nuclei Join Benchmark ---' && \
+     python benchmarks/mesh_overlap/run_nu_scalability.py --dataset-profile large_nu_nn --nu 200 400 600 800 --approaches direct_estimation cgal tdbase touch --timeout 1200"

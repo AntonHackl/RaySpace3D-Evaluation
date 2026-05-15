@@ -12,4 +12,4 @@
 srun --cpu-bind=none --container-name RaySpace \
      --container-workdir /sc/projects/sci-zacharatou/chair/RaySpace/RaySpace3D-Evaluation \
      --container-mounts /sc/home/anton.hackl/:/sc/home/anton.hackl/,/sc/projects/sci-zacharatou/chair/RaySpace/:/sc/projects/sci-zacharatou/chair/RaySpace/ \
-     bash -c "source /sc/home/anton.hackl/conda3/etc/profile.d/conda.sh && conda activate spatial_benchmark && export PYTHONPATH=\$PYTHONPATH:. && python benchmarks/mesh_overlap/run_mesh_complexity_benchmark.py --runs 3 --num-objects 100 --approaches direct_estimation cgal touch --timeout 1200"
+     bash -c "source /sc/home/anton.hackl/conda3/etc/profile.d/conda.sh && conda activate spatial_benchmark && export PYTHONPATH=\$PYTHONPATH:. && python benchmarks/mesh_overlap/run_mesh_complexity_benchmark.py --runs 3 --num-objects 100 --approaches direct_estimation cgal touch tdbase --timeout 1200"

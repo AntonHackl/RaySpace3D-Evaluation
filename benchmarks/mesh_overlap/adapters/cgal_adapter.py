@@ -8,7 +8,7 @@ from .base import OverlapBenchmarkAdapter, run_command_streaming
 
 class CGALAdapter(OverlapBenchmarkAdapter):
     def __init__(self, cgal_dir: str, preprocessed_dir: str = "preprocessed", threads: int = None, grid_cell_size: float = 5.0):
-        super().__init__("CGAL")
+        super().__init__("Face")
         self.cgal_dir = Path(cgal_dir)
         self.preprocessed_dir = Path(preprocessed_dir)
         self.executable = self.cgal_dir / "build" / "cgal_overlap"
@@ -28,7 +28,7 @@ class CGALAdapter(OverlapBenchmarkAdapter):
         timeout: float = None,
         log_dir: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Run CGAL overlap join."""
+        """Run Face overlap join."""
         if not self.executable.exists():
             return {"error": f"Executable not found: {self.executable}"}
 
@@ -37,10 +37,10 @@ class CGALAdapter(OverlapBenchmarkAdapter):
         p2 = self._get_preprocessed_path(file2)
 
         if not p1.exists() or not p2.exists():
-            return {"error": f"CGAL requires .pre files. One of these does not exist: {p1}, {p2}"}
+            return {"error": f"Face requires .pre files. One of these does not exist: {p1}, {p2}"}
 
         runtimes = []
-        # CGAL overlap usage: <datasetA.bin> <datasetB.bin> [threads]
+        # Face overlap usage: <datasetA.bin> <datasetB.bin> [threads]
         cmd = [str(self.executable), str(p1), str(p2)]
         if self.threads:
             cmd.append(str(self.threads))
@@ -74,7 +74,7 @@ class CGALAdapter(OverlapBenchmarkAdapter):
                 print(f"[{self.name}] Timeout reached ({timeout}s)")
                 return {"error": f"Timeout reached ({timeout}s)"}
             except subprocess.CalledProcessError as e:
-                return {"error": f"CGAL failed with exit code {e.returncode}: {e.stderr}"}
+                return {"error": f"Face failed with exit code {e.returncode}: {e.stderr}"}
 
         if not runtimes:
             return {"error": "No timing results collected"}
