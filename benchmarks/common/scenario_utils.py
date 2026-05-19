@@ -1,4 +1,5 @@
 import json
+import math
 import shutil
 import subprocess
 import sys
@@ -14,6 +15,24 @@ RAYSPACE_DIR = REPO_ROOT / "src" / "RaySpace3D"
 SHARED_DATA_ROOT = BENCHMARKS_DIR / "data_shared"
 GENERATE_CUBES_SCRIPT = RAYSPACE_DIR / "scripts" / "generate_cubes_by_selectivity.py"
 GENERATE_SPHERES_BIN = RAYSPACE_DIR / "scripts" / "cpp_generator" / "generate_spheres"
+
+
+def build_selectivity_sweep(
+    min_selectivity: float = 0.0001,
+    max_selectivity: float = 0.01,
+    num_points: int = 10,
+) -> list[float]:
+    if min_selectivity <= 0 or max_selectivity <= 0:
+        raise ValueError("Selectivity bounds must be positive")
+    if min_selectivity > max_selectivity:
+        raise ValueError("min_selectivity must be <= max_selectivity")
+    if num_points < 2:
+        raise ValueError("num_points must be at least 2")
+
+    log_min = math.log10(min_selectivity)
+    log_max = math.log10(max_selectivity)
+    step = (log_max - log_min) / (num_points - 1)
+    return [float(f"{10 ** (log_min + step * i):.8g}") for i in range(num_points)]
 
 
 def timestamp_tag() -> str:

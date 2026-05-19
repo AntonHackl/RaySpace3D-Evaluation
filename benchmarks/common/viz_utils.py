@@ -6,12 +6,13 @@ from pathlib import Path
 
 PAPER_FIGSIZE = (10.0, 7.2)
 PAPER_WIDE_FIGSIZE = PAPER_FIGSIZE
+PAPER_SIDE_BY_SIDE_FIGSIZE = (8.0, 4.8)
 
 APPROACH_PALETTE = [
-    "#edf8fb",
-    "#4c78a8",
-    "#8c96c6",
-    "#88419d",
+    "#9ebcda", # TOUCH
+    "#8856a7", # Pierce
+    "#8c96c6", # Face (cgal)
+    "#810f7c", # TDBase
 ]
 
 QUERY_PALETTE = {
@@ -21,14 +22,14 @@ QUERY_PALETTE = {
 }
 
 APPROACH_STYLES = {
-    "pierce": {"label": "Pierce", "color": APPROACH_PALETTE[1], "marker": None, "hatch": "\\", "linestyle": "-"},
-    "exact": {"label": "Pierce (Two Pass)", "color": APPROACH_PALETTE[1], "marker": None, "hatch": "/", "linestyle": "-"},
-    "direct_estimation": {"label": "Pierce (Estimation Only)", "color": APPROACH_PALETTE[1], "marker": None, "hatch": "\\", "linestyle": "--"},
-    "estimated": {"label": "Pierce (Estimated)", "color": APPROACH_PALETTE[1], "marker": None, "hatch": "\\", "linestyle": ":"},
-    "estimated_mem10": {"label": "Pierce (10 GB fixed)", "color": APPROACH_PALETTE[1], "marker": None, "hatch": "x", "linestyle": "-."},
-    "cgal": {"label": "Face", "color": APPROACH_PALETTE[2], "marker": None, "hatch": "-", "linestyle": "-"},
-    "touch": {"label": "TOUCH", "color": APPROACH_PALETTE[0], "marker": None, "hatch": "+", "linestyle": "-"},
-    "tdbase": {"label": "TDBase", "color": APPROACH_PALETTE[3], "marker": None, "hatch": ".", "linestyle": "-."},
+    "pierce": {"label": "Pierce", "color": APPROACH_PALETTE[1], "marker": "o", "hatch": "\\", "linestyle": "-"},
+    "exact": {"label": "Pierce (Two Pass)", "color": APPROACH_PALETTE[1], "marker": "o", "hatch": "/", "linestyle": "-"},
+    "direct_estimation": {"label": "Pierce", "color": APPROACH_PALETTE[1], "marker": "s", "hatch": "\\", "linestyle": "--"},
+    "estimated": {"label": "Pierce (Estimated)", "color": APPROACH_PALETTE[1], "marker": "^", "hatch": "\\", "linestyle": ":"},
+    "estimated_mem10": {"label": "Pierce (10 GB fixed)", "color": APPROACH_PALETTE[1], "marker": "D", "hatch": "x", "linestyle": "-."},
+    "cgal": {"label": "Face", "color": APPROACH_PALETTE[2], "marker": "v", "hatch": "-", "linestyle": "-"},
+    "touch": {"label": "TOUCH", "color": APPROACH_PALETTE[0], "marker": "p", "hatch": "+", "linestyle": "-"},
+    "tdbase": {"label": "TDBase", "color": APPROACH_PALETTE[3], "marker": "P", "hatch": ".", "linestyle": "-."},
 }
 
 HATCH_PATTERNS = ["/", "\\", "x", "-", "+", ".", "o", "*"]
@@ -50,6 +51,20 @@ def apply_paper_style():
         "lines.linewidth": 2.8,
         "lines.markersize": 9,
         "axes.grid": False,
+    })
+
+def apply_side_by_side_style():
+    apply_paper_style()
+    plt.rcParams.update({
+        "font.size": 13,
+        "axes.labelsize": 14,
+        "axes.titlesize": 14,
+        "xtick.labelsize": 12,
+        "ytick.labelsize": 12,
+        "legend.fontsize": 10,
+        "legend.title_fontsize": 10,
+        "lines.linewidth": 2.2,
+        "lines.markersize": 7,
     })
 
 def make_legend_bold(ax, *args, **kwargs):

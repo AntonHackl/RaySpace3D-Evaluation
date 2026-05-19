@@ -17,7 +17,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
-from benchmarks.common.viz_utils import apply_paper_style, set_log_timing_axis_limits, style_for
+from benchmarks.common.viz_utils import apply_side_by_side_style, set_log_timing_axis_limits, style_for, PAPER_SIDE_BY_SIDE_FIGSIZE, make_legend_bold
 
 
 @dataclass
@@ -74,7 +74,7 @@ def _canonicalize_approaches(raw: Dict[str, float]) -> Dict[str, float]:
     return out
 
 
-def _extract_nu_profile_400(path: Path, *, dataset_profile: str, group_name: str) -> Optional[GroupResult]:
+def _extract_latest_complete_nu_profile(path: Path, *, dataset_profile: str, group_name: str) -> Optional[GroupResult]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     md = payload.get("metadata", {})
     if md.get("dataset_profile") != dataset_profile:
@@ -82,21 +82,34 @@ def _extract_nu_profile_400(path: Path, *, dataset_profile: str, group_name: str
 
     results = payload.get("results", {})
     counts = results.get("counts", [])
-    if 400 not in counts:
+    if not counts:
         return None
-    idx = counts.index(400)
 
     approaches = results.get("enabled_approaches") or md.get("approaches") or []
-    approach_to_mean: Dict[str, float] = {}
-    for app in approaches:
-        arr = (results.get(app) or {}).get("mean", [])
-        if idx >= len(arr):
-            continue
-        mean = _valid_mean(arr[idx])
-        if mean is not None:
-            approach_to_mean[app] = mean
+    if not approaches:
+        return None
 
-    if not approach_to_mean:
+    selected_idx = None
+    approach_to_mean: Dict[str, float] = {}
+    for idx in sorted(range(len(counts)), key=lambda i: counts[i], reverse=True):
+        candidate_means: Dict[str, float] = {}
+        complete = True
+        for app in approaches:
+            arr = (results.get(app) or {}).get("mean", [])
+            if idx >= len(arr):
+                complete = False
+                break
+            mean = _valid_mean(arr[idx])
+            if mean is None:
+                complete = False
+                break
+            candidate_means[app] = mean
+        if complete:
+            selected_idx = idx
+            approach_to_mean = candidate_means
+            break
+
+    if selected_idx is None:
         return None
 
     run_dir = path.parent
@@ -104,17 +117,17 @@ def _extract_nu_profile_400(path: Path, *, dataset_profile: str, group_name: str
         group_name=group_name,
         run_dir=run_dir,
         run_timestamp=_parse_ts_from_run_dir(run_dir),
-        selector_value="nu=400",
+        selector_value=f"nu={counts[selected_idx]}",
         approach_to_mean=approach_to_mean,
     )
 
 
-def _extract_nu_large_400(path: Path) -> Optional[GroupResult]:
-    return _extract_nu_profile_400(path, dataset_profile="large_nu_v", group_name=r"Nuclei $\bowtie$ Vessel")
+def _extract_latest_complete_nu_large(path: Path) -> Optional[GroupResult]:
+    return _extract_latest_complete_nu_profile(path, dataset_profile="large_nu_v", group_name=r"Nuclei $\bowtie$ Vessel")
 
 
-def _extract_nu_nn_large_400(path: Path) -> Optional[GroupResult]:
-    return _extract_nu_profile_400(path, dataset_profile="large_nu_nn", group_name=r"Nuclei $\bowtie$ Nuclei")
+def _extract_latest_complete_nu_nn_large(path: Path) -> Optional[GroupResult]:
+    return _extract_latest_complete_nu_profile(path, dataset_profile="large_nu_nn", group_name=r"Nuclei $\bowtie$ Nuclei")
 
 
 def _extract_microns_4gb(path: Path) -> Optional[GroupResult]:
@@ -160,6 +173,7 @@ def _extract_cube_largest(path: Path) -> Optional[GroupResult]:
     results = payload.get("results", {})
     if not isinstance(results, dict):
         return None
+
     counts = results.get("counts", [])
     if not counts:
         return None
@@ -234,7 +248,7 @@ def _pick_latest_usable_with_required_approach(
 
 
 def _plot_grouped_bars(groups: List[GroupResult], output_base: Path) -> None:
-    apply_paper_style()
+    apply_side_by_side_style()
 
     for g in groups:
         g.approach_to_mean = _canonicalize_approaches(g.approach_to_mean)
@@ -249,7 +263,7 @@ def _plot_grouped_bars(groups: List[GroupResult], output_base: Path) -> None:
     x = np.arange(len(groups), dtype=float)
     width = 0.8 / max(1, num_apps)
 
-    fig, ax = plt.subplots(figsize=(12, 6.8))
+    fig, ax = plt.subplots(figsize=(6.2, 4.1))
 
     seen_labels = set()
     for gi, g in enumerate(groups):
@@ -276,14 +290,16 @@ def _plot_grouped_bars(groups: List[GroupResult], output_base: Path) -> None:
             elif app == "tdbase":
                 # For TDBase, if it's missing, draw an 'X' to indicate it couldn't run
                 # rather than just leaving an empty space or skipping it.
+                # Draw a very short 'failure' bar so the X has a base and stays within the plot area
+                ax.bar(x[gi] + offset, 1.0, width=width, color=st["color"], alpha=0.2, edgecolor="black", linewidth=0.5)
                 ax.text(
                     x[gi] + offset,
-                    1.2, # Slightly above the 1.0 floor for visibility
+                    1.1, # Slightly above the 1.0 floor for visibility
                     "X",
                     ha='center',
                     va='bottom',
                     color=st["color"],
-                    fontsize=34,
+                    fontsize=22,
                     fontweight='bold'
                 )
                 # Ensure it appears in the legend if this is the first time we encounter it
@@ -296,20 +312,28 @@ def _plot_grouped_bars(groups: List[GroupResult], output_base: Path) -> None:
     ax.set_yscale("log")
     all_vals = [v for g in groups for v in g.approach_to_mean.values()]
     set_log_timing_axis_limits(ax, all_vals, floor=1.0)
-    ax.set_ylabel("Overlap query time (ms) [log scale]")
+    ax.set_ylabel("Query Time (ms)", fontsize=17)
     ax.set_xticks(x)
-    ax.set_xticklabels([g.group_name for g in groups])
+    pretty_labels = [
+        r"Nuclei" + "\n" + r"$\bowtie$ Vessel",
+        r"Nuclei" + "\n" + r"$\bowtie$ Nuclei",
+        r"Neurons" + "\n" + r"$\bowtie$ Neurons",
+        r"Cubes" + "\n" + r"$\bowtie$ Cubes",
+    ]
+    if len(groups) == len(pretty_labels):
+        ax.set_xticklabels(pretty_labels, fontsize=11)
+    else:
+        ax.set_xticklabels([g.group_name for g in groups], fontsize=11)
+    ax.tick_params(axis="y", labelsize=14)
     ax.grid(False)
+    ax.set_xlim(x[0] - 0.6, x[-1] + 0.6)
     handles, labels = ax.get_legend_handles_labels()
-    unique = {}
-    for h, l in zip(handles, labels):
-        if l not in unique:
-            unique[l] = h
-    ax.legend(unique.values(), unique.keys(), loc="best")
+    unique = dict(zip(labels, handles))
+    make_legend_bold(ax, unique.values(), unique.keys(), loc="upper left", fontsize=12)
 
-    plt.tight_layout()
-    plt.savefig(f"{output_base}.png", dpi=300, bbox_inches="tight")
-    plt.savefig(f"{output_base}.pdf", bbox_inches="tight")
+    plt.tight_layout(pad=0.6)
+    plt.savefig(f"{output_base}.png", dpi=300)
+    plt.savefig(f"{output_base}.pdf")
     plt.close(fig)
 
 
@@ -317,7 +341,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "Create grouped bar chart for overlap overall performance using latest usable runs: "
-            "large nu (nu=400, large_nu_v), large nu nn (nu=400, large_nu_nn), "
+            "large nu (highest complete nu from latest large_nu_v run), "
+            "large nu nn (highest complete nu from latest large_nu_nn run), "
             "MICrONS (4GB), cube scalability (largest dataset)."
         )
     )
@@ -331,8 +356,8 @@ def main() -> None:
 
     runs_root = args.runs_root
 
-    group_nu = _pick_latest_usable(runs_root, "overlap_nu_scalability", _extract_nu_large_400)
-    group_nu_nn = _pick_latest_usable(runs_root, "overlap_nu_scalability", _extract_nu_nn_large_400)
+    group_nu = _pick_latest_usable(runs_root, "overlap_nu_scalability", _extract_latest_complete_nu_large)
+    group_nu_nn = _pick_latest_usable(runs_root, "overlap_nu_scalability", _extract_latest_complete_nu_nn_large)
     group_microns = _pick_latest_usable_with_required_approach(
         runs_root, "overlap_microns", _extract_microns_4gb, "pierce"
     )

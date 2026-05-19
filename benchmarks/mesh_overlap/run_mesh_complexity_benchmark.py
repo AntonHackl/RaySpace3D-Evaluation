@@ -15,7 +15,14 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
-from benchmarks.common.viz_utils import PAPER_FIGSIZE, apply_paper_style, make_legend_bold, set_log_timing_axis_limits, style_for
+from benchmarks.common.viz_utils import (
+    PAPER_FIGSIZE,
+    PAPER_SIDE_BY_SIDE_FIGSIZE,
+    apply_side_by_side_style,
+    make_legend_bold,
+    set_log_timing_axis_limits,
+    style_for,
+)
 from benchmarks.common.scenario_utils import (
     canonical_sphere_pair_paths,
     count_vertices,
@@ -43,8 +50,7 @@ RUNS_DIR = SCRIPT_DIR / "runs"
 SINGLE_OBJ_DIR = DATA_DIR / "single_obj_files"
 SPHERE_TEMPLATE_DIR = REPO_ROOT / "benchmarks" / "mesh_overlap" / "data" / "single_obj_files"
 SHARED_SCENARIO = "mesh_complexity"
-
-TIMEOUT_SECONDS = 3600.0  # Allow longer timeout for dense meshes
+DEFAULT_STAGES = list(range(1, 6))
 
 def run_experiment(runs, grid_cell_size, num_objects, selectivity, run_log_dir, approaches=None, timeout=3600.0):
     if approaches is None:
@@ -78,8 +84,7 @@ def run_experiment(runs, grid_cell_size, num_objects, selectivity, run_log_dir, 
         "tdbase": {"mean": [], "std": []},
     }
 
-    # Iterate over exactly 10 stages
-    for stage in range(1, 11):
+    for stage in DEFAULT_STAGES:
         template_name = f"Sphere_Stage_{stage}.obj"
         template_path = SPHERE_TEMPLATE_DIR / template_name
         
@@ -133,22 +138,22 @@ def run_experiment(runs, grid_cell_size, num_objects, selectivity, run_log_dir, 
         res_direct = {"error": "Skipped"}
         if "direct_estimation" in approaches:
             print("Running Selectivity Estimation Mode...")
-            res_direct = direct_estimation_adapter.run_overlap(str(file_a), str(file_b), runs, log_dir=str(run_log_dir), timeout=TIMEOUT_SECONDS)
+            res_direct = direct_estimation_adapter.run_overlap(str(file_a), str(file_b), runs, log_dir=str(run_log_dir), timeout=timeout)
         
         res_cgal = {"error": "Skipped"}
         if "cgal" in approaches:
             print("Running Face Mode...")
-            res_cgal = cgal_adapter.run_overlap(str(file_a), str(file_b), runs, log_dir=str(run_log_dir), timeout=TIMEOUT_SECONDS)
+            res_cgal = cgal_adapter.run_overlap(str(file_a), str(file_b), runs, log_dir=str(run_log_dir), timeout=timeout)
         
         res_touch = {"error": "Skipped"}
         if "touch" in approaches:
             print("Running TOUCH Mode...")
-            res_touch = touch_adapter.run_overlap(str(file_a), str(file_b), runs, log_dir=str(run_log_dir), timeout=TIMEOUT_SECONDS)
+            res_touch = touch_adapter.run_overlap(str(file_a), str(file_b), runs, log_dir=str(run_log_dir), timeout=timeout)
 
         res_tdbase = {"error": "Skipped"}
         if "tdbase" in approaches:
             print("Running TDBase...")
-            res_tdbase = tdbase_adapter.run_overlap(str(file_a), str(file_b), runs, log_dir=str(run_log_dir), timeout=TIMEOUT_SECONDS)
+            res_tdbase = tdbase_adapter.run_overlap(str(file_a), str(file_b), runs, log_dir=str(run_log_dir), timeout=timeout)
 
         # Handle errors gracefully
         for res in [res_exact, res_direct, res_cgal, res_touch, res_tdbase]:
@@ -192,12 +197,14 @@ def plot_results(results, num_objects, selectivity, figures_dir):
     if not complexities:
         return
 
-    apply_paper_style()
-    plt.figure(figsize=PAPER_FIGSIZE)
+    apply_side_by_side_style()
+    plt.figure(figsize=(6.2, 4.1))
     all_y_vals = []
 
     for key in ["exact", "direct_estimation", "cgal", "touch", "tdbase"]:
-        valid_indices = [i for i, m in enumerate(results[key]["mean"]) if m is not None]
+        if key not in results:
+            continue
+        valid_indices = [i for i, m in enumerate(results[key].get("mean", [])) if m is not None]
         if valid_indices:
             x_vals = [complexities[i] for i in valid_indices]
             means = [results[key]["mean"][i] for i in valid_indices]
@@ -207,30 +214,32 @@ def plot_results(results, num_objects, selectivity, figures_dir):
             plt.plot(
                 x_vals,
                 means,
-                f"-{st['marker']}",
+                linestyle="-",
+                marker=st.get("marker"),
                 label=st["label"],
                 color=st["color"],
             )
 
-    plt.xlabel('Mesh Complexity (Vertices per Mesh)')
-    plt.ylabel('Execution Time (ms) [Log Scale]')
+    plt.xlabel('Mesh Complexity (Vertices per Mesh)', fontsize=16)
+    plt.ylabel('Query Time (ms)', fontsize=16)
     plt.yscale('log')
+    plt.gca().tick_params(axis='both', labelsize=13)
     set_log_timing_axis_limits(plt.gca(), all_y_vals)
     plt.xscale('log') # Use log scale for complexity as well to spread points evenly
-    make_legend_bold(plt.gca())
+    make_legend_bold(plt.gca(), loc='upper left', fontsize=12)
     plt.grid(False)
     plt.tight_layout()
     output_path = figures_dir / "mesh_complexity_scalability.png"
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.savefig(output_path, dpi=300)
     pdf_path = str(output_path).replace('.png', '.pdf')
-    plt.savefig(pdf_path, bbox_inches='tight')
+    plt.savefig(pdf_path)
     print(f"Visualization saved to {output_path} and .pdf")
 
 def main():
     parser = argparse.ArgumentParser(description="Mesh Complexity Benchmark")
     parser.add_argument("--runs", type=int, default=3, help="Number of runs per method")
     parser.add_argument("--grid-cell-size", type=float, default=5.0, help="Grid resolution for RaySpace")
-    parser.add_argument("--num-objects", type=int, default=50000, help="Number of objects per dataset")
+    parser.add_argument("--num-objects", type=int, default=500, help="Number of objects per dataset")
     parser.add_argument("--selectivity", type=float, default=0.0005, help="Fixed selectivity target")
     parser.add_argument("--approaches", type=str, nargs="+", default=["exact", "direct_estimation", "cgal", "touch", "tdbase"], 
                         choices=["exact", "direct_estimation", "cgal", "touch", "tdbase"], help="Approaches to run")

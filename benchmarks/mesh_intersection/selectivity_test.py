@@ -8,6 +8,7 @@ REPO_ROOT = SCRIPT_DIR.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from benchmarks.common.scenario_utils import (
+    build_selectivity_sweep,
     canonical_cube_pair_paths,
     create_benchmark_run_layout,
     ensure_cube_pair_dataset,
@@ -19,7 +20,7 @@ from benchmarks.mesh_intersection.adapters.cgal_adapter import CGALIntersectionA
 from benchmarks.mesh_intersection.adapters.raytracer_adapter import RaytracerIntersectionAdapter
 
 
-SELECTIVITIES = [0.0001, 0.0005, 0.001, 0.005, 0.01]
+SELECTIVITIES = build_selectivity_sweep()
 NUM_CUBES = 50000
 MIN_SIZE = 1
 MAX_SIZE = 4

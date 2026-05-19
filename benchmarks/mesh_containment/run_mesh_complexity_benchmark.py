@@ -23,12 +23,13 @@ from benchmarks.mesh_containment.adapters.raytracer_adapter import RaytracerCont
 
 CGAL_BASE_DIR = REPO_ROOT / "baselines" / "RaySpace3DBaselines" / "CGAL"
 SPHERE_TEMPLATE_DIR = REPO_ROOT / "benchmarks" / "mesh_overlap" / "data" / "single_obj_files"
+DEFAULT_STAGES = list(range(1, 6))
 
 
 def main():
     parser = argparse.ArgumentParser(description="Mesh complexity benchmark for mesh containment")
-    parser.add_argument("--stages", type=int, nargs="+", default=list(range(1, 11)))
-    parser.add_argument("--num-objects", type=int, default=50000)
+    parser.add_argument("--stages", type=int, nargs="+", default=DEFAULT_STAGES)
+    parser.add_argument("--num-objects", type=int, default=500)
     parser.add_argument("--selectivity", type=float, default=0.0005)
     parser.add_argument("--min-size", type=float, default=1.0)
     parser.add_argument("--max-size", type=float, default=5.0)

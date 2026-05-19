@@ -13,6 +13,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
 from benchmarks.common.scenario_utils import (
+    build_selectivity_sweep,
     canonical_cube_pair_paths,
     compute_universe_for_selectivity,
     ensure_cube_pair_dataset,
@@ -28,7 +29,7 @@ from adapters.touch_adapter import TOUCHAdapter
 from visualize_selectivity_test import visualize_selectivity
 
 # Configuration
-SELECTIVITIES = [0.0001, 0.0005, 0.001, 0.005, 0.01]
+SELECTIVITIES = build_selectivity_sweep()
 NUM_CUBES = 50000
 MIN_SIZE = 1
 MAX_SIZE = 4

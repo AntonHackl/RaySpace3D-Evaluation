@@ -19,7 +19,9 @@ from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_
 from benchmarks.common.viz_utils import (
     PAPER_FIGSIZE,
     PAPER_WIDE_FIGSIZE,
+    PAPER_SIDE_BY_SIDE_FIGSIZE,
     apply_paper_style,
+    apply_side_by_side_style,
     make_legend_bold,
     set_log_timing_axis_limits,
     style_for,
@@ -300,6 +302,7 @@ def run_experiment(
              results["num_obj1"] = []
              results["num_obj2"] = []
              results["num_intersections"] = []
+             results["selectivity"] = []
              results["size_bytes1"] = []
              results["size_bytes2"] = []
              results["universe_extents1"] = []
@@ -311,7 +314,12 @@ def run_experiment(
             if "num_obj1" in res and res["num_obj1"] > 0:
                 results["num_obj1"].append(int(res["num_obj1"]))
                 results["num_obj2"].append(int(res["num_obj2"]))
-                results["num_intersections"].append(int(res.get("num_intersections", 0)))
+                num_intersections = int(res.get("num_intersections", 0))
+                results["num_intersections"].append(num_intersections)
+                cross_product_size = int(res["num_obj1"]) * int(res["num_obj2"])
+                results["selectivity"].append(
+                    (num_intersections / cross_product_size) if cross_product_size > 0 else 0.0
+                )
                 results["universe_extents1"].append(res.get("universe_extents1", [0.0, 0.0, 0.0]))
                 results["universe_extents2"].append(res.get("universe_extents2", [0.0, 0.0, 0.0]))
                 found_counts = True
@@ -321,6 +329,7 @@ def run_experiment(
             results["num_obj1"].append(0)
             results["num_obj2"].append(0)
             results["num_intersections"].append(0)
+            results["selectivity"].append(0.0)
             results["universe_extents1"].append([0.0, 0.0, 0.0])
             results["universe_extents2"].append([0.0, 0.0, 0.0])
 
@@ -474,22 +483,18 @@ def plot_results(results, figures_dir):
             )
             ax.plot([], [], linestyle=st.get("linestyle", "-"), marker=st.get("marker"), label=st["label"], color=st["color"])
 
-        ax.set_xlabel('Number of Nuclei')
-        ax.set_ylabel('Execution Time (ms) [Log Scale]')
+        ax.set_xlabel('Number of Nuclei', fontsize=16)
+        ax.set_ylabel('Query Time (ms)', fontsize=16)
         ax.set_yscale('log')
+        ax.tick_params(axis='both', labelsize=13)
         
         # Format X-axis with 'k' for thousands
         ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: f'{x/1e3:g}k' if x >= 1e3 else f'{x:g}'))
         
-        # Add secondary axis for selectivity
-        if any(x_sel_labels):
-            secax = ax.secondary_xaxis('top')
-            secax.set_xticks(x_vals)
-            secax.set_xticklabels(x_sel_labels, rotation=45, ha='left', fontsize=12)
-            secax.set_xlabel('Selectivity', fontsize=13, fontweight='bold', labelpad=10)
+        # Secondary axis for selectivity removed as requested
 
         set_log_timing_axis_limits(ax, all_y_vals)
-        make_legend_bold(ax)
+        make_legend_bold(ax, loc='center right', fontsize=12)
         ax.grid(False)
 
     # --- Plot 2: Breakdown Bar Chart ---
@@ -620,12 +625,13 @@ def plot_results(results, figures_dir):
                             if j == len(modes_to_plot) - 1 and phase == active_phases_ordered[-1]:
                                 sel = x_selectivities[i]
                                 if sel is not None:
-                                    ax.text(i, bottom + 5, f"sel={sel*100:.1e}%", ha='center', va='bottom', fontsize=11, fontweight='bold', rotation=90)
+                                    ax.text(i, bottom + 5, f"sel={sel*100:.1e}%", ha='center', va='bottom', fontsize=12, fontweight='bold', rotation=90)
 
         ax.set_xticks(x_indices)
         ax.set_xticklabels(x_labels)
-        ax.set_xlabel('Number of Nuclei')
-        ax.set_ylabel('Query Time (ms)')
+        ax.set_xlabel('Number of Nuclei', fontsize=16)
+        ax.set_ylabel('Query Time (ms)', fontsize=16)
+        ax.tick_params(axis='both', labelsize=13)
         ax.grid(False)
         for j, mode in enumerate(modes_to_plot):
             x_annot = 0 - group_width/2 + (j + 0.5) * mode_width
@@ -636,7 +642,7 @@ def plot_results(results, figures_dir):
                 ha='center',
                 va='top',
                 transform=ax.get_xaxis_transform(),
-                fontsize=13,
+                fontsize=14,
                 fontweight='bold',
                 color="#444444",
             )
@@ -649,13 +655,13 @@ def plot_results(results, figures_dir):
                 legend_labels,
                 bbox_to_anchor=(1.02, 1),
                 loc='upper left',
-                fontsize=12,
+                fontsize=13,
                 ncol=1,
                 frameon=True,
             )
 
     # 1. Generate Combined Figure
-    apply_paper_style()
+    apply_side_by_side_style()
     fig, (ax_main, ax_breakdown) = plt.subplots(1, 2, figsize=PAPER_FIGSIZE)
     generate_scaling_plot(ax_main, results, counts)
     generate_breakdown_plot(ax_breakdown, results, counts)
@@ -667,13 +673,13 @@ def plot_results(results, figures_dir):
     plt.close(fig)
 
     # 2. Generate Separate Scaling Figure
-    apply_paper_style()
-    fig_scaling, ax_scaling = plt.subplots(figsize=PAPER_FIGSIZE)
+    apply_side_by_side_style()
+    fig_scaling, ax_scaling = plt.subplots(figsize=(6.2, 4.1))
     generate_scaling_plot(ax_scaling, results, counts)
     plt.tight_layout()
     scaling_path = figures_dir / "mesh_overlap_nu_scalability_scaling.png"
-    plt.savefig(scaling_path, dpi=300, bbox_inches='tight')
-    plt.savefig(str(scaling_path).replace('.png', '.pdf'), bbox_inches='tight')
+    plt.savefig(scaling_path, dpi=300)
+    plt.savefig(str(scaling_path).replace('.png', '.pdf'))
     print(f"Scaling visualization saved to {scaling_path}")
     plt.close(fig_scaling)
 

@@ -294,12 +294,13 @@ def generate_query_comparison_figures(
             linewidth=0.6,
         )
 
-        ax.set_xlabel(x_axis_label)
-    ax.set_ylabel("Query time (ms)")
+        ax.set_xlabel(x_axis_label, fontsize=16)
+    ax.set_ylabel("Query time (ms)", fontsize=16)
     ax.set_xticks(x)
     ax.set_xticklabels(case_labels, rotation=20, ha="right")
+    ax.tick_params(axis="both", labelsize=13)
     ax.grid(False)
-    make_legend_bold(ax)
+    make_legend_bold(ax, fontsize=13)
     fig.tight_layout()
     fig.savefig(figures_dir / "query_time_comparison.png", dpi=180)
     fig.savefig(figures_dir / "query_time_comparison.pdf")
@@ -346,17 +347,18 @@ def generate_query_comparison_figures(
                 )
                 bottoms[:, q_idx] += vals
 
-        ax.set_xlabel(x_axis_label)
-    ax.set_ylabel("Breakdown time (ms)")
+        ax.set_xlabel(x_axis_label, fontsize=16)
+    ax.set_ylabel("Breakdown time (ms)", fontsize=16)
     ax.set_xticks(x)
     ax.set_xticklabels(case_labels, rotation=20, ha="right")
+    ax.tick_params(axis="both", labelsize=13)
     ax.grid(False)
-    make_legend_bold(ax, loc="upper right", fontsize=12, title="Phases")
+    make_legend_bold(ax, loc="upper right", fontsize=13, title="Phases")
 
     # Add annotation for query order
     query_order_str = " | ".join([f"{q[0].upper()}: {q}" for q in queries])
     ax.text(0.5, -0.22, f"Queries in each group: {query_order_str}",
-            transform=ax.transAxes, ha='center', fontsize=13, fontweight='bold')
+            transform=ax.transAxes, ha='center', fontsize=14, fontweight='bold')
 
     fig.tight_layout()
     fig.savefig(figures_dir / "query_time_breakdown_comparison.png", dpi=180)
@@ -392,12 +394,13 @@ def generate_query_comparison_figures(
             )
             bottoms += vals
 
-        ax.set_xlabel(x_axis_label)
-        ax.set_ylabel("Time (ms)")
+        ax.set_xlabel(x_axis_label, fontsize=16)
+        ax.set_ylabel("Time (ms)", fontsize=16)
         ax.set_xticks(x)
         ax.set_xticklabels(case_labels, rotation=20, ha="right")
+        ax.tick_params(axis="both", labelsize=13)
         ax.grid(False)
-        make_legend_bold(ax, loc="upper right", fontsize=12)
+        make_legend_bold(ax, loc="upper right", fontsize=13)
         fig.tight_layout()
         safe_query = sanitize_case_token(query)
         fig.savefig(figures_dir / f"breakdown_{safe_query}.png", dpi=180)

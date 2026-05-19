@@ -84,3 +84,4 @@ datasets_scripts/modelnet_data/
 modelnet_data/
 
 tmp/
+runs/

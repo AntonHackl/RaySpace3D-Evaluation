@@ -2,6 +2,11 @@
 from __future__ import annotations
 
 import shutil
+import argparse
+import subprocess
+import os
+import sys
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,6 +21,8 @@ class FigureSpec:
     runs_dir: Path
     run_prefix: str
     source_pattern: str
+    revisualize_script: Path | None = None
+    required_dataset_profile: str | None = None
 
 
 FIGURES = [
@@ -24,18 +31,22 @@ FIGURES = [
         runs_dir=SCRIPT_DIR / "mesh_overlap" / "runs",
         run_prefix="overlap_mesh_complexity_",
         source_pattern="figures/mesh_complexity_scalability.pdf",
+        revisualize_script=SCRIPT_DIR / "mesh_overlap" / "run_mesh_complexity_benchmark.py",
     ),
     FigureSpec(
         output_name="mesh_overlap_nu_scalability_scaling.pdf",
         runs_dir=SCRIPT_DIR / "mesh_overlap" / "runs",
         run_prefix="overlap_nu_scalability_",
         source_pattern="figures/mesh_overlap_nu_scalability_scaling.pdf",
+        revisualize_script=SCRIPT_DIR / "mesh_overlap" / "run_nu_scalability.py",
+        required_dataset_profile="large_nu_v",
     ),
     FigureSpec(
         output_name="mesh_overlap_overall_performance.pdf",
         runs_dir=SCRIPT_DIR / "mesh_overlap" / "runs",
         run_prefix="overlap_overall_performance_",
         source_pattern="figures/mesh_overlap_overall_performance_*.pdf",
+        revisualize_script=SCRIPT_DIR / "mesh_overlap" / "plot_overall_performance.py",
     ),
     FigureSpec(
         output_name="mesh_query_comparison_overall_performance.pdf",
@@ -44,21 +55,16 @@ FIGURES = [
         source_pattern="figures/mesh_query_comparison_overall_performance_*.pdf",
     ),
     FigureSpec(
-        output_name="nu_scalability_query_time_comparison.pdf",
-        runs_dir=SCRIPT_DIR / "mesh_query_comparison" / "runs",
-        run_prefix="query_comparison_nu_scalability_",
-        source_pattern="figures/query_time_comparison.pdf",
-    ),
-    FigureSpec(
         output_name="overlap_selectivity_scaling.pdf",
         runs_dir=SCRIPT_DIR / "mesh_overlap" / "runs",
         run_prefix="overlap_selectivity_",
         source_pattern="figures/selectivity_scaling.pdf",
+        revisualize_script=SCRIPT_DIR / "mesh_overlap" / "visualize_selectivity_test.py",
     ),
 ]
 
 
-def newest_matching_pdf(spec: FigureSpec) -> Path:
+def newest_matching_files(spec: FigureSpec) -> tuple[Path, Path | None, Path | None]:
     candidate_runs = sorted(
         (
             path
@@ -69,9 +75,34 @@ def newest_matching_pdf(spec: FigureSpec) -> Path:
     )
 
     for run_dir in candidate_runs:
+        results_json = run_dir / "results.json"
+        if spec.required_dataset_profile is not None:
+            if not results_json.exists():
+                continue
+            try:
+                payload = json.loads(results_json.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            dataset_profile = (payload.get("metadata") or {}).get("dataset_profile")
+            if dataset_profile != spec.required_dataset_profile:
+                continue
+
+        # For overall performance, the pattern matches a file in figures/
         matches = sorted(run_dir.glob(spec.source_pattern))
         if matches:
-            return matches[-1]
+            pdf_path = matches[-1]
+            # Try to find matching png
+            png_path = pdf_path.with_suffix(".png")
+            if not png_path.exists():
+                # Try glob if filename differs by more than suffix (e.g. if source_pattern had a wildcard)
+                png_matches = sorted(run_dir.glob(spec.source_pattern.replace(".pdf", ".png")))
+                if png_matches:
+                    png_path = png_matches[-1]
+                else:
+                    png_path = None
+            
+            actual_results = results_json if results_json.exists() else None
+            return pdf_path, png_path, actual_results
 
     raise FileNotFoundError(
         f"No PDF matching {spec.source_pattern!r} found in runs with prefix "
@@ -80,18 +111,72 @@ def newest_matching_pdf(spec: FigureSpec) -> Path:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Fetch latest benchmark figures.")
+    parser.add_argument("--revisualize", action="store_true", help="Re-generate plots from results.json before fetching.")
+    args = parser.parse_args()
+
     EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 
-    copied = []
-    for spec in FIGURES:
-        source = newest_matching_pdf(spec)
-        target = EXPORT_DIR / spec.output_name
-        shutil.copy2(source, target)
-        copied.append((target, source))
+    # Set up environment for subprocesses
+    env = os.environ.copy()
+    repo_root = SCRIPT_DIR.parent
+    if "PYTHONPATH" in env:
+        env["PYTHONPATH"] = f"{repo_root}:{env['PYTHONPATH']}"
+    else:
+        env["PYTHONPATH"] = str(repo_root)
 
-    print(f"Copied {len(copied)} figures to {EXPORT_DIR}")
-    for target, source in copied:
-        print(f"{target.name} <- {source}")
+    if args.revisualize:
+        print("Re-visualizing latest results...")
+        seen_scripts = set()
+        for spec in FIGURES:
+            if spec.revisualize_script and spec.revisualize_script.exists():
+                try:
+                    pdf, png, results = newest_matching_files(spec)
+                    
+                    # Special case for plot_overall_performance which takes no args
+                    if "plot_overall_performance.py" in spec.revisualize_script.name:
+                        if spec.revisualize_script not in seen_scripts:
+                            print(f"Running {spec.revisualize_script.name}...")
+                            subprocess.run([sys.executable, str(spec.revisualize_script)], env=env, check=True)
+                            seen_scripts.add(spec.revisualize_script)
+                        continue
+
+                    if not results:
+                        print(f"Warning: No results.json found for {spec.output_name}, skipping revisualization.")
+                        continue
+                    
+                    cmd = [sys.executable, str(spec.revisualize_script)]
+                    if "visualize_selectivity_test.py" in spec.revisualize_script.name:
+                        cmd.append(str(results))
+                    else:
+                        cmd.extend(["--revisualize", str(results)])
+                    
+                    print(f"Running: {' '.join(cmd)}")
+                    subprocess.run(cmd, env=env, check=True)
+                except Exception as e:
+                    print(f"Error revisualizing {spec.output_name}: {e}")
+
+    copied_count = 0
+    for spec in FIGURES:
+        try:
+            source_pdf, source_png, _ = newest_matching_files(spec)
+            
+            # Copy PDF
+            target_pdf = EXPORT_DIR / spec.output_name
+            shutil.copy2(source_pdf, target_pdf)
+            print(f"{target_pdf.name} <- {source_pdf}")
+            copied_count += 1
+            
+            # Copy PNG if exists
+            if source_png and source_png.exists():
+                target_png = EXPORT_DIR / f"_{spec.output_name.replace('.pdf', '.png')}"
+                shutil.copy2(source_png, target_png)
+                print(f"{target_png.name} <- {source_png}")
+                copied_count += 1
+        except FileNotFoundError as e:
+            print(f"Skipping {spec.output_name}: {e}")
+
+    print(f"Copied {copied_count} files to {EXPORT_DIR}")
     return 0
 
 

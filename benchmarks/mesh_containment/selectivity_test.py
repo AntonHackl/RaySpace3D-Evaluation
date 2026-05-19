@@ -9,6 +9,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from benchmarks.common.scenario_utils import (
     RAYSPACE_DIR,
+    build_selectivity_sweep,
     canonical_cube_pair_paths,
     compute_universe_for_selectivity,
     create_benchmark_run_layout,
@@ -24,7 +25,7 @@ RESULTS_DIR = SCRIPT_DIR / "results"
 CGAL_BASE_DIR = REPO_ROOT / "baselines" / "RaySpace3DBaselines" / "CGAL"
 
 
-DEFAULT_SELECTIVITIES = [0.0001, 0.0005, 0.001, 0.005, 0.01]
+DEFAULT_SELECTIVITIES = build_selectivity_sweep()
 
 
 def main():

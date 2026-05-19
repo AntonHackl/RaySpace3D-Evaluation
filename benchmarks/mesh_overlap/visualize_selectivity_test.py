@@ -8,7 +8,7 @@ import json
 import argparse
 import re
 import matplotlib.pyplot as plt
-from benchmarks.common.viz_utils import PAPER_FIGSIZE, PAPER_WIDE_FIGSIZE, apply_paper_style, make_legend_bold, plot_mean_series, style_for
+from benchmarks.common.viz_utils import PAPER_FIGSIZE, PAPER_WIDE_FIGSIZE, PAPER_SIDE_BY_SIDE_FIGSIZE, apply_side_by_side_style, make_legend_bold, plot_mean_series, style_for, set_log_timing_axis_limits
 import numpy as np
 from pathlib import Path
 
@@ -148,8 +148,8 @@ def visualize_selectivity(summary_file, output_path=None):
         num_cubes_str = f" ({num_cubes} cubes)"
 
     # --- Plot 1: Scaling Line Plot ---
-    apply_paper_style()
-    fig_main, ax_main = plt.subplots(figsize=PAPER_FIGSIZE)
+    apply_side_by_side_style()
+    fig_main, ax_main = plt.subplots(figsize=PAPER_SIDE_BY_SIDE_FIGSIZE)
     ax_mem = ax_main.twinx()
     plot_mean_series(ax_main, valid_selectivities, exact_means, "exact")
     
@@ -169,7 +169,7 @@ def visualize_selectivity(summary_file, output_path=None):
         
         st_td = style_for("tdbase")
         ax_main.errorbar(td_sel, td_means, label=st_td["label"],
-                    marker=st_td["marker"], capsize=5, linestyle=st_td.get("linestyle", "-."), color=st_td["color"])
+                    marker='o', capsize=5, linestyle=st_td.get("linestyle", "-."), color=st_td["color"])
 
     if any(x is not None for x in cgal_means):
         cgal_sel = [s for s, m in zip(valid_selectivities, cgal_means) if m is not None]
@@ -187,28 +187,27 @@ def visualize_selectivity(summary_file, output_path=None):
 
     ax_main.set_xscale('log')
     ax_main.set_yscale('log')
-    ax_main.set_xlabel('Selectivity (Log Scale)')
-    ax_main.set_ylabel('Query Time (ms) [Log Scale]')
+    ax_main.set_xlabel('Selectivity')
+    ax_main.set_ylabel('Query Time (ms)')
+    set_log_timing_axis_limits(ax_main, exact_means + (est_means if any(x is not None for x in est_means) else []) + (tdbase_means if any(x is not None for x in tdbase_means) else []))
 
     mem_plotted = False
-    memory_color = "#ff7f0e" # Distinct orange for all memory lines
+    memory_color = "#ff7f0e"
     if any(v is not None for v in exact_mem_gib):
         x = [s for s, v in zip(valid_selectivities, exact_mem_gib) if v is not None]
         y = [v for v in exact_mem_gib if v is not None]
-        st = style_for("exact")
-        ax_mem.plot(x, y, linestyle=st.get("linestyle", "--"), marker=None, color=memory_color, label='Exact Memory')
+        ax_mem.plot(x, y, label="Exact Memory", color=memory_color, linestyle="-", marker="o", markersize=6)
         mem_plotted = True
-
+    
     if any(v is not None for v in direct_est_mem_gib):
         x = [s for s, v in zip(valid_selectivities, direct_est_mem_gib) if v is not None]
         y = [v for v in direct_est_mem_gib if v is not None]
-        st = style_for("direct_estimation")
-        ax_mem.plot(x, y, linestyle=st.get("linestyle", "--"), marker=None, color=memory_color, label='Selectivity Estimation Memory')
+        ax_mem.plot(x, y, label="Selectivity Estimation Memory", color=memory_color, linestyle="--", marker="o", markersize=6)
         mem_plotted = True
 
     if mem_plotted:
         ax_mem.set_yscale('log')
-        ax_mem.set_ylabel('Allocated Memory (GiB) [Log Scale]')
+        ax_mem.set_ylabel('Allocated Memory (GiB)', labelpad=15)
 
     ax_main.grid(False, which="both")
     ax_mem.grid(False, which="both")
@@ -218,9 +217,28 @@ def visualize_selectivity(summary_file, output_path=None):
     ax_mem.yaxis.grid(False, which="both")
     h1, l1 = ax_main.get_legend_handles_labels()
     h2, l2 = ax_mem.get_legend_handles_labels()
-    legend = ax_main.legend(h1 + h2, l1 + l2, fontsize=14)
-    for text in legend.get_texts():
-        text.set_fontweight("bold")
+    
+    # Use 'o' for all main plot lines
+    for line in ax_main.get_lines():
+        line.set_marker('o')
+    
+    all_handles = h1 + h2
+    all_labels = l1 + l2
+    
+    # Rename Pierce to Pierce (Selectivity Estimation) specifically for this plot's legend
+    all_labels = [label if label != "Pierce" else "Pierce (Selectivity Estimation)" for label in all_labels]
+    
+    legend = make_legend_bold(ax_main, all_handles, all_labels, loc='upper left', ncol=1, fontsize=9)
+    
+    # Hide markers in legend handles ONLY (so they still appear on the plot)
+    for h in legend.legend_handles:
+        if hasattr(h, 'set_marker'):
+            h.set_marker("")
+        # For errorbars in legend
+        if hasattr(h, 'get_children'):
+            for child in h.get_children():
+                if hasattr(child, 'set_marker'):
+                    child.set_marker("")
 
     # Annotate improvement factor
     for sl, ex, est in zip(valid_selectivities, exact_means, est_means):
