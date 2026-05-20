@@ -27,8 +27,15 @@ from benchmarks.common.scenario_utils import (
     get_shared_data_dirs,
     write_json,
 )
+from benchmarks.common.adapters.tdbase_common import (
+    TDBASE_TIMING_MODE_INDEX_COMPUTE_EVALUATE,
+    TDBASE_TIMING_MODES,
+)
 from benchmarks.mesh_overlap.adapters.raytracer_adapter import RaytracerAdapter
+from benchmarks.mesh_overlap.adapters.tdbase_adapter import TDBaseAdapter
 from benchmarks.mesh_overlap.adapters.base import run_command_streaming
+
+TDBASE_DIR = REPO_ROOT / "baselines" / "RaySpace3DBaselines" / "tdbase"
 
 
 @dataclass(frozen=True)
@@ -36,6 +43,9 @@ class DatasetRow:
     dataset_id: str
     source_path: Path
     grid_cell_size: float
+
+
+TDBASE_ELIGIBLE_DATASETS = {"Nuclei_1", "Nuclei_2", "Vessel_1"}
 
 
 def _ts() -> str:
@@ -219,6 +229,94 @@ def _run_join_and_parse_loading(
     raise RuntimeError(f"Join failed for {case_name}. Attempts: {' | '.join(attempted_errors)}")
 
 
+def _tdbase_preprocessed_path(preprocessed_dir: Path, source_path: Path) -> Path:
+    return preprocessed_dir / source_path.with_suffix(".dt").name
+
+
+def _run_tdbase_preprocess(
+    *,
+    dataset: DatasetRow,
+    adapter: TDBaseAdapter,
+    logs_dir: Path,
+) -> Dict[str, float | str]:
+    _log(f"[tdbase-preprocess:{dataset.dataset_id}] START source={dataset.source_path}")
+    t0 = time.time()
+    adapter.preprocess_from_source(str(dataset.source_path), str(dataset.source_path), log_dir=str(logs_dir))
+    elapsed_ms = (time.time() - t0) * 1000.0
+    dt_path = _tdbase_preprocessed_path(adapter.preprocessed_dir, dataset.source_path)
+    if not dt_path.exists():
+        raise RuntimeError(f"TDBase preprocessed dataset missing for {dataset.dataset_id}: {dt_path}")
+    _log(
+        f"[tdbase-preprocess:{dataset.dataset_id}] finished elapsed_ms={elapsed_ms:.2f} "
+        f"output={dt_path}"
+    )
+    return {
+        "preprocess_ms": elapsed_ms,
+        "preprocessed_path": str(dt_path),
+    }
+
+
+def _run_tdbase_and_parse_loading(
+    *,
+    dataset: DatasetRow,
+    adapter: TDBaseAdapter,
+    logs_dir: Path,
+) -> Dict[str, float | str]:
+    case_name = f"tdbase_self_{dataset.dataset_id.lower()}"
+    _log(f"[tdbase-load:{dataset.dataset_id}] START self-join source={dataset.source_path}")
+    result = adapter.run_overlap(
+        str(dataset.source_path),
+        str(dataset.source_path),
+        num_runs=1,
+        timeout=1200.0,
+        log_dir=str(logs_dir / case_name),
+    )
+    if "error" in result:
+        raise RuntimeError(f"TDBase run failed for {dataset.dataset_id}: {result['error']}")
+
+    run_log = logs_dir / case_name / adapter.name / "run_000.log"
+    if not run_log.exists():
+        raise RuntimeError(f"TDBase run log missing for {dataset.dataset_id}: {run_log}")
+
+    if not result.get("run_metrics"):
+        raise RuntimeError(f"TDBase metrics missing for {dataset.dataset_id}")
+
+    metrics = result["run_metrics"][0]
+    total_ms = float(metrics["total_ms"])
+    load_tiles_ms = float(metrics["load_tiles_ms"])
+    index_ms = float(metrics["index_ms"])
+    decode_ms = float(metrics["decode_ms"])
+    prepare_ms = float(metrics["prepare_ms"])
+    compute_ms = float(metrics["compute_ms"])
+    evaluate_ms = float(metrics["evaluate_ms"])
+    other_ms = float(metrics["other_ms"])
+    total_loading_ms = float(metrics["loading_ms"])
+    # Self-join processes the same dataset twice; store the per-dataset loading cost.
+    load_ms = total_loading_ms / 2.0
+    _log(
+        f"[tdbase-load:{dataset.dataset_id}] finished total_ms={total_ms:.2f} "
+        f"load_tiles_ms={load_tiles_ms:.2f} index_ms={index_ms:.2f} "
+        f"decode_ms={decode_ms:.2f} prepare_ms={prepare_ms:.2f} "
+        f"evaluate_ms={evaluate_ms:.2f} compute_ms={compute_ms:.2f} other_ms={other_ms:.2f} "
+        f"total_loading_ms={total_loading_ms:.2f} "
+        f"per_dataset_loading_ms={load_ms:.2f} log={run_log}"
+    )
+    return {
+        "loading_ms": load_ms,
+        "total_ms": total_ms,
+        "load_tiles_ms": load_tiles_ms,
+        "index_ms": index_ms,
+        "decode_ms": decode_ms,
+        "prepare_ms": prepare_ms,
+        "evaluate_ms": evaluate_ms,
+        "compute_ms": compute_ms,
+        "other_ms": other_ms,
+        "total_loading_ms": total_loading_ms,
+        "run_log": str(run_log),
+        "mean_query_preprocessing_ms": float(result.get("mean_preprocessing", 0.0)),
+    }
+
+
 def _build_latex_table(rows: List[Dict[str, object]]) -> str:
     def _latex_escape(text: object) -> str:
         s = str(text)
@@ -303,6 +401,13 @@ def main() -> None:
     parser.add_argument("--nu", type=int, default=400, help="NU count used for large_nu_v/large_nu_nn overall benchmark point")
     parser.add_argument("--microns-size-gb", type=int, default=4, help="MICrONS size used in overall benchmark point")
     parser.add_argument("--cube-count-b", type=int, default=1000000, help="Cubes count for dataset B used in overall benchmark point")
+    parser.add_argument(
+        "--tdbase-timing-mode",
+        type=str,
+        default=TDBASE_TIMING_MODE_INDEX_COMPUTE_EVALUATE,
+        choices=TDBASE_TIMING_MODES,
+        help="TDBase query-time definition for overlap runs. Loading-column extraction is unaffected.",
+    )
     args = parser.parse_args()
     _log(
         f"dataset benchmark start nu={args.nu} microns_size_gb={args.microns_size_gb} "
@@ -373,6 +478,36 @@ def main() -> None:
             logs_dir=logs_dir,
         )
     _log("=== Stage complete: preprocessing ===")
+
+    tdbase_adapter = TDBaseAdapter(
+        str(TDBASE_DIR),
+        preprocessed_dir=str(dataset_dirs["preprocessed"]),
+        query_timing_mode=args.tdbase_timing_mode,
+    )
+    tdbase_preprocess_stats: Dict[str, Dict[str, float | str]] = {}
+    tdbase_loading_stats: Dict[str, Dict[str, float | str]] = {}
+
+    _log("=== Stage: TDBase preprocessing for eligible datasets ===")
+    for ds in datasets:
+        if ds.dataset_id not in TDBASE_ELIGIBLE_DATASETS:
+            continue
+        tdbase_preprocess_stats[ds.dataset_id] = _run_tdbase_preprocess(
+            dataset=ds,
+            adapter=tdbase_adapter,
+            logs_dir=logs_dir,
+        )
+    _log("=== Stage complete: TDBase preprocessing ===")
+
+    _log("=== Stage: TDBase loading extraction for eligible datasets ===")
+    for ds in datasets:
+        if ds.dataset_id not in TDBASE_ELIGIBLE_DATASETS:
+            continue
+        tdbase_loading_stats[ds.dataset_id] = _run_tdbase_and_parse_loading(
+            dataset=ds,
+            adapter=tdbase_adapter,
+            logs_dir=logs_dir,
+        )
+    _log("=== Stage complete: TDBase loading extraction ===")
 
     loading_ms: Dict[str, float] = {}
     join_logs: Dict[str, str] = {}
@@ -446,11 +581,29 @@ def main() -> None:
                 "objects": int(stats["objects"]),
                 "triangles": int(stats["triangles"]),
                 "preprocess_pierce_ms": float(stats["preprocess_ms"]),
-                "preprocess_tdbase_ms": None,
+                "preprocess_tdbase_ms": (
+                    float(tdbase_preprocess_stats[ds.dataset_id]["preprocess_ms"])
+                    if ds.dataset_id in tdbase_preprocess_stats
+                    else None
+                ),
                 "loading_pierce_ms": float(loading_ms.get(ds.dataset_id, 0.0)),
-                "loading_tdbase_ms": None,
+                "loading_tdbase_ms": (
+                    float(tdbase_loading_stats[ds.dataset_id]["loading_ms"])
+                    if ds.dataset_id in tdbase_loading_stats
+                    else None
+                ),
                 "preprocess_log": stats["log_path"],
                 "preprocess_timing_json": stats["timing_path"],
+                "preprocess_tdbase_path": (
+                    tdbase_preprocess_stats[ds.dataset_id]["preprocessed_path"]
+                    if ds.dataset_id in tdbase_preprocess_stats
+                    else None
+                ),
+                "tdbase_run_log": (
+                    tdbase_loading_stats[ds.dataset_id]["run_log"]
+                    if ds.dataset_id in tdbase_loading_stats
+                    else None
+                ),
             }
         )
 
@@ -467,6 +620,7 @@ def main() -> None:
             "nu": args.nu,
             "microns_size_gb": args.microns_size_gb,
             "cube_count_b": args.cube_count_b,
+            "tdbase_timing_mode": args.tdbase_timing_mode,
             "grid_sizes": {"nu": 200.0, "microns": 700.0, "cubes": 5.0},
             "join_logs": join_logs,
             "latex_table_path": str(latex_path),

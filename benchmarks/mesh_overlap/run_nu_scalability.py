@@ -40,6 +40,10 @@ from adapters.raytracer_adapter import RaytracerAdapter
 from adapters.cgal_adapter import CGALAdapter
 from adapters.touch_adapter import TOUCHAdapter
 from adapters.tdbase_adapter import TDBaseAdapter
+from benchmarks.common.adapters.tdbase_common import (
+    TDBASE_TIMING_MODE_INDEX_COMPUTE_EVALUATE,
+    TDBASE_TIMING_MODES,
+)
 
 # Configuration
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -97,6 +101,7 @@ def run_experiment(
     track_hash_contention=False,
     timeout=120.0,
     dataset_profile="standard",
+    tdbase_timing_mode=TDBASE_TIMING_MODE_INDEX_COMPUTE_EVALUATE,
 ):
     if approaches is None:
         approaches = ["exact", "direct_estimation", "cgal", "touch", "tdbase"]
@@ -167,7 +172,8 @@ def run_experiment(
 
     tdbase_adapter = TDBaseAdapter(
         str(TDBASE_DIR),
-        preprocessed_dir=str(PREPROCESSED_DIR)
+        preprocessed_dir=str(PREPROCESSED_DIR),
+        query_timing_mode=tdbase_timing_mode,
     )
     
     results = {
@@ -704,6 +710,13 @@ def main():
     parser.add_argument("--timeout", type=float, default=1200.0, help="Timeout in seconds per run")
     parser.add_argument("--revisualize", type=str, help="Path to results.json to re-generate plots from")
     parser.add_argument(
+        "--tdbase-timing-mode",
+        type=str,
+        default=TDBASE_TIMING_MODE_INDEX_COMPUTE_EVALUATE,
+        choices=TDBASE_TIMING_MODES,
+        help="TDBase query-time definition. Default uses index+compute+evaluate; use compute_only to revert.",
+    )
+    parser.add_argument(
         "--dataset-profile",
         type=str,
         choices=["standard", "large_nu_v", "large_nu_nn"],
@@ -735,6 +748,7 @@ def main():
         track_hash_contention=args.track_hash_contention,
         timeout=args.timeout,
         dataset_profile=args.dataset_profile,
+        tdbase_timing_mode=args.tdbase_timing_mode,
     )
     
     if results and results["counts"]:
@@ -781,6 +795,7 @@ def main():
                     "nu_counts": nu_counts,
                     "timeout": args.timeout,
                     "dataset_profile": args.dataset_profile,
+                    "tdbase_timing_mode": args.tdbase_timing_mode,
                 },
                 "results": clean_results,
             },

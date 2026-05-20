@@ -175,6 +175,29 @@ def main() -> int:
                 copied_count += 1
         except FileNotFoundError as e:
             print(f"Skipping {spec.output_name}: {e}")
+    # Also copy the latest dataset_table.tex from the dataset benchmark run
+    try:
+        dataset_runs_dir = SCRIPT_DIR / "dataset_benchmark" / "runs"
+        if dataset_runs_dir.exists():
+            candidate_runs = sorted(
+                (
+                    path
+                    for path in dataset_runs_dir.iterdir()
+                    if path.is_dir() and path.name.startswith("dataset_table_benchmark_")
+                ),
+                reverse=True,
+            )
+
+            for run_dir in candidate_runs:
+                table_path = run_dir / "dataset_table.tex"
+                if table_path.exists():
+                    target_table = EXPORT_DIR / "dataset_table.tex"
+                    shutil.copy2(table_path, target_table)
+                    print(f"{target_table.name} <- {table_path}")
+                    copied_count += 1
+                    break
+    except Exception as e:
+        print(f"Skipping dataset_table.tex: {e}")
 
     print(f"Copied {copied_count} files to {EXPORT_DIR}")
     return 0

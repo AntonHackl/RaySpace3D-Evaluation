@@ -28,6 +28,10 @@ from adapters.raytracer_adapter import RaytracerAdapter
 from adapters.cgal_adapter import CGALAdapter
 from adapters.touch_adapter import TOUCHAdapter
 from adapters.tdbase_adapter import TDBaseAdapter
+from benchmarks.common.adapters.tdbase_common import (
+    TDBASE_TIMING_MODE_INDEX_COMPUTE_EVALUATE,
+    TDBASE_TIMING_MODES,
+)
 
 # Configuration
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -58,7 +62,16 @@ def resolve_nn_dataset_pair(raw_shared_dir: Path, nu: int):
     )
     return n_file1, n_file2
 
-def run_experiment(runs, grid_cell_size, nu_counts, run_log_dir, approaches=None, track_hash_contention=False, timeout=120.0):
+def run_experiment(
+    runs,
+    grid_cell_size,
+    nu_counts,
+    run_log_dir,
+    approaches=None,
+    track_hash_contention=False,
+    timeout=120.0,
+    tdbase_timing_mode=TDBASE_TIMING_MODE_INDEX_COMPUTE_EVALUATE,
+):
     if approaches is None:
         approaches = ["exact", "direct_estimation", "cgal", "touch", "tdbase"]
     
@@ -111,7 +124,8 @@ def run_experiment(runs, grid_cell_size, nu_counts, run_log_dir, approaches=None
 
     tdbase_adapter = TDBaseAdapter(
         str(TDBASE_DIR),
-        preprocessed_dir=str(PREPROCESSED_DIR)
+        preprocessed_dir=str(PREPROCESSED_DIR),
+        query_timing_mode=tdbase_timing_mode,
     )
     
     results = {
@@ -551,6 +565,13 @@ def main():
     parser.add_argument("--track-hash-contention", action="store_true", help="Enable direct-estimation hash contention tracking")
     parser.add_argument("--timeout", type=float, default=1200.0, help="Timeout in seconds per run")
     parser.add_argument("--revisualize", type=str, help="Path to results.json to re-generate plots from")
+    parser.add_argument(
+        "--tdbase-timing-mode",
+        type=str,
+        default=TDBASE_TIMING_MODE_INDEX_COMPUTE_EVALUATE,
+        choices=TDBASE_TIMING_MODES,
+        help="TDBase query-time definition. Default uses index+compute+evaluate; use compute_only to revert.",
+    )
     args = parser.parse_args()
     
     if args.revisualize:
@@ -575,6 +596,7 @@ def main():
         approaches=args.approaches,
         track_hash_contention=args.track_hash_contention,
         timeout=args.timeout,
+        tdbase_timing_mode=args.tdbase_timing_mode,
     )
     
     if results and results["counts"]:
@@ -620,6 +642,7 @@ def main():
                     "grid_cell_size": args.grid_cell_size,
                     "nu_counts": nu_counts,
                     "timeout": args.timeout,
+                    "tdbase_timing_mode": args.tdbase_timing_mode,
                 },
                 "results": clean_results,
             },

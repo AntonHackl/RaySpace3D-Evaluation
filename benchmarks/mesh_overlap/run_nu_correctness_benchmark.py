@@ -16,6 +16,10 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
 from benchmarks.common.viz_utils import style_for
+from benchmarks.common.adapters.tdbase_common import (
+    TDBASE_TIMING_MODE_INDEX_COMPUTE_EVALUATE,
+    TDBASE_TIMING_MODES,
+)
 
 sys.path.append(str(SCRIPT_DIR))
 from adapters.raytracer_adapter import RaytracerAdapter
@@ -308,7 +312,13 @@ def plot_runtime_lines(results: Dict[str, object], output_path: Path) -> None:
     plt.close()
 
 
-def run_experiment(runs: int, grid_cell_size: int, nu_counts: List[int], run_layout) -> Dict[str, object]:
+def run_experiment(
+    runs: int,
+    grid_cell_size: int,
+    nu_counts: List[int],
+    run_layout,
+    tdbase_timing_mode: str = TDBASE_TIMING_MODE_INDEX_COMPUTE_EVALUATE,
+) -> Dict[str, object]:
     PROJECT_TMP_DIR.mkdir(parents=True, exist_ok=True)
     PREPROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     TIMINGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -341,7 +351,11 @@ def run_experiment(runs: int, grid_cell_size: int, nu_counts: List[int], run_lay
         grid_cell_size=grid_cell_size,
         warmup_runs=1,
     )
-    tdbase_adapter = TDBaseAdapter(str(TDBASE_DIR), preprocessed_dir=str(PREPROCESSED_DIR))
+    tdbase_adapter = TDBaseAdapter(
+        str(TDBASE_DIR),
+        preprocessed_dir=str(PREPROCESSED_DIR),
+        query_timing_mode=tdbase_timing_mode,
+    )
 
     exact_exec = RAYSPACE_DIR / "query" / "build" / "bin" / "raytracer_mesh_overlap"
 
@@ -513,10 +527,23 @@ def main() -> None:
     parser.add_argument("--runs", type=int, default=5, help="Number of timing runs per approach")
     parser.add_argument("--grid-cell-size", type=float, default=1500.0, help="Grid resolution for RaySpace preprocessing")
     parser.add_argument("--nu", type=int, nargs="+", default=DEFAULT_NU_COUNTS, help="Nu values to run")
+    parser.add_argument(
+        "--tdbase-timing-mode",
+        type=str,
+        default=TDBASE_TIMING_MODE_INDEX_COMPUTE_EVALUATE,
+        choices=TDBASE_TIMING_MODES,
+        help="TDBase query-time definition. Default uses index+compute+evaluate; use compute_only to revert.",
+    )
     args = parser.parse_args()
 
     run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_nu_correctness")
-    results = run_experiment(args.runs, args.grid_cell_size, args.nu, run_layout)
+    results = run_experiment(
+        args.runs,
+        args.grid_cell_size,
+        args.nu,
+        run_layout,
+        tdbase_timing_mode=args.tdbase_timing_mode,
+    )
     if not results["counts"]:
         print("No successful datasets processed.")
         return
@@ -532,6 +559,7 @@ def main() -> None:
                 "runs": args.runs,
                 "grid_cell_size": args.grid_cell_size,
                 "nu_counts": args.nu,
+                "tdbase_timing_mode": args.tdbase_timing_mode,
             },
             "results": results,
         },

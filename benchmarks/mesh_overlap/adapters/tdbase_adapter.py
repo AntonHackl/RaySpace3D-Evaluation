@@ -1,13 +1,23 @@
 import subprocess
 import time
-import re
 import numpy as np
 from typing import Dict, Any, Optional
 from pathlib import Path
 from .base import OverlapBenchmarkAdapter, run_command_streaming
+from benchmarks.common.adapters.tdbase_common import (
+    TDBASE_TIMING_MODE_INDEX_COMPUTE_EVALUATE,
+    parse_tdbase_run_metrics,
+    query_time_for_mode,
+    validate_tdbase_timing_mode,
+)
 
 class TDBaseAdapter(OverlapBenchmarkAdapter):
-    def __init__(self, tdbase_dir: str, preprocessed_dir: Optional[str] = None):
+    def __init__(
+        self,
+        tdbase_dir: str,
+        preprocessed_dir: Optional[str] = None,
+        query_timing_mode: str = TDBASE_TIMING_MODE_INDEX_COMPUTE_EVALUATE,
+    ):
         super().__init__("TDBase")
         self.tdbase_dir = Path(tdbase_dir)
         legacy_build_dir = self.tdbase_dir / "src" / "build"
@@ -28,6 +38,7 @@ class TDBaseAdapter(OverlapBenchmarkAdapter):
         self.executable = next((p for p in tdbase_candidates if p.exists()), tdbase_candidates[0])
         self.obj_to_dt_exec = next((p for p in obj_to_dt_candidates if p.exists()), obj_to_dt_candidates[0])
         self.preprocessed_dir = Path(preprocessed_dir) if preprocessed_dir else None
+        self.query_timing_mode = validate_tdbase_timing_mode(query_timing_mode)
         
         if self.preprocessed_dir:
             self.preprocessed_dir.mkdir(parents=True, exist_ok=True)
@@ -105,6 +116,9 @@ class TDBaseAdapter(OverlapBenchmarkAdapter):
         # Run TDBase once per run with multiple -l flags (progressive LODs) and GPU enabled
         lods = [20, 40, 60, 80, 100]
         runtimes = []
+        preprocessing_times = []
+        loading_times = []
+        run_metrics = []
 
         # Build command with repeated -l flags as recommended by TDBase README
         cmd_base = [
@@ -137,90 +151,43 @@ class TDBaseAdapter(OverlapBenchmarkAdapter):
                     prefix=f"[{self.name}]",
                 )
                 output = stdout_text + stderr_text
-                # Parse either the legacy summary line with units or the newer plain numeric stats.
-                match = re.search(r"compute:\s+([\d.]+)\s+(s|ms)", output)
-                comp_time = 0.0
-                if match:
-                    val = float(match.group(1))
-                    unit = match.group(2)
-                    if unit == 's':
-                        val *= 1000.0
-                    comp_time = val
-                else:
-                    computation_match = re.search(r"computation:\s*([\d.]+)", output)
-                    if computation_match:
-                        comp_time = float(computation_match.group(1))
-                    else:
-                        comp_matches = re.finditer(r"computation for checking intersection takes ([\d.]+) ms", output)
-                        comp_times = [float(m.group(1)) for m in comp_matches]
-                        if comp_times:
-                            comp_time = sum(comp_times)
-                            
-                total_match = re.search(r"total:\s*([\d.]+)\s+(s|ms)?", output)
-                total_time = 0.0
-                if total_match:
-                    val = float(total_match.group(1))
-                    if total_match.group(2) == 's':
-                        val *= 1000.0
-                    # TDBase sometimes logs total without unit assuming seconds
-                    elif total_match.group(2) is None and val < 1000:
-                         val *= 1000.0
-                    total_time = val
-                    
-                if comp_time > 0:
-                    runtimes.append(comp_time)
-                    # Hack: store the PREPROCESSING time as a property on self, or append it to a list
-                    if not hasattr(self, 'preprocessing_times'):
-                        self.preprocessing_times = []
-                    
-                    prep_time = 0.0
-                    decode_m = re.search(r"decode:\s+([\d.]+)\s+(s|ms)", output)
-                    if decode_m:
-                        v = float(decode_m.group(1))
-                        if decode_m.group(2) == 's': v *= 1000.0
-                        prep_time += v
-                    
-                    index_m = re.search(r"index:\s+([\d.]+)\s+(s|ms)", output)
-                    if index_m:
-                        v = float(index_m.group(1))
-                        if index_m.group(2) == 's': v *= 1000.0
-                        prep_time += v
-                        
-                    prepare_m = re.search(r"prepare:\s+([\d.]+)\s+(s|ms)", output)
-                    if prepare_m:
-                        v = float(prepare_m.group(1))
-                        if prepare_m.group(2) == 's': v *= 1000.0
-                        prep_time += v
-                        
-                    # Also load tiles counts as query setup in TDBase since it's inside the join execution
-                    load_m = re.search(r"load tiles takes\s+([\d.]+)\s+(s|ms)", output)
-                    if load_m:
-                        v = float(load_m.group(1))
-                        if load_m.group(2) == 's': v *= 1000.0
-                        prep_time += v
-
-                    self.preprocessing_times.append(prep_time)
-                else:
-                    print(f"[{self.name}] Error: Could not find computation timing in output. Result:\n{output}")
-                    return {"error": "Computation timing not found"}
+                metrics = parse_tdbase_run_metrics(output)
+                query_time_ms = query_time_for_mode(metrics, self.query_timing_mode)
+                runtimes.append(query_time_ms)
+                preprocessing_times.append(metrics["preprocessing_ms"])
+                loading_times.append(metrics["loading_ms"])
+                run_metrics.append(
+                    {
+                        **metrics,
+                        "query_time_ms": query_time_ms,
+                        "query_timing_mode": self.query_timing_mode,
+                    }
+                )
             except subprocess.TimeoutExpired:
                 print(f"[{self.name}] Timeout reached ({timeout}s)")
                 return {"error": f"Timeout reached ({timeout}s)"}
             except subprocess.CalledProcessError as e:
                 return {"error": f"TDBase failed with exit code {e.returncode}: {e.stderr}"}
+            except RuntimeError as e:
+                print(f"[{self.name}] Error: {e}. Result:\n{output}")
+                return {"error": str(e)}
 
         if not runtimes:
-            return {"error": "No computation timing results collected for TDBase"}
+            return {"error": "No timing results collected for TDBase"}
 
         # Return aggregate stats over the runs (each run processed all LODs)
-        mean_prep = np.mean(self.preprocessing_times) if hasattr(self, 'preprocessing_times') and self.preprocessing_times else 0.0
+        mean_prep = float(np.mean(preprocessing_times)) if preprocessing_times else 0.0
+        mean_loading = float(np.mean(loading_times)) if loading_times else 0.0
         return {
             "mean": float(np.mean(runtimes)),
             "min": float(np.min(runtimes)),
             "max": float(np.max(runtimes)),
             "std": float(np.std(runtimes)),
             "raw_times": [float(x) for x in runtimes],
-            "mean_preprocessing": float(mean_prep),
+            "mean_preprocessing": mean_prep,
+            "mean_loading": mean_loading,
+            "run_metrics": run_metrics,
+            "query_timing_mode": self.query_timing_mode,
             "lods": lods,
             "gpu": True
         }

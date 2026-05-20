@@ -36,6 +36,10 @@ from benchmarks.mesh_overlap.adapters.raytracer_adapter import RaytracerAdapter
 from benchmarks.mesh_overlap.adapters.cgal_adapter import CGALAdapter
 from benchmarks.mesh_overlap.adapters.touch_adapter import TOUCHAdapter
 from benchmarks.mesh_overlap.adapters.tdbase_adapter import TDBaseAdapter
+from benchmarks.common.adapters.tdbase_common import (
+    TDBASE_TIMING_MODE_INDEX_COMPUTE_EVALUATE,
+    TDBASE_TIMING_MODES,
+)
 
 # Configuration
 RAYSPACE_DIR = REPO_ROOT / "src/RaySpace3D"
@@ -52,7 +56,16 @@ SPHERE_TEMPLATE_DIR = REPO_ROOT / "benchmarks" / "mesh_overlap" / "data" / "sing
 SHARED_SCENARIO = "mesh_complexity"
 DEFAULT_STAGES = list(range(1, 6))
 
-def run_experiment(runs, grid_cell_size, num_objects, selectivity, run_log_dir, approaches=None, timeout=3600.0):
+def run_experiment(
+    runs,
+    grid_cell_size,
+    num_objects,
+    selectivity,
+    run_log_dir,
+    approaches=None,
+    timeout=3600.0,
+    tdbase_timing_mode=TDBASE_TIMING_MODE_INDEX_COMPUTE_EVALUATE,
+):
     if approaches is None:
         approaches = ["exact", "direct_estimation", "cgal", "touch", "tdbase"]
 
@@ -72,7 +85,11 @@ def run_experiment(runs, grid_cell_size, num_objects, selectivity, run_log_dir, 
     direct_estimation_adapter.preprocessed_dir = shared_dirs["preprocessed"]
     cgal_adapter = CGALAdapter(str(CGAL_DIR), preprocessed_dir=str(shared_dirs["preprocessed"]), grid_cell_size=grid_cell_size)
     touch_adapter = TOUCHAdapter(str(CGAL_DIR), preprocessed_dir=str(shared_dirs["preprocessed"]), grid_cell_size=grid_cell_size)
-    tdbase_adapter = TDBaseAdapter(str(TDBASE_DIR), preprocessed_dir=str(shared_dirs["preprocessed"]))
+    tdbase_adapter = TDBaseAdapter(
+        str(TDBASE_DIR),
+        preprocessed_dir=str(shared_dirs["preprocessed"]),
+        query_timing_mode=tdbase_timing_mode,
+    )
     
     results = {
         "complexities": [],
@@ -245,6 +262,13 @@ def main():
                         choices=["exact", "direct_estimation", "cgal", "touch", "tdbase"], help="Approaches to run")
     parser.add_argument("--timeout", type=float, default=1200.0, help="Timeout in seconds per run")
     parser.add_argument("--revisualize", type=str, help="Path to results.json to re-generate plots from")
+    parser.add_argument(
+        "--tdbase-timing-mode",
+        type=str,
+        default=TDBASE_TIMING_MODE_INDEX_COMPUTE_EVALUATE,
+        choices=TDBASE_TIMING_MODES,
+        help="TDBase query-time definition. Default uses index+compute+evaluate; use compute_only to revert.",
+    )
     args = parser.parse_args()
 
     if args.revisualize:
@@ -260,7 +284,16 @@ def main():
     run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_mesh_complexity")
     run_log_dir = Path(run_layout["logs_dir"])
     figures_dir = Path(run_layout["figures_dir"])
-    results = run_experiment(args.runs, args.grid_cell_size, args.num_objects, args.selectivity, run_log_dir, approaches=args.approaches, timeout=args.timeout)
+    results = run_experiment(
+        args.runs,
+        args.grid_cell_size,
+        args.num_objects,
+        args.selectivity,
+        run_log_dir,
+        approaches=args.approaches,
+        timeout=args.timeout,
+        tdbase_timing_mode=args.tdbase_timing_mode,
+    )
 
     
     if results and results["complexities"]:
@@ -278,6 +311,7 @@ def main():
                 "selectivity": args.selectivity,
                 "approaches": args.approaches,
                 "timeout": args.timeout,
+                "tdbase_timing_mode": args.tdbase_timing_mode,
             },
 
             "results": results,

@@ -27,6 +27,10 @@ from adapters.tdbase_adapter import TDBaseAdapter
 from adapters.cgal_adapter import CGALAdapter
 from adapters.touch_adapter import TOUCHAdapter
 from visualize_selectivity_test import visualize_selectivity
+from benchmarks.common.adapters.tdbase_common import (
+    TDBASE_TIMING_MODE_INDEX_COMPUTE_EVALUATE,
+    TDBASE_TIMING_MODES,
+)
 
 # Configuration
 SELECTIVITIES = build_selectivity_sweep()
@@ -58,6 +62,13 @@ def main():
                         help="Approaches to run")
     parser.add_argument("--runs", type=int, default=5, help="Number of runs per selectivity")
     parser.add_argument("--timeout", type=float, default=1200.0, help="Timeout in seconds per run")
+    parser.add_argument(
+        "--tdbase-timing-mode",
+        type=str,
+        default=TDBASE_TIMING_MODE_INDEX_COMPUTE_EVALUATE,
+        choices=TDBASE_TIMING_MODES,
+        help="TDBase query-time definition. Default uses index+compute+evaluate; use compute_only to revert.",
+    )
     args = parser.parse_args()
 
     run_layout = create_benchmark_run_layout(Path(__file__).parent, "overlap_selectivity")
@@ -131,7 +142,8 @@ def main():
         if "tdbase" in args.approaches:
             tdbase_adapter = TDBaseAdapter(
                 str(TDBASE_DIR),
-                preprocessed_dir=str(shared_dirs["preprocessed"])
+                preprocessed_dir=str(shared_dirs["preprocessed"]),
+                query_timing_mode=args.tdbase_timing_mode,
             )
             print("Ensuring preprocessed files (TDBase)...")
             tdbase_adapter.preprocess_from_source(str(obj_a), str(dt_a), log_dir=str(run_layout["logs_dir"]))

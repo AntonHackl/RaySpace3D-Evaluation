@@ -8,6 +8,10 @@ from pathlib import Path
 from adapters import TDBaseAdapter, CGALAdapter, TOUCHAdapter, RaytracerAdapter
 import numpy as np
 from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_json
+from benchmarks.common.adapters.tdbase_common import (
+    TDBASE_TIMING_MODE_INDEX_COMPUTE_EVALUATE,
+    TDBASE_TIMING_MODES,
+)
 
 
 class _Tee:
@@ -91,6 +95,13 @@ def main():
     parser.add_argument("--threads", type=int, default=None, help="Number of threads for parallel approaches (default: all available)")
     parser.add_argument("--log-dir", type=str, default=None, help="Deprecated: logs are written inside each run folder")
     parser.add_argument("--no-logs", action="store_true", help="Disable writing benchmark/adapters logs to files")
+    parser.add_argument(
+        "--tdbase-timing-mode",
+        type=str,
+        default=TDBASE_TIMING_MODE_INDEX_COMPUTE_EVALUATE,
+        choices=TDBASE_TIMING_MODES,
+        help="TDBase query-time definition. Default uses index+compute+evaluate; use compute_only to revert.",
+    )
     
     args = parser.parse_args()
 
@@ -150,7 +161,7 @@ def main():
         if "touch" in args.approaches:
             adapters.append(TOUCHAdapter(str(CGAL_BASE_DIR), preprocessed_dir=str(preprocessed_dir), threads=args.threads))
         if "tdbase" in args.approaches:
-            adapters.append(TDBaseAdapter(str(TDBASE_DIR)))
+            adapters.append(TDBaseAdapter(str(TDBASE_DIR), query_timing_mode=args.tdbase_timing_mode))
         if "raytracer_exact" in args.approaches:
             adapters.append(RaytracerAdapter(str(RAYSPACE_DIR), mode="exact", preprocessed_dir=str(preprocessed_dir), timings_dir=str(timings_dir), grid_cell_size=args.grid_cell_size, warmup_runs=args.raytracer_warmup_runs))
         if "raytracer_estimated" in args.approaches:

@@ -21,6 +21,10 @@ from benchmarks.common.scenario_utils import canonical_nu_pair_paths, ensure_nu_
 sys.path.append(str(Path(__file__).parent))
 from adapters.raytracer_adapter import RaytracerAdapter
 from adapters.tdbase_adapter import TDBaseAdapter
+from benchmarks.common.adapters.tdbase_common import (
+    TDBASE_TIMING_MODE_INDEX_COMPUTE_EVALUATE,
+    TDBASE_TIMING_MODES,
+)
 
 RAYSPACE_DIR = REPO_ROOT / "src/RaySpace3D"
 TDBASE_DIR = REPO_ROOT / "baselines/RaySpace3DBaselines/tdbase"
@@ -50,6 +54,7 @@ def run_experiment(
     approaches=None,
     timeout=120.0,
     dataset_profile="large_nu_v",
+    tdbase_timing_mode=TDBASE_TIMING_MODE_INDEX_COMPUTE_EVALUATE,
 ):
     if approaches is None:
         approaches = ["direct_estimation", "tdbase"]
@@ -78,7 +83,11 @@ def run_experiment(
         grid_cell_size=grid_cell_size,
         warmup_runs=1
     )
-    tdbase_adapter = TDBaseAdapter(str(TDBASE_DIR), preprocessed_dir=str(PREPROCESSED_DIR))
+    tdbase_adapter = TDBaseAdapter(
+        str(TDBASE_DIR),
+        preprocessed_dir=str(PREPROCESSED_DIR),
+        query_timing_mode=tdbase_timing_mode,
+    )
     
     results = {
         "counts": [],
@@ -172,6 +181,13 @@ def main():
     parser.add_argument("--approaches", type=str, nargs="+", choices=["direct_estimation", "tdbase"], default=["direct_estimation", "tdbase"])
     parser.add_argument("--timeout", type=float, default=1200.0)
     parser.add_argument(
+        "--tdbase-timing-mode",
+        type=str,
+        default=TDBASE_TIMING_MODE_INDEX_COMPUTE_EVALUATE,
+        choices=TDBASE_TIMING_MODES,
+        help="TDBase query-time definition. Default uses index+compute+evaluate; use compute_only to revert.",
+    )
+    parser.add_argument(
         "--dataset-profile",
         type=str,
         choices=["standard", "large_nu_v"],
@@ -197,6 +213,7 @@ def main():
             args.approaches,
             args.timeout,
             args.dataset_profile,
+            args.tdbase_timing_mode,
         )
         import shutil
         dest_res = layout["results_json"]
