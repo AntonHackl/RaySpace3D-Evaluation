@@ -46,10 +46,11 @@ CUBE_COUNTS = [200000, 400000, 600000, 1000000]
 FIXED_COUNT = "200k_a"
 SHARED_SCENARIO = "cube_scalability"
 
-def run_experiment(runs, grid_cell_size, run_log_dir, approaches=None, timeout=120.0):
+def run_experiment(runs, grid_cell_size, run_log_dir, threads=None, approaches=None, timeout=120.0):
     if approaches is None:
         approaches = ["exact", "estimated", "cgal", "touch"]
     print("--- Starting Cube Scalability Experiment ---")
+    print(f"CGAL/TOUCH threads: {threads if threads else 'OpenMP default'}")
     
     shared_dirs = get_shared_data_dirs(SHARED_SCENARIO)
     shared_raw_dir = shared_dirs["raw"]
@@ -79,12 +80,14 @@ def run_experiment(runs, grid_cell_size, run_log_dir, approaches=None, timeout=1
     cgal_adapter = CGALAdapter(
         str(CGAL_DIR),
         preprocessed_dir=str(shared_dirs["preprocessed"]),
+        threads=threads,
         grid_cell_size=grid_cell_size
     )
     
     touch_adapter = TOUCHAdapter(
         str(CGAL_DIR),
         preprocessed_dir=str(shared_dirs["preprocessed"]),
+        threads=threads,
         grid_cell_size=grid_cell_size
     )
     
@@ -377,6 +380,7 @@ def main():
     parser.add_argument("--runs", type=int, default=5, help="Number of runs per method")
     parser.add_argument("--grid-cell-size", type=float, default=5.0, help="Grid cell size for RaySpace")
     parser.add_argument("--timeout", type=float, default=1200.0, help="Timeout in seconds per run")
+    parser.add_argument("--threads", type=int, default=None, help="Number of threads for CGAL/TOUCH")
     parser.add_argument("--approaches", type=str, nargs="+", default=["exact", "estimated", "cgal", "touch"], 
                         choices=["exact", "estimated", "cgal", "touch"], help="Approaches to run")
     args = parser.parse_args()
@@ -384,7 +388,7 @@ def main():
     run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_cube_scalability")
     run_log_dir = Path(run_layout["logs_dir"])
     figures_dir = Path(run_layout["figures_dir"])
-    results = run_experiment(args.runs, args.grid_cell_size, run_log_dir, approaches=args.approaches, timeout=args.timeout)
+    results = run_experiment(args.runs, args.grid_cell_size, run_log_dir, threads=args.threads, approaches=args.approaches, timeout=args.timeout)
     
     if results and results["counts"]:
         print("\nResults Summary:")

@@ -41,6 +41,7 @@ def main():
     parser.add_argument("--runs", type=int, default=5)
     parser.add_argument("--warmup-runs", type=int, default=1)
     parser.add_argument("--timeout", type=float, default=600.0)
+    parser.add_argument("--threads", type=int, default=None, help="Number of threads for CGAL/TOUCH")
     parser.add_argument("--grid-cell-size", type=float, default=700.0)
     parser.add_argument("--overlap-max-iterations", type=int, default=100)
     parser.add_argument("--query-direction", type=str, default="both", choices=["both", "mesh1tomesh2", "mesh2tomesh1"])
@@ -51,6 +52,7 @@ def main():
     dirs = get_shared_data_dirs("microns_overlap")
     run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_microns")
     run_log_dir = Path(run_layout["logs_dir"])
+    print(f"CGAL/TOUCH threads: {args.threads if args.threads else 'OpenMP default'}")
 
     splits_dir = dirs["root"] / "splits"
     splits_dir.mkdir(parents=True, exist_ok=True)
@@ -64,9 +66,9 @@ def main():
             timings_dir=str(dirs["timings"]), grid_cell_size=args.grid_cell_size, warmup_runs=args.warmup_runs,
         )
     if "cgal" in args.approaches:
-        adapters["cgal"] = CGALAdapter(str(CGAL_DIR), preprocessed_dir=str(dirs["preprocessed"]), grid_cell_size=args.grid_cell_size)
+        adapters["cgal"] = CGALAdapter(str(CGAL_DIR), preprocessed_dir=str(dirs["preprocessed"]), threads=args.threads, grid_cell_size=args.grid_cell_size)
     if "touch" in args.approaches:
-        adapters["touch"] = TOUCHAdapter(str(CGAL_DIR), preprocessed_dir=str(dirs["preprocessed"]), grid_cell_size=args.grid_cell_size)
+        adapters["touch"] = TOUCHAdapter(str(CGAL_DIR), preprocessed_dir=str(dirs["preprocessed"]), threads=args.threads, grid_cell_size=args.grid_cell_size)
 
     results = []
     for size_gb in args.sizes:
@@ -134,6 +136,7 @@ def main():
             "runs": args.runs,
             "warmup_runs": args.warmup_runs,
             "timeout_seconds": args.timeout,
+            "threads": args.threads,
             "overlap_max_iterations": args.overlap_max_iterations,
             "query_direction": args.query_direction,
             "approaches": args.approaches,

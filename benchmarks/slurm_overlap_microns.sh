@@ -12,4 +12,4 @@
 srun --cpu-bind=none --container-name RaySpace \
      --container-workdir /sc/projects/sci-zacharatou/chair/RaySpace/RaySpace3D-Evaluation \
      --container-mounts /sc/home/anton.hackl/:/sc/home/anton.hackl/,/sc/projects/sci-zacharatou/chair/RaySpace/:/sc/projects/sci-zacharatou/chair/RaySpace/ \
-     bash -c "source /sc/home/anton.hackl/conda3/etc/profile.d/conda.sh && conda activate spatial_benchmark && export PYTHONPATH=\$PYTHONPATH:. && python benchmarks/mesh_overlap/run_microns_overlap.py --timeout 1200 --sizes 4 --approaches direct_estimation cgal touch"
+     bash -c "source /sc/home/anton.hackl/conda3/etc/profile.d/conda.sh && conda activate spatial_benchmark && export PYTHONPATH=\$PYTHONPATH:. && export CGAL_THREADS=\${SLURM_CPUS_PER_TASK:-20} && export OMP_NUM_THREADS=\$CGAL_THREADS && export OMP_DISPLAY_ENV=VERBOSE && echo \"[OpenMP] SLURM_CPUS_PER_TASK=\${SLURM_CPUS_PER_TASK:-unset} OMP_NUM_THREADS=\$OMP_NUM_THREADS\" && python benchmarks/mesh_overlap/run_microns_overlap.py --timeout 1200 --sizes 4 --approaches direct_estimation cgal touch --threads \$CGAL_THREADS"

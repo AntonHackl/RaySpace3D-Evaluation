@@ -39,6 +39,7 @@ def main():
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--warmup-runs", type=int, default=1)
     parser.add_argument("--timeout", type=float, default=3600.0)
+    parser.add_argument("--threads", type=int, default=None, help="Number of threads for CGAL")
     parser.add_argument("--approaches", type=str, nargs="+",
                         default=["estimated", "cgal"],
                         choices=["estimated", "estimate_only", "cgal"])
@@ -51,7 +52,8 @@ def main():
         str(RAYSPACE_DIR), mode="estimated", preprocessed_dir=str(dirs["preprocessed"]),
         timings_dir=str(dirs["timings"]), grid_cell_size=args.grid_cell_size, warmup_runs=args.warmup_runs,
     )
-    cgal = CGALIntersectionAdapter(str(CGAL_BASE_DIR), preprocessed_dir=str(dirs["preprocessed"]))
+    print(f"CGAL threads: {args.threads if args.threads else 'OpenMP default'}")
+    cgal = CGALIntersectionAdapter(str(CGAL_BASE_DIR), preprocessed_dir=str(dirs["preprocessed"]), threads=args.threads)
 
     run_log_dir = run_layout["logs_dir"]
 
@@ -127,6 +129,7 @@ def main():
             "runs": args.runs,
             "warmup_runs": args.warmup_runs,
             "timeout_seconds": args.timeout,
+            "threads": args.threads,
             "approaches": args.approaches,
             "shared_data_root": str(dirs["root"]),
             "template_dir": str(SPHERE_TEMPLATE_DIR),

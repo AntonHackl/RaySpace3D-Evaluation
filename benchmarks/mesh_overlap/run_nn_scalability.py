@@ -67,6 +67,9 @@ def run_experiment(
     grid_cell_size,
     nu_counts,
     run_log_dir,
+    threads=None,
+    tdbase_threads=None,
+    tdbase_compute_threads=1,
     approaches=None,
     track_hash_contention=False,
     timeout=120.0,
@@ -77,6 +80,8 @@ def run_experiment(
     
     print(f"--- Starting NN Scalability Experiment ({nu_counts}) ---")
     print(f"Approaches: {approaches}")
+    print(f"CGAL/TOUCH threads: {threads if threads else 'OpenMP default'}")
+    print(f"TDBase threads: {tdbase_threads if tdbase_threads else 'TDBase default'} (compute threads: {tdbase_compute_threads})")
     if track_hash_contention:
         print("Direct estimation hash contention tracking: enabled")
     
@@ -113,18 +118,22 @@ def run_experiment(
     cgal_adapter = CGALAdapter(
         str(CGAL_DIR),
         preprocessed_dir=str(PREPROCESSED_DIR),
+        threads=threads,
         grid_cell_size=grid_cell_size
     )
     
     touch_adapter = TOUCHAdapter(
         str(CGAL_DIR),
         preprocessed_dir=str(PREPROCESSED_DIR),
+        threads=threads,
         grid_cell_size=grid_cell_size
     )
 
     tdbase_adapter = TDBaseAdapter(
         str(TDBASE_DIR),
         preprocessed_dir=str(PREPROCESSED_DIR),
+        threads=tdbase_threads,
+        compute_threads=tdbase_compute_threads,
         query_timing_mode=tdbase_timing_mode,
     )
     
@@ -563,6 +572,9 @@ def main():
     parser.add_argument("--nu", type=int, nargs='+', help="Nu counts to test (e.g. 200 400 600 800)")
     parser.add_argument("--approaches", type=str, nargs='+', choices=["exact", "direct_estimation", "cgal", "touch", "tdbase"], help="Approaches to run")
     parser.add_argument("--track-hash-contention", action="store_true", help="Enable direct-estimation hash contention tracking")
+    parser.add_argument("--threads", type=int, default=None, help="Number of threads for CGAL/TOUCH")
+    parser.add_argument("--tdbase-threads", type=int, default=None, help="Number of TDBase join threads")
+    parser.add_argument("--tdbase-compute-threads", type=int, default=1, help="Number of TDBase compute threads per tile")
     parser.add_argument("--timeout", type=float, default=1200.0, help="Timeout in seconds per run")
     parser.add_argument("--revisualize", type=str, help="Path to results.json to re-generate plots from")
     parser.add_argument(
@@ -593,6 +605,9 @@ def main():
         args.grid_cell_size,
         nu_counts,
         run_log_dir,
+        threads=args.threads,
+        tdbase_threads=args.tdbase_threads,
+        tdbase_compute_threads=args.tdbase_compute_threads,
         approaches=args.approaches,
         track_hash_contention=args.track_hash_contention,
         timeout=args.timeout,
@@ -641,6 +656,9 @@ def main():
                     "runs": args.runs,
                     "grid_cell_size": args.grid_cell_size,
                     "nu_counts": nu_counts,
+                    "threads": args.threads,
+                    "tdbase_threads": args.tdbase_threads,
+                    "tdbase_compute_threads": args.tdbase_compute_threads,
                     "timeout": args.timeout,
                     "tdbase_timing_mode": args.tdbase_timing_mode,
                 },

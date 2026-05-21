@@ -62,6 +62,9 @@ def run_experiment(
     num_objects,
     selectivity,
     run_log_dir,
+    threads=None,
+    tdbase_threads=None,
+    tdbase_compute_threads=1,
     approaches=None,
     timeout=3600.0,
     tdbase_timing_mode=TDBASE_TIMING_MODE_INDEX_COMPUTE_EVALUATE,
@@ -70,6 +73,8 @@ def run_experiment(
         approaches = ["exact", "direct_estimation", "cgal", "touch", "tdbase"]
 
     print("--- Starting Mesh Complexity Experiment ---")
+    print(f"CGAL/TOUCH threads: {threads if threads else 'OpenMP default'}")
+    print(f"TDBase threads: {tdbase_threads if tdbase_threads else 'TDBase default'} (compute threads: {tdbase_compute_threads})")
 
     shared_dirs = get_shared_data_dirs(SHARED_SCENARIO)
     
@@ -83,11 +88,13 @@ def run_experiment(
     )
     exact_adapter.preprocessed_dir = shared_dirs["preprocessed"]
     direct_estimation_adapter.preprocessed_dir = shared_dirs["preprocessed"]
-    cgal_adapter = CGALAdapter(str(CGAL_DIR), preprocessed_dir=str(shared_dirs["preprocessed"]), grid_cell_size=grid_cell_size)
-    touch_adapter = TOUCHAdapter(str(CGAL_DIR), preprocessed_dir=str(shared_dirs["preprocessed"]), grid_cell_size=grid_cell_size)
+    cgal_adapter = CGALAdapter(str(CGAL_DIR), preprocessed_dir=str(shared_dirs["preprocessed"]), threads=threads, grid_cell_size=grid_cell_size)
+    touch_adapter = TOUCHAdapter(str(CGAL_DIR), preprocessed_dir=str(shared_dirs["preprocessed"]), threads=threads, grid_cell_size=grid_cell_size)
     tdbase_adapter = TDBaseAdapter(
         str(TDBASE_DIR),
         preprocessed_dir=str(shared_dirs["preprocessed"]),
+        threads=tdbase_threads,
+        compute_threads=tdbase_compute_threads,
         query_timing_mode=tdbase_timing_mode,
     )
     
@@ -261,6 +268,9 @@ def main():
     parser.add_argument("--approaches", type=str, nargs="+", default=["exact", "direct_estimation", "cgal", "touch", "tdbase"], 
                         choices=["exact", "direct_estimation", "cgal", "touch", "tdbase"], help="Approaches to run")
     parser.add_argument("--timeout", type=float, default=1200.0, help="Timeout in seconds per run")
+    parser.add_argument("--threads", type=int, default=None, help="Number of threads for CGAL/TOUCH")
+    parser.add_argument("--tdbase-threads", type=int, default=None, help="Number of TDBase join threads")
+    parser.add_argument("--tdbase-compute-threads", type=int, default=1, help="Number of TDBase compute threads per tile")
     parser.add_argument("--revisualize", type=str, help="Path to results.json to re-generate plots from")
     parser.add_argument(
         "--tdbase-timing-mode",
@@ -290,6 +300,9 @@ def main():
         args.num_objects,
         args.selectivity,
         run_log_dir,
+        threads=args.threads,
+        tdbase_threads=args.tdbase_threads,
+        tdbase_compute_threads=args.tdbase_compute_threads,
         approaches=args.approaches,
         timeout=args.timeout,
         tdbase_timing_mode=args.tdbase_timing_mode,
@@ -307,6 +320,9 @@ def main():
                 "run_dir": str(run_layout["run_dir"]),
                 "runs": args.runs,
                 "grid_cell_size": args.grid_cell_size,
+                "threads": args.threads,
+                "tdbase_threads": args.tdbase_threads,
+                "tdbase_compute_threads": args.tdbase_compute_threads,
                 "num_objects": args.num_objects,
                 "selectivity": args.selectivity,
                 "approaches": args.approaches,

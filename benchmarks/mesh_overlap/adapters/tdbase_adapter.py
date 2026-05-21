@@ -16,6 +16,8 @@ class TDBaseAdapter(OverlapBenchmarkAdapter):
         self,
         tdbase_dir: str,
         preprocessed_dir: Optional[str] = None,
+        threads: Optional[int] = None,
+        compute_threads: int = 1,
         query_timing_mode: str = TDBASE_TIMING_MODE_INDEX_COMPUTE_EVALUATE,
     ):
         super().__init__("TDBase")
@@ -38,6 +40,8 @@ class TDBaseAdapter(OverlapBenchmarkAdapter):
         self.executable = next((p for p in tdbase_candidates if p.exists()), tdbase_candidates[0])
         self.obj_to_dt_exec = next((p for p in obj_to_dt_candidates if p.exists()), obj_to_dt_candidates[0])
         self.preprocessed_dir = Path(preprocessed_dir) if preprocessed_dir else None
+        self.threads = threads
+        self.compute_threads = compute_threads
         self.query_timing_mode = validate_tdbase_timing_mode(query_timing_mode)
         
         if self.preprocessed_dir:
@@ -128,11 +132,18 @@ class TDBaseAdapter(OverlapBenchmarkAdapter):
             "--tile1", f1,
             "--tile2", f2,
         ]
+        if self.threads:
+            cmd_base.extend(["-t", str(self.threads)])
+        cmd_base.extend(["--cn", str(self.compute_threads)])
         for lod in lods:
             cmd_base.extend(["-l", str(lod)])
         cmd_base.append("-g")
 
-        print(f"[{self.name}] Running TDBase with LODs {lods} (GPU) ...")
+        print(
+            f"[{self.name}] Running TDBase with LODs {lods} (GPU) "
+            f"using {self.threads or 'all available'} join threads and "
+            f"{self.compute_threads} compute threads..."
+        )
 
         adapter_log_dir = None
         if log_dir:
