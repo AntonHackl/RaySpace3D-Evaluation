@@ -4,7 +4,7 @@
 #SBATCH --gres=gpu:rtx_pro_6000:1
 #SBATCH --mem=96G
 #SBATCH --time=14:00:00
-#SBATCH --cpus-per-task=20
+#SBATCH --cpus-per-task=5
 #SBATCH --job-name=query_cmp_microns
 #SBATCH --output=/sc/projects/sci-zacharatou/chair/RaySpace/RaySpace3D-Evaluation/benchmarks/slurm_logs/slurm_query_comparison_microns_%j.out
 #SBATCH --error=/sc/projects/sci-zacharatou/chair/RaySpace/RaySpace3D-Evaluation/benchmarks/slurm_logs/slurm_query_comparison_microns_%j.err

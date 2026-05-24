@@ -4,7 +4,7 @@
 #SBATCH --gres=gpu:rtx_pro_6000:1
 #SBATCH --mem=96G
 #SBATCH --time=14:00:00
-#SBATCH --cpus-per-task=20
+#SBATCH --cpus-per-task=10
 #SBATCH --job-name=overlap_sel
 #SBATCH --output=/sc/projects/sci-zacharatou/chair/RaySpace/RaySpace3D-Evaluation/benchmarks/slurm_logs/slurm_overlap_selectivity_%j.out
 #SBATCH --error=/sc/projects/sci-zacharatou/chair/RaySpace/RaySpace3D-Evaluation/benchmarks/slurm_logs/slurm_overlap_selectivity_%j.err

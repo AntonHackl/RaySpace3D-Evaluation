@@ -15,6 +15,7 @@ from benchmarks.common.scenario_utils import create_benchmark_run_layout, write_
 from benchmarks.common.scenario_utils import (
     build_selectivity_sweep,
     canonical_cube_pair_paths,
+    count_triangles,
     compute_universe_for_selectivity,
     ensure_cube_pair_dataset,
     get_shared_data_dirs,
@@ -33,7 +34,7 @@ from benchmarks.common.adapters.tdbase_common import (
 )
 
 # Configuration
-SELECTIVITIES = build_selectivity_sweep()
+SELECTIVITIES = build_selectivity_sweep(scale="linear")
 NUM_CUBES = 50000
 MIN_SIZE = 1
 MAX_SIZE = 4
@@ -174,8 +175,12 @@ def main():
             "grid_cell_size": grid_cell_size, 
             "universe": universe_extent,
             "num_cubes": NUM_CUBES,
+            "num_obj1": NUM_CUBES,
+            "num_obj2": NUM_CUBES,
             "size_bytes1": obj_a.stat().st_size if obj_a.exists() else 0,
             "size_bytes2": obj_b.stat().st_size if obj_b.exists() else 0,
+            "num_triangles1": count_triangles(obj_a) if obj_a.exists() else 0,
+            "num_triangles2": count_triangles(obj_b) if obj_b.exists() else 0,
             "universe_extents1": [0.0, 0.0, 0.0],
             "universe_extents2": [0.0, 0.0, 0.0],
         }
@@ -248,6 +253,10 @@ def main():
                     "intersections": results.get("num_intersections", 0),
                     "breakdown": breakdown
                 }
+                if "num_obj1" in results:
+                    res_per_sel["num_obj1"] = int(results.get("num_obj1", res_per_sel["num_obj1"]))
+                if "num_obj2" in results:
+                    res_per_sel["num_obj2"] = int(results.get("num_obj2", res_per_sel["num_obj2"]))
                 memory_stats = {
                     "hash_table_allocated_bytes": results.get("hash_table_allocated_bytes", 0),
                     "result_buffer_allocated_bytes": results.get("result_buffer_allocated_bytes", 0),

@@ -9,6 +9,7 @@ from datetime import datetime
 import subprocess 
 import json
 import re
+import shutil
 # Add project root to sys.path to allow imports from 'benchmarks'
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent.parent
@@ -29,9 +30,12 @@ from benchmarks.common.viz_utils import (
 from benchmarks.common.scenario_utils import (
     canonical_nn_pair_paths,
     canonical_nu_pair_paths,
+    count_triangles,
+    create_isolated_run_data_dirs,
     ensure_nn_pair_dataset,
     ensure_nu_pair_dataset,
     get_shared_data_dirs,
+    stage_input_files,
 )
 
 # Add current directory to path to import adapters
@@ -97,6 +101,7 @@ def run_experiment(
     grid_cell_size,
     nu_counts,
     run_log_dir,
+    isolated_data_dirs,
     threads=None,
     tdbase_threads=None,
     tdbase_compute_threads=1,
@@ -136,19 +141,21 @@ def run_experiment(
         legacy_raw_dirs = [LEGACY_RAW_DIR]
 
     shared_raw_dir = shared_dirs["raw"]
-    PREPROCESSED_DIR.mkdir(parents=True, exist_ok=True)
-    TIMINGS_DIR.mkdir(parents=True, exist_ok=True)
+    isolated_raw_dir = isolated_data_dirs["raw"]
+    isolated_preprocessed_dir = isolated_data_dirs["preprocessed"]
+    isolated_timings_dir = isolated_data_dirs["timings"]
 
     print(f"Logging runs to: {run_log_dir}")
     print(f"RaySpace Dir: {RAYSPACE_DIR}")
+    print(f"Isolated data dir: {isolated_data_dirs['root']}")
 
     # Initialize Adapters
     print("Initializing adapters...")
     exact_adapter = RaytracerAdapter(
         str(RAYSPACE_DIR), 
         mode="exact", 
-        preprocessed_dir=str(PREPROCESSED_DIR), 
-        timings_dir=str(TIMINGS_DIR),
+        preprocessed_dir=str(isolated_preprocessed_dir), 
+        timings_dir=str(isolated_timings_dir),
         grid_cell_size=grid_cell_size,
         warmup_runs=1
     )
@@ -156,8 +163,8 @@ def run_experiment(
     direct_estimation_adapter = RaytracerAdapter(
         str(RAYSPACE_DIR), 
         mode="direct_estimation", 
-        preprocessed_dir=str(PREPROCESSED_DIR), 
-        timings_dir=str(TIMINGS_DIR),
+        preprocessed_dir=str(isolated_preprocessed_dir), 
+        timings_dir=str(isolated_timings_dir),
         grid_cell_size=grid_cell_size,
         warmup_runs=1,
         track_hash_contention=track_hash_contention,
@@ -165,21 +172,21 @@ def run_experiment(
 
     cgal_adapter = CGALAdapter(
         str(CGAL_DIR),
-        preprocessed_dir=str(PREPROCESSED_DIR),
+        preprocessed_dir=str(isolated_preprocessed_dir),
         threads=threads,
         grid_cell_size=grid_cell_size
     )
     
     touch_adapter = TOUCHAdapter(
         str(CGAL_DIR),
-        preprocessed_dir=str(PREPROCESSED_DIR),
+        preprocessed_dir=str(isolated_preprocessed_dir),
         threads=threads,
         grid_cell_size=grid_cell_size
     )
 
     tdbase_adapter = TDBaseAdapter(
         str(TDBASE_DIR),
-        preprocessed_dir=str(PREPROCESSED_DIR),
+        preprocessed_dir=str(isolated_raw_dir),
         threads=tdbase_threads,
         compute_threads=tdbase_compute_threads,
         query_timing_mode=tdbase_timing_mode,
@@ -192,7 +199,8 @@ def run_experiment(
         "direct_estimation": {"mean": [], "std": [], "breakdown": []},
         "cgal": {"mean": [], "std": []},
         "touch": {"mean": [], "std": []},
-        "tdbase": {"mean": [], "std": []}
+        "tdbase": {"mean": [], "std": []},
+        "result_sizes": []
     }
 
     for nu in nu_counts:
@@ -208,6 +216,11 @@ def run_experiment(
         if not f_v_path or not f_n_path:
             print(f"Error: Datasets for nu={nu} not found in {shared_raw_dir}! Skipping.")
             continue
+
+        staged_v_path, staged_n_path = stage_input_files(
+            [f_v_path, f_n_path],
+            isolated_raw_dir,
+        )
         
         print(f"\nProcessing nu={nu}: {f_v_path.name} vs {f_n_path.name}")
 
@@ -215,16 +228,16 @@ def run_experiment(
         needs_preprocessing = any(a in approaches for a in ["exact", "direct_estimation", "cgal", "touch"])
         if needs_preprocessing:
             print("Checking preprocessing...")
-            exact_adapter.preprocess_from_source(str(f_v_path), str(f_v_path), log_dir=str(run_log_dir))
-            exact_adapter.preprocess_from_source(str(f_n_path), str(f_n_path), log_dir=str(run_log_dir))
+            exact_adapter.preprocess_from_source(str(staged_v_path), str(staged_v_path), log_dir=str(run_log_dir))
+            exact_adapter.preprocess_from_source(str(staged_n_path), str(staged_n_path), log_dir=str(run_log_dir))
 
         # Run Exact Benchmark
         res_exact = {"mean": None, "std": None, "breakdown": {}}
         if "exact" in approaches:
             print(f"Running Exact Mode ({runs} runs)...")
             res_exact = exact_adapter.run_overlap(
-                str(f_v_path), 
-                str(f_n_path), 
+                str(staged_v_path), 
+                str(staged_n_path), 
                 runs,
                 log_dir=str(run_log_dir),
                 timeout=timeout
@@ -238,8 +251,8 @@ def run_experiment(
         if "direct_estimation" in approaches:
             print(f"Running Selectivity Estimation Mode ({runs} runs)...")
             res_direct = direct_estimation_adapter.run_overlap(
-                str(f_v_path), 
-                str(f_n_path), 
+                str(staged_v_path), 
+                str(staged_n_path), 
                 runs,
                 log_dir=str(run_log_dir),
                 timeout=timeout
@@ -253,8 +266,8 @@ def run_experiment(
         if "cgal" in approaches:
             print(f"Running Face Mode ({runs} runs)...")
             res_cgal = cgal_adapter.run_overlap(
-                str(f_v_path), 
-                str(f_n_path), 
+                str(staged_v_path), 
+                str(staged_n_path), 
                 runs,
                 log_dir=str(run_log_dir),
                 timeout=timeout
@@ -268,8 +281,8 @@ def run_experiment(
         if "touch" in approaches:
             print(f"Running TOUCH Mode ({runs} runs)...")
             res_touch = touch_adapter.run_overlap(
-                str(f_v_path), 
-                str(f_n_path), 
+                str(staged_v_path), 
+                str(staged_n_path), 
                 runs,
                 log_dir=str(run_log_dir),
                 timeout=timeout
@@ -281,10 +294,13 @@ def run_experiment(
         # Run TDBase Benchmark
         res_td = {"mean": None, "std": None}
         if "tdbase" in approaches:
+            # Keep TDBase inputs symmetric and fresh for this pair.
+            tdbase_adapter.preprocess_from_source(str(staged_v_path), str(staged_v_path), log_dir=str(run_log_dir))
+            tdbase_adapter.preprocess_from_source(str(staged_n_path), str(staged_n_path), log_dir=str(run_log_dir))
             print(f"Running TDBase Mode ({runs} runs)...")
             res_td = tdbase_adapter.run_overlap(
-                str(f_v_path), 
-                str(f_n_path), 
+                str(staged_v_path), 
+                str(staged_n_path), 
                 runs,
                 log_dir=str(run_log_dir),
                 timeout=timeout
@@ -320,6 +336,8 @@ def run_experiment(
              results["selectivity"] = []
              results["size_bytes1"] = []
              results["size_bytes2"] = []
+             results["num_triangles1"] = []
+             results["num_triangles2"] = []
              results["universe_extents1"] = []
              results["universe_extents2"] = []
         
@@ -331,6 +349,7 @@ def run_experiment(
                 results["num_obj2"].append(int(res["num_obj2"]))
                 num_intersections = int(res.get("num_intersections", 0))
                 results["num_intersections"].append(num_intersections)
+                results["result_sizes"].append(num_intersections)
                 cross_product_size = int(res["num_obj1"]) * int(res["num_obj2"])
                 results["selectivity"].append(
                     (num_intersections / cross_product_size) if cross_product_size > 0 else 0.0
@@ -347,9 +366,12 @@ def run_experiment(
             results["selectivity"].append(0.0)
             results["universe_extents1"].append([0.0, 0.0, 0.0])
             results["universe_extents2"].append([0.0, 0.0, 0.0])
+            results["result_sizes"].append(0)
 
         results["size_bytes1"].append(f_v_path.stat().st_size if f_v_path.exists() else 0)
         results["size_bytes2"].append(f_n_path.stat().st_size if f_n_path.exists() else 0)
+        results["num_triangles1"].append(count_triangles(f_v_path) if f_v_path.exists() else 0)
+        results["num_triangles2"].append(count_triangles(f_n_path) if f_n_path.exists() else 0)
         
         exact_str = f"{res_exact['mean']:.2f}ms" if res_exact['mean'] is not None else "N/A"
         direct_str = f"{res_direct['mean']:.2f}ms" if res_direct['mean'] is not None else "N/A"
@@ -505,7 +527,21 @@ def plot_results(results, figures_dir):
         
         # Format X-axis with 'k' for thousands
         ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: f'{x/1e3:g}k' if x >= 1e3 else f'{x:g}'))
-        
+
+        # Ensure the x-axis starts at 100k when all data points are >= 100k
+        try:
+            min_x = min(x_vals)
+            max_x = max(x_vals)
+            left_lim = 100_000 if min_x >= 100_000 else min_x
+            # add small padding to the right so markers aren't clipped
+            right_lim = max_x * 1.05 if max_x > left_lim else left_lim * 1.05
+            ax.set_xlim(left=left_lim, right=right_lim)
+            # Use 100k major ticks for clearer labels (will include 100k)
+            ax.xaxis.set_major_locator(ticker.MultipleLocator(100000))
+        except Exception:
+            # fallback to default autoscaling
+            pass
+
         # Secondary axis for selectivity removed as requested
 
         set_log_timing_axis_limits(ax, all_y_vals)
@@ -749,78 +785,87 @@ def main():
     nu_counts = args.nu if args.nu else DEFAULT_NU_COUNTS
     
     run_layout = create_benchmark_run_layout(SCRIPT_DIR, "overlap_nu_scalability")
+    run_dir = Path(run_layout["run_dir"])
     run_log_dir = Path(run_layout["logs_dir"])
     figures_dir = Path(run_layout["figures_dir"])
-    results = run_experiment(
-        args.runs,
-        args.grid_cell_size,
-        nu_counts,
-        run_log_dir,
-        threads=args.threads,
-        tdbase_threads=args.tdbase_threads,
-        tdbase_compute_threads=args.tdbase_compute_threads,
-        approaches=args.approaches,
-        track_hash_contention=args.track_hash_contention,
-        timeout=args.timeout,
-        dataset_profile=args.dataset_profile,
-        tdbase_timing_mode=args.tdbase_timing_mode,
-    )
-    
-    if results and results["counts"]:
-        print("\nResults Summary:")
-        header = f"{'Nu':<10} {'Exact (ms)':<15} {'Selectivity Estimation (ms)':<15} {'Face (ms)':<15} {'TOUCH (ms)':<15} {'TDBase (ms)':<15}"
-        print(header)
-        print("-" * len(header))
-        for i, n in enumerate(results["counts"]):
-            ex = results['exact']['mean'][i]
-            direct = results['direct_estimation']['mean'][i]
-            cg = results['cgal']['mean'][i]
-            to = results['touch']['mean'][i]
-            td = results['tdbase']['mean'][i]
-            
-            ex_str = f"{ex:.2f}" if ex is not None else "N/A"
-            direct_str = f"{direct:.2f}" if direct is not None else "N/A"
-            cg_str = f"{cg:.2f}" if cg is not None else "N/A"
-            to_str = f"{to:.2f}" if to is not None else "N/A"
-            td_str = f"{td:.2f}" if td is not None else "N/A"
-            
-            print(f"{n:<10} {ex_str:<15} {direct_str:<15} {cg_str:<15} {to_str:<15} {td_str:<15}")
-                
-        plot_results(results, figures_dir)
-        
-        # Save summary to canonical run results path
-        out_json = Path(run_layout["results_json"])
-        clean_results = {}
-        for k, v in results.items():
-            if isinstance(v, dict):
-                clean_results[k] = {ki: (vi.tolist() if isinstance(vi, np.ndarray) else vi) for ki, vi in v.items()}
-            elif isinstance(v, list):
-                clean_results[k] = v
-            else:
-                clean_results[k] = v
-        write_json(
-            out_json,
-            {
-                "metadata": {
-                    "timestamp": run_layout["timestamp"],
-                    "run_name": run_layout["run_name"],
-                    "run_dir": str(run_layout["run_dir"]),
-                    "runs": args.runs,
-                    "grid_cell_size": args.grid_cell_size,
-                    "nu_counts": nu_counts,
-                    "threads": args.threads,
-                    "tdbase_threads": args.tdbase_threads,
-                    "tdbase_compute_threads": args.tdbase_compute_threads,
-                    "timeout": args.timeout,
-                    "dataset_profile": args.dataset_profile,
-                    "tdbase_timing_mode": args.tdbase_timing_mode,
-                },
-                "results": clean_results,
-            },
+    isolated_data_dirs = create_isolated_run_data_dirs(run_dir)
+    try:
+        results = run_experiment(
+            args.runs,
+            args.grid_cell_size,
+            nu_counts,
+            run_log_dir,
+            isolated_data_dirs,
+            threads=args.threads,
+            tdbase_threads=args.tdbase_threads,
+            tdbase_compute_threads=args.tdbase_compute_threads,
+            approaches=args.approaches,
+            track_hash_contention=args.track_hash_contention,
+            timeout=args.timeout,
+            dataset_profile=args.dataset_profile,
+            tdbase_timing_mode=args.tdbase_timing_mode,
         )
-        print(f"Raw results saved to {out_json}")
-    else:
-        print("No successful runs.")
+        
+        if results and results["counts"]:
+            print("\nResults Summary:")
+            header = f"{'Nu':<10} {'Exact (ms)':<15} {'Selectivity Estimation (ms)':<15} {'Face (ms)':<15} {'TOUCH (ms)':<15} {'TDBase (ms)':<15}"
+            print(header)
+            print("-" * len(header))
+            for i, n in enumerate(results["counts"]):
+                ex = results['exact']['mean'][i]
+                direct = results['direct_estimation']['mean'][i]
+                cg = results['cgal']['mean'][i]
+                to = results['touch']['mean'][i]
+                td = results['tdbase']['mean'][i]
+                
+                ex_str = f"{ex:.2f}" if ex is not None else "N/A"
+                direct_str = f"{direct:.2f}" if direct is not None else "N/A"
+                cg_str = f"{cg:.2f}" if cg is not None else "N/A"
+                to_str = f"{to:.2f}" if to is not None else "N/A"
+                td_str = f"{td:.2f}" if td is not None else "N/A"
+                
+                print(f"{n:<10} {ex_str:<15} {direct_str:<15} {cg_str:<15} {to_str:<15} {td_str:<15}")
+                    
+            plot_results(results, figures_dir)
+            
+            # Save summary to canonical run results path
+            out_json = Path(run_layout["results_json"])
+            clean_results = {}
+            for k, v in results.items():
+                if isinstance(v, dict):
+                    clean_results[k] = {ki: (vi.tolist() if isinstance(vi, np.ndarray) else vi) for ki, vi in v.items()}
+                elif isinstance(v, list):
+                    clean_results[k] = v
+                else:
+                    clean_results[k] = v
+            write_json(
+                out_json,
+                {
+                    "metadata": {
+                        "timestamp": run_layout["timestamp"],
+                        "run_name": run_layout["run_name"],
+                        "run_dir": str(run_layout["run_dir"]),
+                        "runs": args.runs,
+                        "grid_cell_size": args.grid_cell_size,
+                        "nu_counts": nu_counts,
+                        "threads": args.threads,
+                        "tdbase_threads": args.tdbase_threads,
+                        "tdbase_compute_threads": args.tdbase_compute_threads,
+                        "timeout": args.timeout,
+                        "dataset_profile": args.dataset_profile,
+                        "tdbase_timing_mode": args.tdbase_timing_mode,
+                        "isolated_data_root": str(isolated_data_dirs["root"]),
+                    },
+                    "results": clean_results,
+                },
+            )
+            print(f"Raw results saved to {out_json}")
+        else:
+            print("No successful runs.")
+    finally:
+        if isolated_data_dirs["root"].exists():
+            print(f"Cleaning isolated preprocessing data: {isolated_data_dirs['root']}")
+            shutil.rmtree(isolated_data_dirs["root"], ignore_errors=True)
 
 if __name__ == "__main__":
     main()

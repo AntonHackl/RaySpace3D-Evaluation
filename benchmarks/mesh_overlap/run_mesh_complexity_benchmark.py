@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import numpy as np
 import argparse
 import sys
@@ -25,6 +26,7 @@ from benchmarks.common.viz_utils import (
 )
 from benchmarks.common.scenario_utils import (
     canonical_sphere_pair_paths,
+    count_triangles,
     count_vertices,
     ensure_sphere_pair_dataset,
     get_shared_data_dirs,
@@ -106,6 +108,14 @@ def run_experiment(
         "cgal": {"mean": [], "std": []},
         "touch": {"mean": [], "std": []},
         "tdbase": {"mean": [], "std": []},
+        "num_intersections": [],
+        "result_sizes": [],
+        "num_obj1": [],
+        "num_obj2": [],
+        "size_bytes1": [],
+        "size_bytes2": [],
+        "num_triangles1": [],
+        "num_triangles2": [],
     }
 
     for stage in DEFAULT_STAGES:
@@ -204,6 +214,20 @@ def run_experiment(
 
         results["tdbase"]["mean"].append(res_tdbase.get("mean"))
         results["tdbase"]["std"].append(res_tdbase.get("std"))
+
+        num_intersections = 0
+        for res in [res_exact, res_direct]:
+            if "num_intersections" in res:
+                num_intersections = int(res.get("num_intersections", 0))
+                break
+        results["num_intersections"].append(num_intersections)
+        results["result_sizes"].append(num_intersections)
+        results["num_obj1"].append(int(res_exact.get("num_obj1", num_objects)))
+        results["num_obj2"].append(int(res_exact.get("num_obj2", num_objects)))
+        results["size_bytes1"].append(file_a.stat().st_size if file_a.exists() else 0)
+        results["size_bytes2"].append(file_b.stat().st_size if file_b.exists() else 0)
+        results["num_triangles1"].append(count_triangles(file_a) if file_a.exists() else 0)
+        results["num_triangles2"].append(count_triangles(file_b) if file_b.exists() else 0)
         
         print(
             f"Stage {stage} done. Vertices={vertices_count}, Exact={res_exact.get('mean')}, "
@@ -249,8 +273,20 @@ def plot_results(results, num_objects, selectivity, figures_dir):
     plt.yscale('log')
     plt.gca().tick_params(axis='both', labelsize=13)
     set_log_timing_axis_limits(plt.gca(), all_y_vals)
-    plt.xscale('log') # Use log scale for complexity as well to spread points evenly
-    make_legend_bold(plt.gca(), loc='upper left', fontsize=12)
+    ax = plt.gca()
+    try:
+        min_x = min(complexities)
+        max_x = max(complexities)
+        span = max_x - min_x
+        pad = span * 0.05 if span > 0 else max_x * 0.05 if max_x > 0 else 1
+        left = max(0, min_x - pad)
+        right = max_x + pad
+        ax.set_xlim(left=left, right=right)
+        ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=6))
+        ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{int(x):,}"))
+    except Exception:
+        pass
+    make_legend_bold(ax, loc='upper left', fontsize=12)
     plt.grid(False)
     plt.tight_layout()
     output_path = figures_dir / "mesh_complexity_scalability.png"

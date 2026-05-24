@@ -61,7 +61,8 @@ def main():
 
     queries = resolve_queries(args.queries, args.approaches)
 
-    shared_dirs = get_shared_data_dirs("microns_query_comparison")
+    # Use the same shared dataset root as overlap overall performance MICrONS runs.
+    shared_dirs = get_shared_data_dirs("microns_overlap")
     run_layout = create_benchmark_run_layout(SCRIPT_DIR, "query_comparison_microns")
     logs_dir = Path(run_layout["logs_dir"])
     figures_dir = Path(run_layout["figures_dir"])

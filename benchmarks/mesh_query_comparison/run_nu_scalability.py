@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 from pathlib import Path
+import shutil
 import sys
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -8,10 +9,14 @@ REPO_ROOT = SCRIPT_DIR.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from benchmarks.common.scenario_utils import (
+    canonical_nn_pair_paths,
     canonical_nu_pair_paths,
+    create_isolated_run_data_dirs,
     create_benchmark_run_layout,
+    ensure_nn_pair_dataset,
     ensure_nu_pair_dataset,
     get_shared_data_dirs,
+    stage_input_files,
     write_json,
 )
 from benchmarks.mesh_query_comparison.core import (
@@ -27,12 +32,22 @@ from benchmarks.mesh_query_comparison.core import (
 
 
 LEGACY_OVERLAP_RAW_DIR = REPO_ROOT / "benchmarks" / "mesh_overlap" / "data" / "raw"
-DEFAULT_NU_COUNTS = [200, 400, 600, 800]
+FORCED_NU_COUNTS = [800]
+OVERLAP_SHARED_SCENARIO = "large_nu_nn_scalability"
+OVERLAP_NU_NV = 750
+OVERLAP_NU_PREFIX = "tdbase_large"
 
 
 def main():
     parser = argparse.ArgumentParser(description="Nu scalability benchmark for mesh query comparison")
-    parser.add_argument("--nu", type=int, nargs="+", default=DEFAULT_NU_COUNTS)
+    parser.add_argument("--nu", type=int, nargs="+", default=FORCED_NU_COUNTS)
+    parser.add_argument(
+        "--dataset-profile",
+        type=str,
+        default="large_nu_v",
+        choices=["large_nu_v", "large_nu_nn"],
+        help="Use Vessel-Nuclei (large_nu_v) or Nuclei-Nuclei (large_nu_nn) datasets.",
+    )
     parser.add_argument("--grid-cell-size", type=float, default=200.0)
     parser.add_argument("--runs", type=int, default=5)
     parser.add_argument("--warmup-runs", type=int, default=1)
@@ -51,17 +66,28 @@ def main():
     parser.add_argument("--use-anyhit-point-in-mesh", action="store_true")
     parser.add_argument("--include-overlap-pairs", action="store_true")
     args = parser.parse_args()
+    if args.nu != FORCED_NU_COUNTS:
+        print(f"requested nu={args.nu}; forcing nu={FORCED_NU_COUNTS} for consistency")
+        args.nu = FORCED_NU_COUNTS.copy()
 
     queries = resolve_queries(args.queries, args.approaches)
 
-    shared_dirs = get_shared_data_dirs("nu_scalability")
-    run_layout = create_benchmark_run_layout(SCRIPT_DIR, "query_comparison_nu_scalability")
+    # Use the same shared dataset root as overlap overall performance (large_nu_v profile).
+    shared_dirs = get_shared_data_dirs(OVERLAP_SHARED_SCENARIO)
+    run_layout_name = (
+        "query_comparison_nu_v_scalability"
+        if args.dataset_profile == "large_nu_v"
+        else "query_comparison_nu_scalability_nn"
+    )
+    run_layout = create_benchmark_run_layout(SCRIPT_DIR, run_layout_name)
+    run_dir = Path(run_layout["run_dir"])
     logs_dir = Path(run_layout["logs_dir"])
     figures_dir = Path(run_layout["figures_dir"])
+    isolated_data_dirs = create_isolated_run_data_dirs(run_dir)
 
     adapters = build_raytracer_query_adapters(
         repo_root=REPO_ROOT,
-        shared_dirs=shared_dirs,
+        data_dirs=isolated_data_dirs,
         grid_cell_size=args.grid_cell_size,
         warmup_runs=args.warmup_runs,
         overlap_mode=args.overlap_mode,
@@ -81,82 +107,110 @@ def main():
 
     results = []
     case_labels = []
-    for nu in args.nu:
-        n_path, v_path = canonical_nu_pair_paths(shared_dirs["raw"], nu=nu)
-        ensure_nu_pair_dataset(n_path, v_path, legacy_raw_dirs=[LEGACY_OVERLAP_RAW_DIR])
-        case_label = f"nu_{nu}"
-        case_log_dir = logs_dir / sanitize_case_token(case_label)
+    try:
+        for nu in args.nu:
+            if args.dataset_profile == "large_nu_nn":
+                n1_path, n2_path = canonical_nn_pair_paths(
+                    shared_dirs["raw"],
+                    nu=nu,
+                    nv=OVERLAP_NU_NV,
+                    prefix=OVERLAP_NU_PREFIX,
+                )
+                ensure_nn_pair_dataset(n1_path, n2_path, legacy_raw_dirs=[LEGACY_OVERLAP_RAW_DIR])
+                mesh1_path, mesh2_path = n1_path, n2_path
+            else:
+                n_path, v_path = canonical_nu_pair_paths(
+                    shared_dirs["raw"],
+                    nu=nu,
+                    nv=OVERLAP_NU_NV,
+                    prefix=OVERLAP_NU_PREFIX,
+                )
+                ensure_nu_pair_dataset(n_path, v_path, legacy_raw_dirs=[LEGACY_OVERLAP_RAW_DIR])
+                mesh1_path, mesh2_path = v_path, n_path
+            case_label = f"nu_{nu}"
+            case_log_dir = logs_dir / sanitize_case_token(case_label)
 
-        ensure_preprocessed(adapters, [v_path, n_path], log_dir=case_log_dir)
-
-        row = {
-            "nu": nu,
-            "mesh1": str(v_path),
-            "mesh2": str(n_path),
-            "size_bytes1": v_path.stat().st_size if v_path.exists() else 0,
-            "size_bytes2": n_path.stat().st_size if n_path.exists() else 0,
-        }
-        row.update(
-            run_selected_queries(
-                adapters=adapters,
-                queries=queries,
-                mesh1=v_path,
-                mesh2=n_path,
-                runs=args.runs,
-                timeout=args.timeout,
-                overlap_query_direction=args.overlap_query_direction,
-                intersection_extra_args=intersection_extra_args,
-                log_dir=case_log_dir,
+            staged_mesh1_path, staged_mesh2_path = stage_input_files(
+                [mesh1_path, mesh2_path],
+                isolated_data_dirs["raw"],
             )
+            ensure_preprocessed(adapters, [staged_mesh1_path, staged_mesh2_path], log_dir=case_log_dir)
+
+            row = {
+                "nu": nu,
+                "dataset_profile": args.dataset_profile,
+                "mesh1": str(mesh1_path),
+                "mesh2": str(mesh2_path),
+                "size_bytes1": mesh1_path.stat().st_size if mesh1_path.exists() else 0,
+                "size_bytes2": mesh2_path.stat().st_size if mesh2_path.exists() else 0,
+            }
+            row.update(
+                run_selected_queries(
+                    adapters=adapters,
+                    queries=queries,
+                    mesh1=staged_mesh1_path,
+                    mesh2=staged_mesh2_path,
+                    runs=args.runs,
+                    timeout=args.timeout,
+                    overlap_query_direction=args.overlap_query_direction,
+                    intersection_extra_args=intersection_extra_args,
+                    log_dir=case_log_dir,
+                )
+            )
+
+            results.append(row)
+            case_labels.append(case_label)
+            print(f"nu={nu}: done")
+
+        generate_query_comparison_figures(
+            results_rows=results,
+            queries=queries,
+            case_labels=case_labels,
+            figures_dir=figures_dir,
+            title_prefix="NU scalability",
+            x_axis_label="Dataset case",
         )
 
-        results.append(row)
-        case_labels.append(case_label)
-        print(f"nu={nu}: done")
-
-    generate_query_comparison_figures(
-        results_rows=results,
-        queries=queries,
-        case_labels=case_labels,
-        figures_dir=figures_dir,
-        title_prefix="NU scalability",
-        x_axis_label="Dataset case",
-    )
-
-    payload = {
-        "metadata": {
-            "scenario": "nu_scalability",
-            "query_type": "mesh_query_comparison",
-            "timestamp": run_layout["timestamp"],
-            "run_name": run_layout["run_name"],
-            "run_dir": str(run_layout["run_dir"]),
-            "nu": args.nu,
-            "grid_cell_size": args.grid_cell_size,
-            "runs": args.runs,
-            "warmup_runs": args.warmup_runs,
-            "timeout_seconds": args.timeout,
-            "queries": queries,
-            "query_implementations": {
-                "overlap": f"raytracer_{args.overlap_mode}",
-                "intersection": f"raytracer_{args.intersection_mode}",
-                "containment": "raytracer_containment",
+        payload = {
+            "metadata": {
+                "scenario": "nu_scalability",
+                "query_type": "mesh_query_comparison",
+                "dataset_profile": args.dataset_profile,
+                "timestamp": run_layout["timestamp"],
+                "run_name": run_layout["run_name"],
+                "run_dir": str(run_layout["run_dir"]),
+                "nu": args.nu,
+                "grid_cell_size": args.grid_cell_size,
+                "runs": args.runs,
+                "warmup_runs": args.warmup_runs,
+                "timeout_seconds": args.timeout,
+                "queries": queries,
+                "query_implementations": {
+                    "overlap": f"raytracer_{args.overlap_mode}",
+                    "intersection": f"raytracer_{args.intersection_mode}",
+                    "containment": "raytracer_containment",
+                },
+                "intersection_query_direction": args.intersection_query_direction,
+                "overlap_query_direction": args.overlap_query_direction,
+                "overlap_max_iterations": args.overlap_max_iterations,
+                "containment_max_iterations": args.containment_max_iterations,
+                "hash_load_factor": args.hash_load_factor,
+                "enable_profiling_stats": args.enable_profiling_stats,
+                "use_anyhit_point_in_mesh": args.use_anyhit_point_in_mesh,
+                "include_overlap_pairs": args.include_overlap_pairs,
+                "shared_data_root": str(shared_dirs["root"]),
+                "isolated_data_root": str(isolated_data_dirs["root"]),
             },
-            "intersection_query_direction": args.intersection_query_direction,
-            "overlap_query_direction": args.overlap_query_direction,
-            "overlap_max_iterations": args.overlap_max_iterations,
-            "containment_max_iterations": args.containment_max_iterations,
-            "hash_load_factor": args.hash_load_factor,
-            "enable_profiling_stats": args.enable_profiling_stats,
-            "use_anyhit_point_in_mesh": args.use_anyhit_point_in_mesh,
-            "include_overlap_pairs": args.include_overlap_pairs,
-            "shared_data_root": str(shared_dirs["root"]),
-        },
-        "results": results,
-    }
+            "results": results,
+        }
 
-    out = Path(run_layout["results_json"])
-    write_json(out, payload)
-    print(f"Saved: {out}")
+        out = Path(run_layout["results_json"])
+        write_json(out, payload)
+        print(f"Saved: {out}")
+    finally:
+        if isolated_data_dirs["root"].exists():
+            print(f"Cleaning isolated preprocessing data: {isolated_data_dirs['root']}")
+            shutil.rmtree(isolated_data_dirs["root"], ignore_errors=True)
 
 
 if __name__ == "__main__":

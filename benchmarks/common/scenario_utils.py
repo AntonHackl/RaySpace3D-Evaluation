@@ -5,7 +5,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, Iterable, Tuple
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -21,6 +21,7 @@ def build_selectivity_sweep(
     min_selectivity: float = 0.0001,
     max_selectivity: float = 0.01,
     num_points: int = 10,
+    scale: str = "log",
 ) -> list[float]:
     if min_selectivity <= 0 or max_selectivity <= 0:
         raise ValueError("Selectivity bounds must be positive")
@@ -29,10 +30,16 @@ def build_selectivity_sweep(
     if num_points < 2:
         raise ValueError("num_points must be at least 2")
 
-    log_min = math.log10(min_selectivity)
-    log_max = math.log10(max_selectivity)
-    step = (log_max - log_min) / (num_points - 1)
-    return [float(f"{10 ** (log_min + step * i):.8g}") for i in range(num_points)]
+    if scale == "log":
+        log_min = math.log10(min_selectivity)
+        log_max = math.log10(max_selectivity)
+        step = (log_max - log_min) / (num_points - 1)
+        return [float(f"{10 ** (log_min + step * i):.8g}") for i in range(num_points)]
+    elif scale == "linear":
+        step = (max_selectivity - min_selectivity) / (num_points - 1)
+        return [float(f"{(min_selectivity + step * i):.8g}") for i in range(num_points)]
+    else:
+        raise ValueError(f"Unknown scale: {scale}")
 
 
 def timestamp_tag() -> str:
@@ -141,6 +148,34 @@ def get_shared_data_dirs(scenario_name: str) -> Dict[str, Path]:
         "preprocessed": preprocessed_dir,
         "timings": timings_dir,
     }
+
+
+def create_isolated_run_data_dirs(run_dir: Path) -> Dict[str, Path]:
+    isolated_root = run_dir / "isolated_data"
+    raw_dir = isolated_root / "raw"
+    preprocessed_dir = isolated_root / "preprocessed"
+    timings_dir = isolated_root / "timings"
+    for d in (raw_dir, preprocessed_dir, timings_dir):
+        d.mkdir(parents=True, exist_ok=True)
+    return {
+        "root": isolated_root,
+        "raw": raw_dir,
+        "preprocessed": preprocessed_dir,
+        "timings": timings_dir,
+    }
+
+
+def stage_input_file(source_path: Path, raw_dir: Path) -> Path:
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    staged_path = raw_dir / source_path.name
+    if staged_path.exists():
+        return staged_path
+    shutil.copyfile(source_path, staged_path)
+    return staged_path
+
+
+def stage_input_files(source_paths: Iterable[Path], raw_dir: Path) -> list[Path]:
+    return [stage_input_file(Path(source_path), raw_dir) for source_path in source_paths]
 
 
 def run_cmd(cmd, desc: str):
@@ -270,6 +305,15 @@ def count_vertices(obj_path: Path) -> int:
     with open(obj_path, "r", encoding="utf-8") as f:
         for line in f:
             if line.startswith("v "):
+                count += 1
+    return count
+
+
+def count_triangles(obj_path: Path) -> int:
+    count = 0
+    with open(obj_path, "r", encoding="utf-8") as f:
+        for line in f:
+            if line.startswith("f "):
                 count += 1
     return count
 

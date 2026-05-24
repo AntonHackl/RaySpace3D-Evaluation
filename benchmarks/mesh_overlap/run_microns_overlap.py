@@ -96,6 +96,7 @@ def main():
             "size_bytes_a": agg_a.stat().st_size if agg_a.exists() else 0,
             "size_bytes_b": agg_b.stat().st_size if agg_b.exists() else 0,
         }
+        result_size = 0
 
         # Run Benchmarks
         for approach_name in args.approaches:
@@ -118,8 +119,14 @@ def main():
                     str(agg_a), str(agg_b), args.runs, timeout=args.timeout,
                     log_dir=str(run_log_dir)
                 )
+
+            if approach_name == "direct_estimation" and "error" not in res:
+                # Result size must be the true number of unique output pairs, not the estimate.
+                result_size = int(res.get("num_intersections", 0))
             
             entry[approach_name] = res
+
+        entry["result_size"] = result_size
 
         results.append(entry)
         print(f"size_gb={size_gb}: done")

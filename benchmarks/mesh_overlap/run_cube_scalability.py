@@ -96,7 +96,8 @@ def run_experiment(runs, grid_cell_size, run_log_dir, threads=None, approaches=N
         "exact": {"mean": [], "std": [], "breakdown": []},
         "estimated": {"mean": [], "std": [], "breakdown": []},
         "cgal": {"mean": [], "std": []},
-        "touch": {"mean": [], "std": []}
+        "touch": {"mean": [], "std": []},
+        "result_sizes": []
     }
 
     for count in CUBE_COUNTS:
@@ -208,6 +209,13 @@ def run_experiment(runs, grid_cell_size, run_log_dir, threads=None, approaches=N
         
         results["touch"]["mean"].append(res_touch["mean"])
         results["touch"]["std"].append(res_touch["std"])
+
+        result_size = 0
+        for res in [res_exact, res_est]:
+            if "num_intersections" in res:
+                result_size = int(res.get("num_intersections", 0))
+                break
+        results["result_sizes"].append(result_size)
         
         # Add dataset sizes
         if "num_obj1" not in results:

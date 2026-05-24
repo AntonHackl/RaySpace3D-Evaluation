@@ -87,7 +87,7 @@ def resolve_queries(queries: Sequence[str] | None, approaches: Sequence[str] | N
 def build_raytracer_query_adapters(
     *,
     repo_root: Path,
-    shared_dirs: Dict[str, Path],
+    data_dirs: Dict[str, Path],
     grid_cell_size: int,
     warmup_runs: int,
     overlap_mode: str,
@@ -101,8 +101,8 @@ def build_raytracer_query_adapters(
     overlap = RaytracerOverlapAdapter(
         str(rayspace_dir),
         mode=overlap_mode,
-        preprocessed_dir=str(shared_dirs["preprocessed"]),
-        timings_dir=str(shared_dirs["timings"]),
+        preprocessed_dir=str(data_dirs["preprocessed"]),
+        timings_dir=str(data_dirs["timings"]),
         grid_cell_size=grid_cell_size,
         warmup_runs=warmup_runs,
         overlap_max_iterations=overlap_max_iterations,
@@ -110,15 +110,15 @@ def build_raytracer_query_adapters(
     intersection = RaytracerIntersectionAdapter(
         str(rayspace_dir),
         mode=intersection_mode,
-        preprocessed_dir=str(shared_dirs["preprocessed"]),
-        timings_dir=str(shared_dirs["timings"]),
+        preprocessed_dir=str(data_dirs["preprocessed"]),
+        timings_dir=str(data_dirs["timings"]),
         grid_cell_size=grid_cell_size,
         warmup_runs=warmup_runs,
     )
     containment = RaytracerContainmentAdapter(
         str(rayspace_dir),
-        preprocessed_dir=str(shared_dirs["preprocessed"]),
-        timings_dir=str(shared_dirs["timings"]),
+        preprocessed_dir=str(data_dirs["preprocessed"]),
+        timings_dir=str(data_dirs["timings"]),
         grid_cell_size=grid_cell_size,
         warmup_runs=warmup_runs,
         use_anyhit_point_in_mesh=use_anyhit_point_in_mesh,

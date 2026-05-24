@@ -27,6 +27,7 @@ class GroupResult:
     run_timestamp: str
     selector_value: str
     approach_to_mean: Dict[str, float]
+    result_size: Optional[int] = None
 
 
 def _parse_ts_from_run_dir(run_dir: Path) -> str:
@@ -46,6 +47,16 @@ def _valid_mean(value) -> Optional[float]:
     if not math.isfinite(v) or v <= 0.0:
         return None
     return v
+
+
+def _valid_int(value) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        v = int(value)
+    except (TypeError, ValueError):
+        return None
+    return v if v >= 0 else None
 
 
 def _approach_order_key(name: str) -> Tuple[int, str]:
@@ -91,23 +102,27 @@ def _extract_latest_complete_nu_profile(path: Path, *, dataset_profile: str, gro
 
     selected_idx = None
     approach_to_mean: Dict[str, float] = {}
+    result_size = None
     for idx in sorted(range(len(counts)), key=lambda i: counts[i], reverse=True):
         candidate_means: Dict[str, float] = {}
-        complete = True
         for app in approaches:
             arr = (results.get(app) or {}).get("mean", [])
             if idx >= len(arr):
-                complete = False
-                break
+                continue
             mean = _valid_mean(arr[idx])
-            if mean is None:
-                complete = False
-                break
-            candidate_means[app] = mean
-        if complete:
-            selected_idx = idx
-            approach_to_mean = candidate_means
-            break
+            if mean is not None:
+                candidate_means[app] = mean
+        if not candidate_means:
+            continue
+
+        selected_idx = idx
+        approach_to_mean = candidate_means
+        sizes = results.get("result_sizes", [])
+        if idx < len(sizes):
+            result_size = _valid_int(sizes[idx])
+        if result_size is None:
+            return None
+        break
 
     if selected_idx is None:
         return None
@@ -119,6 +134,7 @@ def _extract_latest_complete_nu_profile(path: Path, *, dataset_profile: str, gro
         run_timestamp=_parse_ts_from_run_dir(run_dir),
         selector_value=f"nu={counts[selected_idx]}",
         approach_to_mean=approach_to_mean,
+        result_size=result_size,
     )
 
 
@@ -128,6 +144,16 @@ def _extract_latest_complete_nu_large(path: Path) -> Optional[GroupResult]:
 
 def _extract_latest_complete_nu_nn_large(path: Path) -> Optional[GroupResult]:
     return _extract_latest_complete_nu_profile(path, dataset_profile="large_nu_nn", group_name=r"Nuclei $\bowtie$ Nuclei")
+
+def _extract_latest_complete_nu_nn_large_800(path: Path) -> Optional[GroupResult]:
+    extracted = _extract_latest_complete_nu_profile(
+        path,
+        dataset_profile="large_nu_nn",
+        group_name=r"Nuclei $\bowtie$ Nuclei",
+    )
+    if extracted is None or extracted.selector_value != "nu=800":
+        return None
+    return extracted
 
 
 def _extract_microns_4gb(path: Path) -> Optional[GroupResult]:
@@ -149,7 +175,9 @@ def _extract_microns_4gb(path: Path) -> Optional[GroupResult]:
     approach_to_mean: Dict[str, float] = {}
     for app in approaches:
         res = row.get(app)
-        if not isinstance(res, dict) or "error" in res:
+        if not isinstance(res, dict):
+            continue
+        if res.get("error"):
             continue
         mean = _valid_mean(res.get("mean"))
         if mean is not None:
@@ -158,6 +186,18 @@ def _extract_microns_4gb(path: Path) -> Optional[GroupResult]:
     if not approach_to_mean:
         return None
 
+    # Prefer true intersection cardinality from direct_estimation/exact outputs.
+    # Older microns runs stored row["result_size"] from estimated pairs, which is incorrect.
+    result_size = None
+    for app in ("direct_estimation", "exact", "pierce", "estimated"):
+        res = row.get(app)
+        if isinstance(res, dict):
+            result_size = _valid_int(res.get("num_intersections"))
+            if result_size is not None:
+                break
+    if result_size is None:
+        result_size = _valid_int(row.get("result_size"))
+
     run_dir = path.parent
     return GroupResult(
         group_name=r"Neurons $\bowtie$ Neurons",
@@ -165,6 +205,7 @@ def _extract_microns_4gb(path: Path) -> Optional[GroupResult]:
         run_timestamp=_parse_ts_from_run_dir(run_dir),
         selector_value="size_gb=4",
         approach_to_mean=approach_to_mean,
+        result_size=result_size,
     )
 
 
@@ -197,6 +238,11 @@ def _extract_cube_largest(path: Path) -> Optional[GroupResult]:
     if not approach_to_mean:
         return None
 
+    sizes = results.get("result_sizes", [])
+    result_size = _valid_int(sizes[idx]) if idx < len(sizes) else None
+    if result_size is None:
+        return None
+
     run_dir = path.parent
     return GroupResult(
         group_name=r"Cubes $\bowtie$ Cubes",
@@ -204,6 +250,7 @@ def _extract_cube_largest(path: Path) -> Optional[GroupResult]:
         run_timestamp=_parse_ts_from_run_dir(run_dir),
         selector_value=f"count={max_count}",
         approach_to_mean=approach_to_mean,
+        result_size=result_size,
     )
 
 
@@ -315,10 +362,10 @@ def _plot_grouped_bars(groups: List[GroupResult], output_base: Path) -> None:
     ax.set_ylabel("Query Time (ms)", fontsize=17)
     ax.set_xticks(x)
     pretty_labels = [
-        r"Nuclei" + "\n" + r"$\bowtie$ Vessel",
-        r"Nuclei" + "\n" + r"$\bowtie$ Nuclei",
-        r"Neurons" + "\n" + r"$\bowtie$ Neurons",
-        r"Cubes" + "\n" + r"$\bowtie$ Cubes",
+        r"Nuclei$_1$" + "\n" + r"$\bowtie$ Vessel",
+        r"Nuclei$_1$" + "\n" + r"$\bowtie$ Nuclei$_2$",
+        r"Neurons$_1$" + "\n" + r"$\bowtie$ Neurons$_2$",
+        r"Cubes$_1$" + "\n" + r"$\bowtie$ Cubes$_2$",
     ]
     if len(groups) == len(pretty_labels):
         ax.set_xticklabels(pretty_labels, fontsize=11)
@@ -357,7 +404,7 @@ def main() -> None:
     runs_root = args.runs_root
 
     group_nu = _pick_latest_usable(runs_root, "overlap_nu_scalability", _extract_latest_complete_nu_large)
-    group_nu_nn = _pick_latest_usable(runs_root, "overlap_nu_scalability", _extract_latest_complete_nu_nn_large)
+    group_nu_nn = _pick_latest_usable(runs_root, "overlap_nu_scalability", _extract_latest_complete_nu_nn_large_800)
     group_microns = _pick_latest_usable_with_required_approach(
         runs_root, "overlap_microns", _extract_microns_4gb, "pierce"
     )
@@ -384,6 +431,7 @@ def main() -> None:
                 "source_run": str(g.run_dir),
                 "source_run_name": g.run_dir.name,
                 "source_timestamp": g.run_timestamp,
+                "result_size": g.result_size,
                 "results_ms": g.approach_to_mean,
             }
             for g in groups

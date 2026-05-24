@@ -22,8 +22,10 @@ from benchmarks.common.scenario_utils import (
     canonical_microns_aggregated_paths,
     canonical_nn_pair_paths,
     canonical_nu_pair_paths,
+    canonical_sphere_pair_paths,
     create_benchmark_run_layout,
     ensure_cube_pair_dataset,
+    ensure_sphere_pair_dataset,
     get_shared_data_dirs,
     write_json,
 )
@@ -36,6 +38,20 @@ from benchmarks.mesh_overlap.adapters.tdbase_adapter import TDBaseAdapter
 from benchmarks.mesh_overlap.adapters.base import run_command_streaming
 
 TDBASE_DIR = REPO_ROOT / "baselines" / "RaySpace3DBaselines" / "tdbase"
+SLURM_LOGS_DIR = REPO_ROOT / "benchmarks" / "slurm_logs"
+
+_TDBASE_GENERATION_FILENAME_RE = re.compile(
+    r"^(?P<prefix>.+)_(?P<kind>n|nn)_nv(?P<nv>\d+)_nu(?P<nu>\d+)_(?:n|v)_nv\d+_nu\d+_vs\d+_r\d+\.dt$"
+)
+_TDBASE_LARGE_HEADER_RE = re.compile(
+    r"Generating LARGE (?P<kind>n|nn|nu) dataset with prefix=(?P<prefix>[^,]+), nv=(?P<nv>\d+), nu=(?P<nu>\d+)\.\.\."
+)
+_TDBASE_PREPROCESS_TIMING_RE = re.compile(
+    r"preprocess_timing_ms .* preprocessing_only=([0-9.]+)"
+)
+_TDBASE_GENERATED_TOTAL_RE = re.compile(
+    r"\d+ vessels \d+ nucleis are generated takes ([0-9.]+) s"
+)
 
 
 @dataclass(frozen=True)
@@ -46,6 +62,12 @@ class DatasetRow:
 
 
 TDBASE_ELIGIBLE_DATASETS = {"Nuclei_1", "Nuclei_2", "Vessel_1"}
+SPHERE_TEMPLATE_DIR = REPO_ROOT / "benchmarks" / "mesh_overlap" / "data" / "single_obj_files"
+SPHERE_DEFAULT_STAGE = 5
+SPHERE_DEFAULT_NUM_OBJECTS = 500
+SPHERE_DEFAULT_SELECTIVITY = 0.0005
+SPHERE_DEFAULT_GRID_CELL_SIZE = 5.0
+FORCED_NU = 800
 
 
 def _ts() -> str:
@@ -233,6 +255,78 @@ def _tdbase_preprocessed_path(preprocessed_dir: Path, source_path: Path) -> Path
     return preprocessed_dir / source_path.with_suffix(".dt").name
 
 
+def _parse_tdbase_generation_spec(source_path: Path) -> Dict[str, object] | None:
+    match = _TDBASE_GENERATION_FILENAME_RE.match(source_path.name)
+    if not match:
+        return None
+    kind = match.group("kind")
+    if kind == "nu":
+        kind = "n"
+    return {
+        "prefix": match.group("prefix"),
+        "kind": kind,
+        "nv": int(match.group("nv")),
+        "nu": int(match.group("nu")),
+    }
+
+
+def _find_tdbase_generation_timing(source_path: Path) -> Dict[str, object] | None:
+    spec = _parse_tdbase_generation_spec(source_path)
+    if spec is None:
+        return None
+
+    candidates = sorted(SLURM_LOGS_DIR.glob("generate_large_nu_nn_*.out"), reverse=True)
+    for out_path in candidates:
+        err_path = out_path.with_suffix(".err")
+        if not err_path.exists():
+            continue
+
+        out_lines = out_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        err_text = err_path.read_text(encoding="utf-8", errors="replace")
+
+        stage_specs: List[Dict[str, object]] = []
+        for line in out_lines:
+            match = _TDBASE_LARGE_HEADER_RE.search(line)
+            if not match:
+                continue
+            kind = match.group("kind")
+            if kind == "nu":
+                kind = "n"
+            stage_specs.append(
+                {
+                    "prefix": match.group("prefix"),
+                    "kind": kind,
+                    "nv": int(match.group("nv")),
+                    "nu": int(match.group("nu")),
+                }
+            )
+
+        if not stage_specs:
+            continue
+
+        preprocess_matches = [float(m.group(1)) for m in _TDBASE_PREPROCESS_TIMING_RE.finditer(err_text)]
+        if preprocess_matches:
+            for stage_spec, preprocess_ms in zip(stage_specs, preprocess_matches):
+                if stage_spec == spec:
+                    return {
+                        "preprocess_ms": preprocess_ms,
+                        "preprocess_source": "simulator_preprocessing_only_from_slurm_log",
+                        "log_path": str(err_path),
+                    }
+
+        generated_totals = [float(m.group(1)) * 1000.0 for m in _TDBASE_GENERATED_TOTAL_RE.finditer(err_text)]
+        if generated_totals:
+            for stage_spec, preprocess_ms in zip(stage_specs, generated_totals):
+                if stage_spec == spec:
+                    return {
+                        "preprocess_ms": preprocess_ms,
+                        "preprocess_source": "simulator_total_elapsed_fallback_from_slurm_log",
+                        "log_path": str(err_path),
+                    }
+
+    return None
+
+
 def _run_tdbase_preprocess(
     *,
     dataset: DatasetRow,
@@ -240,18 +334,33 @@ def _run_tdbase_preprocess(
     logs_dir: Path,
 ) -> Dict[str, float | str]:
     _log(f"[tdbase-preprocess:{dataset.dataset_id}] START source={dataset.source_path}")
+    timing_info = _find_tdbase_generation_timing(dataset.source_path) if dataset.source_path.suffix == ".dt" else None
     t0 = time.time()
     adapter.preprocess_from_source(str(dataset.source_path), str(dataset.source_path), log_dir=str(logs_dir))
-    elapsed_ms = (time.time() - t0) * 1000.0
+    copy_elapsed_ms = (time.time() - t0) * 1000.0
     dt_path = _tdbase_preprocessed_path(adapter.preprocessed_dir, dataset.source_path)
     if not dt_path.exists():
         raise RuntimeError(f"TDBase preprocessed dataset missing for {dataset.dataset_id}: {dt_path}")
+
+    preprocess_ms = copy_elapsed_ms
+    preprocess_source = "obj_to_dt_wall_clock"
+    preprocess_log_path = None
+    if timing_info is not None:
+        preprocess_ms = float(timing_info["preprocess_ms"])
+        preprocess_source = str(timing_info["preprocess_source"])
+        preprocess_log_path = str(timing_info["log_path"])
+    elif dataset.source_path.suffix == ".dt":
+        preprocess_source = "dt_copy_wall_clock_fallback"
+
     _log(
-        f"[tdbase-preprocess:{dataset.dataset_id}] finished elapsed_ms={elapsed_ms:.2f} "
-        f"output={dt_path}"
+        f"[tdbase-preprocess:{dataset.dataset_id}] finished preprocess_ms={preprocess_ms:.2f} "
+        f"copy_elapsed_ms={copy_elapsed_ms:.2f} source={preprocess_source} output={dt_path}"
     )
     return {
-        "preprocess_ms": elapsed_ms,
+        "preprocess_ms": preprocess_ms,
+        "copy_elapsed_ms": copy_elapsed_ms,
+        "preprocess_source": preprocess_source,
+        "preprocess_log_path": preprocess_log_path,
         "preprocessed_path": str(dt_path),
     }
 
@@ -291,15 +400,15 @@ def _run_tdbase_and_parse_loading(
     evaluate_ms = float(metrics["evaluate_ms"])
     other_ms = float(metrics["other_ms"])
     total_loading_ms = float(metrics["loading_ms"])
-    # Self-join processes the same dataset twice; store the per-dataset loading cost.
-    load_ms = total_loading_ms / 2.0
+    # Self-join processes the same dataset twice; store the per-dataset tile-loading cost.
+    load_ms = load_tiles_ms / 2.0
     _log(
         f"[tdbase-load:{dataset.dataset_id}] finished total_ms={total_ms:.2f} "
         f"load_tiles_ms={load_tiles_ms:.2f} index_ms={index_ms:.2f} "
         f"decode_ms={decode_ms:.2f} prepare_ms={prepare_ms:.2f} "
         f"evaluate_ms={evaluate_ms:.2f} compute_ms={compute_ms:.2f} other_ms={other_ms:.2f} "
         f"total_loading_ms={total_loading_ms:.2f} "
-        f"per_dataset_loading_ms={load_ms:.2f} log={run_log}"
+        f"per_dataset_tile_loading_ms={load_ms:.2f} log={run_log}"
     )
     return {
         "loading_ms": load_ms,
@@ -318,88 +427,110 @@ def _run_tdbase_and_parse_loading(
 
 
 def _build_latex_table(rows: List[Dict[str, object]]) -> str:
-    def _latex_escape(text: object) -> str:
-        s = str(text)
-        replacements = {
-            "\\": r"\textbackslash{}",
-            "&": r"\&",
-            "%": r"\%",
-            "$": r"\$",
-            "#": r"\#",
-            "_": r"\_",
-            "{": r"\{",
-            "}": r"\}",
-            "~": r"\textasciitilde{}",
-            "^": r"\textasciicircum{}",
-        }
-        return "".join(replacements.get(ch, ch) for ch in s)
+    rows_by_id = {str(r["dataset_id"]): r for r in rows}
 
-    source_info = {
-        "Nuclei_1": r"TDBase simulator nuclei dataset (\url{https://github.com/tengdj/tdbase})",
-        "Nuclei_2": r"TDBase simulator nuclei dataset (\url{https://github.com/tengdj/tdbase})",
-        "Vessel_1": r"TDBase simulator vessel dataset (\url{https://github.com/tengdj/tdbase})",
-        "Neurons_1": r"MICrONS neuron mesh aggregate (\url{https://www.microns-explorer.org/})",
-        "Neurons_2": r"MICrONS neuron mesh aggregate (\url{https://www.microns-explorer.org/})",
-        "Cubes_1": r"Synthetic cube dataset generated by benchmark scripts",
-        "Cubes_2": r"Synthetic cube dataset generated by benchmark scripts",
-    }
+    def _fmt_int(value: object) -> str:
+        return f"{int(value):,}".replace(",", "{,}")
+
+    def _fmt_triangles(value: object) -> str:
+        v = int(value)
+        if v >= 1_000_000:
+            return f"{(v / 1_000_000.0):.1f}M"
+        return _fmt_int(v)
+
+    def _fmt_size(size_bytes: object) -> str:
+        b = int(size_bytes)
+        if b >= 1024**3:
+            s = f"{(b / (1024**3)):.2f}".rstrip("0").rstrip(".")
+            return f"{s} GB"
+        if b >= 1024**2:
+            s = f"{(b / (1024**2)):.0f}"
+            return f"{s} MB"
+        if b >= 1024:
+            s = f"{(b / 1024):.0f}"
+            return f"{s} KB"
+        return f"{b} B"
+
+    def _fmt_pair(left: object, right: object, *, left_scale: float = 1.0, right_scale: float = 1.0) -> str:
+        left_s = "--" if left is None else f"{(float(left) / left_scale):.2f}"
+        right_s = "--" if right is None else f"{(float(right) / right_scale):.2f}"
+        return f"{left_s} / {right_s}"
+
+    def _row(dataset_id: str, label: str, description: str) -> str:
+        row = rows_by_id[dataset_id]
+        return (
+            f"\\quad \\texttt{{{label}}} & {description} & "
+            f"{_fmt_int(row['objects'])} & {_fmt_triangles(row['triangles'])} & {_fmt_size(row['dataset_size_bytes'])} & "
+            f"{_fmt_pair(row.get('preprocess_pierce_ms'), row.get('preprocess_tdbase_ms'), left_scale=1000.0, right_scale=1000.0)} & "
+            f"{_fmt_pair(row.get('loading_pierce_ms'), row.get('loading_tdbase_ms'))} \\\\"
+        )
 
     lines = [
         r"\begin{table*}[t]",
         r"\centering",
         r"\scriptsize",
-        r"\setlength{\tabcolsep}{3pt}",
-        r"\begin{tabular}{lrrp{4.6cm}rrr}",
+        r"\setlength{\tabcolsep}{4pt}",
+        r"\begin{tabular}{lp{5cm}rrrrr}",
         r"\toprule",
-        r"Dataset Name & \#Objects & Size on Disk & Source Description & \#Triangles & Preprocessing Time (Pierce/TDBase) & Loading Time (Pierce/TDBase) \\",
+        r"Dataset & Description & \#Objects & \#Triangles & Size & Preproc.\ (s) [Pierce/TDBase] & Loading (ms) [Pierce/TDBase] \\",
         r"\midrule",
+        r"\multicolumn{7}{l}{\textit{\textsc{Tissue} }} \\",
+        _row("Nuclei_1", r"nuclei\_1", r"Cell nuclei mesh (\url{https://github.com/tengdj/tdbase})"),
+        _row("Nuclei_2", r"nuclei\_2", r"Independent regeneration of nuclei"),
+        _row("Vessel_1", r"vessel", r"Blood vessel mesh (\url{https://github.com/tengdj/tdbase})"),
+        r"\midrule",
+        r"\multicolumn{7}{l}{\textit{\textsc{MICrONS}}} \\",
+        _row("Neurons_1", r"neurons\_1", r"Neuron meshes (\url{https://www.microns-explorer.org/})"),
+        _row("Neurons_2", r"neurons\_2", r"Neuron meshes (\url{https://www.microns-explorer.org/})"),
+        _row("Neurons_3", r"neurons\_3", r"Neuron meshes (\url{https://www.microns-explorer.org/})"),
+        _row("Neurons_4", r"neurons\_4", r"Neuron meshes (\url{https://www.microns-explorer.org/})"),
+        r"\midrule",
+        r"\multicolumn{7}{l}{\textit{\textsc{Synthetic}}} \\",
+        _row("Cubes_1", r"cubes\_1", r"Axis-aligned cubes, benchmark script"),
+        _row("Cubes_2", r"cubes\_2", r"Axis-aligned cubes, benchmark script"),
+        _row("Spheres_1", r"spheres\_1", r"Tessellated spheres, mesh complexity benchmark script"),
+        _row("Spheres_2", r"spheres\_2", r"Tessellated spheres, mesh complexity benchmark script"),
+        r"\bottomrule",
+        r"\end{tabular}",
+        r"\caption{Datasets used in our evaluation, with preprocessing and loading times. A dash indicates that TDBase does not support the dataset.}",
+        r"\label{tab:dataset_benchmark}",
+        r"\end{table*}",
     ]
-
-    for row in rows:
-        preprocess_pierce_s = (
-            f"{(float(row['preprocess_pierce_ms']) / 1000.0):.2f}"
-            if row.get("preprocess_pierce_ms") is not None
-            else "-"
-        )
-        preprocess_tdbase_s = (
-            f"{(float(row['preprocess_tdbase_ms']) / 1000.0):.2f}"
-            if row.get("preprocess_tdbase_ms") is not None
-            else "-"
-        )
-        loading_pierce_ms = (
-            f"{float(row['loading_pierce_ms']):.2f}"
-            if row.get("loading_pierce_ms") is not None
-            else "-"
-        )
-        loading_tdbase_ms = (
-            f"{float(row['loading_tdbase_ms']):.2f}"
-            if row.get("loading_tdbase_ms") is not None
-            else "-"
-        )
-        dataset_id = str(row["dataset_id"])
-        source_desc = source_info.get(dataset_id, "Dataset used in benchmark")
-        lines.append(
-            f"{_latex_escape(dataset_id)} & {row['objects']} & {_latex_escape(row['dataset_size_human'])} & "
-            f"{source_desc} & {row['triangles']} & {preprocess_pierce_s} / {preprocess_tdbase_s} & "
-            f"{loading_pierce_ms} / {loading_tdbase_ms} \\\\"
-        )
-
-    lines.extend(
-        [
-            r"\bottomrule",
-            r"\end{tabular}",
-            r"\caption{Dataset statistics and preprocessing/loading costs used in the benchmark.}",
-            r"\label{tab:dataset_benchmark}",
-            r"\end{table*}",
-        ]
-    )
     return "\n".join(lines)
+
+
+def _resolve_microns_pair_paths(size_gb: int) -> Tuple[Path, Path]:
+    scenario_candidates = [
+        "microns_overlap",
+        "microns_query_comparison",
+        "microns_intersection_estimated",
+    ]
+    tried: List[Tuple[str, Path, Path]] = []
+    for scenario in scenario_candidates:
+        dirs = get_shared_data_dirs(scenario)
+        a_path, b_path = canonical_microns_aggregated_paths(dirs["raw"], size_gb)
+        tried.append((scenario, a_path, b_path))
+        if a_path.exists() and b_path.exists():
+            _log(
+                f"resolved MICrONS {size_gb}GB from scenario={scenario}: "
+                f"{a_path.name}, {b_path.name}"
+            )
+            return a_path, b_path
+
+    tried_str = "; ".join(
+        f"{scenario}: {a_path} | {b_path}"
+        for scenario, a_path, b_path in tried
+    )
+    raise FileNotFoundError(
+        f"MICrONS {size_gb}GB split files not found in any known shared-data scenario. Tried: {tried_str}"
+    )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Dataset benchmark table generator for overall overlap benchmark datasets")
-    parser.add_argument("--nu", type=int, default=400, help="NU count used for large_nu_v/large_nu_nn overall benchmark point")
+    parser.add_argument("--nu", type=int, default=FORCED_NU, help="NU count used for large_nu_v/large_nu_nn overall benchmark point (forced to 800)")
     parser.add_argument("--microns-size-gb", type=int, default=4, help="MICrONS size used in overall benchmark point")
+    parser.add_argument("--large-microns-size-gb", type=int, default=8, help="MICrONS large size used for Neurons 3 and 4")
     parser.add_argument("--cube-count-b", type=int, default=1000000, help="Cubes count for dataset B used in overall benchmark point")
     parser.add_argument(
         "--tdbase-timing-mode",
@@ -409,6 +540,9 @@ def main() -> None:
         help="TDBase query-time definition for overlap runs. Loading-column extraction is unaffected.",
     )
     args = parser.parse_args()
+    if args.nu != FORCED_NU:
+        _log(f"requested nu={args.nu}; forcing nu={FORCED_NU} for consistency")
+        args.nu = FORCED_NU
     _log(
         f"dataset benchmark start nu={args.nu} microns_size_gb={args.microns_size_gb} "
         f"cube_count_b={args.cube_count_b}"
@@ -423,13 +557,13 @@ def main() -> None:
     _log(f"shared dataset dirs: {dataset_dirs}")
 
     nu_dirs = get_shared_data_dirs("large_nu_nn_scalability")
-    mic_dirs = get_shared_data_dirs("microns_overlap")
     cube_dirs = get_shared_data_dirs("cube_scalability")
 
     vessel_path = canonical_nu_pair_paths(nu_dirs["raw"], nu=args.nu, nv=750, prefix="tdbase_large")[1]
     nuclei1_path = canonical_nu_pair_paths(nu_dirs["raw"], nu=args.nu, nv=750, prefix="tdbase_large")[0]
     nuclei_nn_1, nuclei_nn_2 = canonical_nn_pair_paths(nu_dirs["raw"], nu=args.nu, nv=750, prefix="tdbase_large")
-    neurons_1, neurons_2 = canonical_microns_aggregated_paths(mic_dirs["raw"], args.microns_size_gb)
+    neurons_1, neurons_2 = _resolve_microns_pair_paths(args.microns_size_gb)
+    neurons_3, neurons_4 = _resolve_microns_pair_paths(args.large_microns_size_gb)
     cubes_1, cubes_2 = canonical_cube_pair_paths(
         cube_dirs["raw"],
         num_cubes_a=200000,
@@ -439,6 +573,21 @@ def main() -> None:
         selectivity=0.001,
         seed=42,
         grid_cell_size=5.0,
+    )
+    spheres_dirs = get_shared_data_dirs("mesh_complexity")
+    sphere_template_name = f"Sphere_Stage_{SPHERE_DEFAULT_STAGE}.obj"
+    sphere_template_path = SPHERE_TEMPLATE_DIR / sphere_template_name
+    if not sphere_template_path.exists():
+        raise FileNotFoundError(f"Sphere template not found: {sphere_template_path}")
+    spheres_1, spheres_2 = canonical_sphere_pair_paths(
+        spheres_dirs["raw"],
+        template_name=sphere_template_name,
+        num_objects=SPHERE_DEFAULT_NUM_OBJECTS,
+        min_size=1.0,
+        max_size=5.0,
+        selectivity=SPHERE_DEFAULT_SELECTIVITY,
+        seed=42,
+        grid_cell_size=SPHERE_DEFAULT_GRID_CELL_SIZE,
     )
 
     ensure_cube_pair_dataset(
@@ -452,6 +601,17 @@ def main() -> None:
         seed=42,
     )
     _log(f"cube files ensured: {cubes_1} | {cubes_2}")
+    ensure_sphere_pair_dataset(
+        spheres_1,
+        spheres_2,
+        template_obj=sphere_template_path,
+        num_objects=SPHERE_DEFAULT_NUM_OBJECTS,
+        min_size=1.0,
+        max_size=5.0,
+        selectivity=SPHERE_DEFAULT_SELECTIVITY,
+        seed=42,
+    )
+    _log(f"sphere files ensured (largest stage): {spheres_1} | {spheres_2}")
 
     datasets: List[DatasetRow] = [
         DatasetRow("Nuclei_1", nuclei1_path, 200.0),
@@ -459,8 +619,12 @@ def main() -> None:
         DatasetRow("Nuclei_2", nuclei_nn_2, 200.0),
         DatasetRow("Neurons_1", neurons_1, 700.0),
         DatasetRow("Neurons_2", neurons_2, 700.0),
+        DatasetRow("Neurons_3", neurons_3, 700.0),
+        DatasetRow("Neurons_4", neurons_4, 700.0),
         DatasetRow("Cubes_1", cubes_1, 5.0),
         DatasetRow("Cubes_2", cubes_2, 5.0),
+        DatasetRow("Spheres_1", spheres_1, 5.0),
+        DatasetRow("Spheres_2", spheres_2, 5.0),
     ]
 
     for ds in datasets:
@@ -486,27 +650,39 @@ def main() -> None:
     )
     tdbase_preprocess_stats: Dict[str, Dict[str, float | str]] = {}
     tdbase_loading_stats: Dict[str, Dict[str, float | str]] = {}
+    tdbase_preprocess_errors: Dict[str, str] = {}
+    tdbase_loading_errors: Dict[str, str] = {}
 
     _log("=== Stage: TDBase preprocessing for eligible datasets ===")
     for ds in datasets:
         if ds.dataset_id not in TDBASE_ELIGIBLE_DATASETS:
             continue
-        tdbase_preprocess_stats[ds.dataset_id] = _run_tdbase_preprocess(
-            dataset=ds,
-            adapter=tdbase_adapter,
-            logs_dir=logs_dir,
-        )
+        try:
+            tdbase_preprocess_stats[ds.dataset_id] = _run_tdbase_preprocess(
+                dataset=ds,
+                adapter=tdbase_adapter,
+                logs_dir=logs_dir,
+            )
+        except Exception as exc:
+            err = str(exc)
+            tdbase_preprocess_errors[ds.dataset_id] = err
+            _log(f"[tdbase-preprocess:{ds.dataset_id}] FAILED: {err}")
     _log("=== Stage complete: TDBase preprocessing ===")
 
     _log("=== Stage: TDBase loading extraction for eligible datasets ===")
     for ds in datasets:
         if ds.dataset_id not in TDBASE_ELIGIBLE_DATASETS:
             continue
-        tdbase_loading_stats[ds.dataset_id] = _run_tdbase_and_parse_loading(
-            dataset=ds,
-            adapter=tdbase_adapter,
-            logs_dir=logs_dir,
-        )
+        try:
+            tdbase_loading_stats[ds.dataset_id] = _run_tdbase_and_parse_loading(
+                dataset=ds,
+                adapter=tdbase_adapter,
+                logs_dir=logs_dir,
+            )
+        except Exception as exc:
+            err = str(exc)
+            tdbase_loading_errors[ds.dataset_id] = err
+            _log(f"[tdbase-load:{ds.dataset_id}] FAILED: {err}")
     _log("=== Stage complete: TDBase loading extraction ===")
 
     loading_ms: Dict[str, float] = {}
@@ -554,6 +730,20 @@ def main() -> None:
     loading_ms["Neurons_2"] = l2
     join_logs["neurons_neurons"] = log
 
+    _log("=== Stage: join + loading extraction (neurons_neurons_large) ===")
+    l3, l4, log_large = _run_join_and_parse_loading(
+        case_name="neurons_neurons_large",
+        mesh1=neurons_3,
+        mesh2=neurons_4,
+        grid_cell_size=700.0,
+        preprocessed_dir=dataset_dirs["preprocessed"],
+        timings_dir=dataset_dirs["timings"],
+        logs_dir=logs_dir,
+    )
+    loading_ms["Neurons_3"] = l3
+    loading_ms["Neurons_4"] = l4
+    join_logs["neurons_neurons_large"] = log_large
+
     _log("=== Stage: join + loading extraction (cubes_cubes) ===")
     l1, l2, log = _run_join_and_parse_loading(
         case_name="cubes_cubes",
@@ -567,6 +757,19 @@ def main() -> None:
     loading_ms["Cubes_1"] = l1
     loading_ms["Cubes_2"] = l2
     join_logs["cubes_cubes"] = log
+    _log("=== Stage: join + loading extraction (spheres_spheres) ===")
+    l1, l2, log = _run_join_and_parse_loading(
+        case_name="spheres_spheres",
+        mesh1=spheres_1,
+        mesh2=spheres_2,
+        grid_cell_size=5.0,
+        preprocessed_dir=dataset_dirs["preprocessed"],
+        timings_dir=dataset_dirs["timings"],
+        logs_dir=logs_dir,
+    )
+    loading_ms["Spheres_1"] = l1
+    loading_ms["Spheres_2"] = l2
+    join_logs["spheres_spheres"] = log
     _log("=== Stage complete: join + loading extraction ===")
 
     rows: List[Dict[str, object]] = []
@@ -599,11 +802,28 @@ def main() -> None:
                     if ds.dataset_id in tdbase_preprocess_stats
                     else None
                 ),
+                "preprocess_tdbase_source": (
+                    tdbase_preprocess_stats[ds.dataset_id]["preprocess_source"]
+                    if ds.dataset_id in tdbase_preprocess_stats
+                    else None
+                ),
+                "preprocess_tdbase_log": (
+                    tdbase_preprocess_stats[ds.dataset_id]["preprocess_log_path"]
+                    if ds.dataset_id in tdbase_preprocess_stats
+                    else None
+                ),
+                "preprocess_tdbase_copy_elapsed_ms": (
+                    float(tdbase_preprocess_stats[ds.dataset_id]["copy_elapsed_ms"])
+                    if ds.dataset_id in tdbase_preprocess_stats
+                    else None
+                ),
                 "tdbase_run_log": (
                     tdbase_loading_stats[ds.dataset_id]["run_log"]
                     if ds.dataset_id in tdbase_loading_stats
                     else None
                 ),
+                "preprocess_tdbase_error": tdbase_preprocess_errors.get(ds.dataset_id),
+                "loading_tdbase_error": tdbase_loading_errors.get(ds.dataset_id),
             }
         )
 
@@ -624,6 +844,8 @@ def main() -> None:
             "grid_sizes": {"nu": 200.0, "microns": 700.0, "cubes": 5.0},
             "join_logs": join_logs,
             "latex_table_path": str(latex_path),
+            "tdbase_preprocess_errors": tdbase_preprocess_errors,
+            "tdbase_loading_errors": tdbase_loading_errors,
         },
         "rows": rows,
         "latex_table": latex_table,

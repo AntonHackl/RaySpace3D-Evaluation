@@ -185,18 +185,18 @@ def visualize_selectivity(summary_file, output_path=None):
         
         plot_mean_series(ax_main, touch_sel, tm, "touch")
 
-    ax_main.set_xscale('log')
-    ax_main.set_yscale('log')
+    ax_main.set_xscale('linear')
+    ax_main.set_yscale('linear')
     ax_main.set_xlabel('Selectivity')
     ax_main.set_ylabel('Query Time (ms)')
-    set_log_timing_axis_limits(ax_main, exact_means + (est_means if any(x is not None for x in est_means) else []) + (tdbase_means if any(x is not None for x in tdbase_means) else []))
+    ax_main.set_ylim(bottom=0)
 
     mem_plotted = False
     memory_color = "#ff7f0e"
     if any(v is not None for v in exact_mem_gib):
         x = [s for s, v in zip(valid_selectivities, exact_mem_gib) if v is not None]
         y = [v for v in exact_mem_gib if v is not None]
-        ax_mem.plot(x, y, label="Exact Memory", color=memory_color, linestyle="-", marker="o", markersize=6)
+        ax_mem.plot(x, y, label="Two Pass Memory", color=memory_color, linestyle="-", marker="o", markersize=6)
         mem_plotted = True
     
     if any(v is not None for v in direct_est_mem_gib):
@@ -206,7 +206,8 @@ def visualize_selectivity(summary_file, output_path=None):
         mem_plotted = True
 
     if mem_plotted:
-        ax_mem.set_yscale('log')
+        ax_mem.set_yscale('linear')
+        ax_mem.set_ylim(bottom=0)
         ax_mem.set_ylabel('Allocated Memory (GiB)', labelpad=15)
 
     ax_main.grid(False, which="both")

@@ -4,10 +4,10 @@
 #SBATCH --gres=gpu:rtx_pro_6000:1
 #SBATCH --mem=96G
 #SBATCH --time=14:00:00
-#SBATCH --cpus-per-task=20
-#SBATCH --job-name=query_cmp
-#SBATCH --output=/sc/projects/sci-zacharatou/chair/RaySpace/RaySpace3D-Evaluation/benchmarks/slurm_logs/slurm_query_comparison_nu_%j.out
-#SBATCH --error=/sc/projects/sci-zacharatou/chair/RaySpace/RaySpace3D-Evaluation/benchmarks/slurm_logs/slurm_query_comparison_nu_%j.err
+#SBATCH --cpus-per-task=5
+#SBATCH --job-name=query_cmp_nu_v
+#SBATCH --output=/sc/projects/sci-zacharatou/chair/RaySpace/RaySpace3D-Evaluation/benchmarks/slurm_logs/slurm_query_comparison_nu_v_%j.out
+#SBATCH --error=/sc/projects/sci-zacharatou/chair/RaySpace/RaySpace3D-Evaluation/benchmarks/slurm_logs/slurm_query_comparison_nu_v_%j.err
 
 srun --cpu-bind=none --container-name RaySpace \
      --container-workdir /sc/projects/sci-zacharatou/chair/RaySpace/RaySpace3D-Evaluation \

@@ -239,7 +239,16 @@ def _pick_latest_point(
     group_name: str,
     selector: str,
 ) -> PointResult:
-    run_dirs = sorted(runs_root.glob(f"{run_prefix}_*"), reverse=True)
+    # Use exact prefix matching to avoid accidental cross-matches such as
+    # `query_comparison_nu_v_scalability_*` picking `_nn_*` runs.
+    run_dirs = sorted(
+        [
+            p
+            for p in runs_root.iterdir()
+            if p.is_dir() and p.name.startswith(f"{run_prefix}_")
+        ],
+        reverse=True,
+    )
     for run_dir in run_dirs:
         result_file = run_dir / "results.json"
         if not result_file.exists():
@@ -308,7 +317,9 @@ def _plot(points: List[PointResult], output_base: Path) -> None:
 
     ax.set_ylabel("Query time (ms)")
     ax.set_xticks(x)
-    ax.set_xticklabels([p.group_name for p in points])
+    # Match overlap overall style: render each dataset pair on two lines.
+    two_line_labels = [p.group_name.replace(r" $\bowtie$ ", "\n" + r"$\bowtie$" + " ") for p in points]
+    ax.set_xticklabels(two_line_labels)
     ax.grid(False)
 
     query_handles = [
@@ -347,7 +358,7 @@ def _plot(points: List[PointResult], output_base: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Grouped bar chart for mesh query comparison overall performance (nu600/nu800/microns4/microns8)."
+        description="Grouped bar chart for mesh query comparison overall performance (largest nu_v, largest nu_nn, microns4, microns8)."
     )
     parser.add_argument("--runs-root", type=Path, default=SCRIPT_DIR / "runs")
     args = parser.parse_args()
@@ -357,30 +368,30 @@ def main() -> None:
     points = [
         _pick_latest_point(
             runs_root,
-            "query_comparison_nu_scalability",
-            row_matcher=lambda r: r.get("nu") == 600,
-            group_name=r"Vessel $\bowtie$ Nuclei$_{600}$",
-            selector="nu=600",
+            "query_comparison_nu_v_scalability",
+            row_matcher=lambda r: r.get("nu") == 800 and r.get("dataset_profile") == "large_nu_v",
+            group_name=r"Vessel $\bowtie$ Nuclei$_1$",
+            selector="nu=800",
         ),
         _pick_latest_point(
             runs_root,
-            "query_comparison_nu_scalability",
-            row_matcher=lambda r: r.get("nu") == 800,
-            group_name=r"Vessel $\bowtie$ Nuclei$_{800}$",
+            "query_comparison_nu_scalability_nn",
+            row_matcher=lambda r: r.get("nu") == 800 and r.get("dataset_profile") == "large_nu_nn",
+            group_name=r"Nuclei$_1$ $\bowtie$ Nuclei$_2$",
             selector="nu=800",
         ),
         _pick_latest_point(
             runs_root,
             "query_comparison_microns",
             row_matcher=lambda r: r.get("size_gb") == 4,
-            group_name=r"Neurons$_1 \bowtie$ Neurons$_2$",
+            group_name=r"Neurons$_1$ $\bowtie$ Neurons$_2$",
             selector="size_gb=4",
         ),
         _pick_latest_point(
             runs_root,
             "query_comparison_microns",
             row_matcher=lambda r: r.get("size_gb") == 8,
-            group_name=r"Neurons$_3 \bowtie$ Neurons$_4$",
+            group_name=r"Neurons$_3$ $\bowtie$ Neurons$_4$",
             selector="size_gb=8",
         ),
     ]

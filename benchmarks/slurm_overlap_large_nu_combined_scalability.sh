@@ -10,7 +10,7 @@
 #SBATCH --error=/sc/projects/sci-zacharatou/chair/RaySpace/RaySpace3D-Evaluation/benchmarks/slurm_logs/slurm_overlap_large_nu_combined_%j.err
 
 # Combined Large Nu Scalability Benchmarks (Vessel and Nuclei joins)
-# These are run sequentially in a single job to avoid race conditions in the shared preprocessed directory.
+# This remains a convenience wrapper for sequential execution.
 
 srun --cpu-bind=none --container-name RaySpace \
      --container-workdir /sc/projects/sci-zacharatou/chair/RaySpace/RaySpace3D-Evaluation \
